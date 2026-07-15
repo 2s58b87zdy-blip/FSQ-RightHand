@@ -27,6 +27,16 @@ const DEFAULT_PROJECTS = [
   { id: 3, name: 'TORM Splendid', customer: 'TORM', status: 'Inspection', progress: 27, lead: 'Jakob' }
 ];
 
+const DEFAULT_QUOTES = [
+  { id: 1, customer: 'Cadeler', project: 'Wind Osprey', value: 420000, status: 'Draft' },
+  { id: 2, customer: 'TORM', project: 'TORM Splendid', value: 185000, status: 'Sent' }
+];
+
+const DEFAULT_REPORTS = [
+  { id: 1, vessel: 'Wind Ally', title: 'Gripper hydraulic cylinder inspection', status: 'Review' },
+  { id: 2, vessel: 'Wind Orca', title: 'BWTS pipe removal report', status: 'Draft' }
+];
+
 const DEFAULT_TASKS = [
   { id: 1, title: 'Klargør svejserobot til SMO', person: 'Jakob', priority: 'High', status: 'In progress' },
   { id: 2, title: 'Skær sidste pinde og pak på paller', person: 'Tommy', priority: 'Normal', status: 'Open' },
@@ -87,24 +97,34 @@ function AppShell({ session, onLogout }) {
   const [active, setActive] = useState('dashboard');
   const [projects, setProjects] = useState(DEFAULT_PROJECTS);
   const [tasks, setTasks] = useState(DEFAULT_TASKS);
+  const [quotes, setQuotes] = useState(DEFAULT_QUOTES);
+  const [reports, setReports] = useState(DEFAULT_REPORTS);
   const [chat, setChat] = useState([{ from: 'ai', text: `Good morning ${session.name}. Workshop and marine systems are ready.` }]);
   const [voice, setVoice] = useState(session.voice);
 
   useEffect(() => {
     const savedProjects = localStorage.getItem('fsq-v2-projects');
     const savedTasks = localStorage.getItem('fsq-v2-tasks');
+    const savedQuotes = localStorage.getItem('fsq-v3-quotes');
+    const savedReports = localStorage.getItem('fsq-v3-reports');
     if (savedProjects) setProjects(JSON.parse(savedProjects));
     if (savedTasks) setTasks(JSON.parse(savedTasks));
+    if (savedQuotes) setQuotes(JSON.parse(savedQuotes));
+    if (savedReports) setReports(JSON.parse(savedReports));
   }, []);
   useEffect(() => localStorage.setItem('fsq-v2-projects', JSON.stringify(projects)), [projects]);
   useEffect(() => localStorage.setItem('fsq-v2-tasks', JSON.stringify(tasks)), [tasks]);
+  useEffect(() => localStorage.setItem('fsq-v3-quotes', JSON.stringify(quotes)), [quotes]);
+  useEffect(() => localStorage.setItem('fsq-v3-reports', JSON.stringify(reports)), [reports]);
 
   const stats = useMemo(() => ({
     projects: projects.length,
     openTasks: tasks.filter(t => t.status !== 'Completed').length,
     urgent: tasks.filter(t => t.priority === 'High' && t.status !== 'Completed').length,
-    workshopLoad: 74
-  }), [projects, tasks]);
+    workshopLoad: 74,
+    quoteValue: quotes.reduce((sum, q) => sum + Number(q.value || 0), 0),
+    reportsOpen: reports.filter(r => r.status !== 'Completed').length
+  }), [projects, tasks, quotes, reports]);
 
   return (
     <div className="appShell">
@@ -116,25 +136,28 @@ function AppShell({ session, onLogout }) {
       </aside>
       <main className="workspace">
         <header className="topbar"><div><p className="eyebrow">FSQ OPERATIONS CONTROL</p><h2>{NAV.find(n => n[0] === active)?.[1]}</h2></div><div className="topActions"><label><input type="checkbox" checked={voice} onChange={e => setVoice(e.target.checked)} /> Voice</label><span className="clock">{new Date().toLocaleDateString('da-DK')}</span></div></header>
-        {active === 'dashboard' && <Dashboard stats={stats} projects={projects} tasks={tasks} setActive={setActive} />}
+        {active === 'dashboard' && <Dashboard session={session} stats={stats} projects={projects} tasks={tasks} setActive={setActive} />}
         {active === 'workshop' && <Workshop tasks={tasks} setTasks={setTasks} />}
         {active === 'projects' && <Projects projects={projects} setProjects={setProjects} />}
+        {active === 'quotes' && <Quotes quotes={quotes} setQuotes={setQuotes} />}
+        {active === 'reports' && <Reports reports={reports} setReports={setReports} />}
         {active === 'ai' && <AI chat={chat} setChat={setChat} voice={voice} />}
-        {!['dashboard','workshop','projects','ai'].includes(active) && <ModulePlaceholder title={NAV.find(n=>n[0]===active)?.[1]} />}
+        {!['dashboard','workshop','projects','quotes','reports','ai'].includes(active) && <ModulePlaceholder title={NAV.find(n=>n[0]===active)?.[1]} />}
       </main>
     </div>
   );
 }
 
-function Dashboard({ stats, projects, tasks, setActive }) {
+function Dashboard({ session, stats, projects, tasks, setActive }) {
   return <div className="content">
-    <section className="hero"><div><p className="eyebrow">GOOD MORNING, FLEMMING</p><h1>FSQ Right Hand is online.</h1><p>Marine projects, workshop production and documentation in one control centre.</p></div><div className="heroCore"><div className="pulse"/><span>74%</span><small>WORKSHOP LOAD</small></div></section>
+    <section className="hero"><div><p className="eyebrow">GOOD MORNING, {session.name.toUpperCase()}</p><h1>FSQ Right Hand is online.</h1><p>Marine projects, workshop production and documentation in one control centre.</p></div><div className="heroCore"><div className="pulse"/><span>74%</span><small>WORKSHOP LOAD</small></div></section>
     <section className="statGrid">
       <Stat label="Active projects" value={stats.projects} delta="+1 this month" />
       <Stat label="Open workshop tasks" value={stats.openTasks} delta={`${stats.urgent} high priority`} />
-      <Stat label="Quotations pending" value="2" delta="DKK 1.24M" />
-      <Stat label="Reports to finalize" value="3" delta="1 due today" />
+      <Stat label="Quotation pipeline" value={`DKK ${Math.round(stats.quoteValue/1000)}k`} delta="2 active quotations" />
+      <Stat label="Reports to finalize" value={stats.reportsOpen} delta="Review before customer issue" />
     </section>
+    <section className="quickActions"><button onClick={()=>setActive('workshop')}>+ Workshop task</button><button onClick={()=>setActive('projects')}>+ Marine project</button><button onClick={()=>setActive('quotes')}>+ Quotation</button><button onClick={()=>setActive('reports')}>+ Service report</button></section>
     <section className="twoCol">
       <div className="panel"><div className="panelHead"><h3>Marine projects</h3><button onClick={()=>setActive('projects')}>View all</button></div>{projects.map(p=><div className="projectRow" key={p.id}><div><b>{p.name}</b><small>{p.customer} · Lead: {p.lead}</small></div><div className="progress"><span style={{width:`${p.progress}%`}}/></div><em>{p.progress}%</em></div>)}</div>
       <div className="panel"><div className="panelHead"><h3>Workshop priorities</h3><button onClick={()=>setActive('workshop')}>Open board</button></div>{tasks.slice(0,4).map(t=><div className="taskMini" key={t.id}><span className={t.priority==='High'?'dot danger':'dot'}/><div><b>{t.title}</b><small>{t.person} · {t.status}</small></div></div>)}</div>
@@ -160,6 +183,21 @@ function Projects({projects,setProjects}) {
   const [name,setName]=useState(''); const [customer,setCustomer]=useState('');
   function add(){if(!name.trim())return;setProjects([...projects,{id:Date.now(),name,customer:customer||'Unassigned',status:'Planning',progress:5,lead:'Flemming'}]);setName('');setCustomer('')}
   return <div className="content"><div className="sectionIntro"><h1>Marine projects</h1><p>Shared project overview for vessels, repairs and inspections.</p></div><div className="panel addBar"><input placeholder="Project or vessel name" value={name} onChange={e=>setName(e.target.value)}/><input placeholder="Customer" value={customer} onChange={e=>setCustomer(e.target.value)}/><button onClick={add}>Create project</button></div><div className="projectCards">{projects.map(p=><article key={p.id}><div className="projectBadge">{p.status}</div><h3>{p.name}</h3><p>{p.customer}</p><div className="meta"><span>Lead {p.lead}</span><span>{p.progress}%</span></div><div className="progress big"><span style={{width:`${p.progress}%`}}/></div><div className="projectLinks"><button>Documents</button><button>Reports</button><button>Tasks</button></div></article>)}</div></div>
+}
+
+
+function Quotes({ quotes, setQuotes }) {
+  const [customer,setCustomer]=useState(''); const [project,setProject]=useState(''); const [value,setValue]=useState('');
+  function add(){if(!customer.trim()||!project.trim())return;setQuotes([...quotes,{id:Date.now(),customer,project,value:Number(value||0),status:'Draft'}]);setCustomer('');setProject('');setValue('')}
+  function cycle(id){setQuotes(quotes.map(q=>q.id===id?{...q,status:q.status==='Draft'?'Sent':q.status==='Sent'?'Accepted':'Draft'}:q))}
+  return <div className="content"><div className="sectionIntro"><h1>Quotations</h1><p>Create and follow FSQ quotation drafts.</p></div><div className="panel quoteForm"><input placeholder="Customer" value={customer} onChange={e=>setCustomer(e.target.value)}/><input placeholder="Project or vessel" value={project} onChange={e=>setProject(e.target.value)}/><input type="number" placeholder="Value DKK" value={value} onChange={e=>setValue(e.target.value)}/><button onClick={add}>Create quotation</button></div><div className="recordGrid">{quotes.map(q=><article className="recordCard" key={q.id}><span className="recordStatus">{q.status}</span><h3>{q.project}</h3><p>{q.customer}</p><strong>DKK {Number(q.value).toLocaleString('da-DK')}</strong><button onClick={()=>cycle(q.id)}>Advance status</button></article>)}</div></div>
+}
+
+function Reports({ reports, setReports }) {
+  const [vessel,setVessel]=useState(''); const [title,setTitle]=useState('');
+  function add(){if(!vessel.trim()||!title.trim())return;setReports([...reports,{id:Date.now(),vessel,title,status:'Draft'}]);setVessel('');setTitle('')}
+  function cycle(id){setReports(reports.map(r=>r.id===id?{...r,status:r.status==='Draft'?'Review':r.status==='Review'?'Completed':'Draft'}:r))}
+  return <div className="content"><div className="sectionIntro"><h1>Service reports</h1><p>Prepare, review and close marine service reports.</p></div><div className="panel reportForm"><input placeholder="Vessel" value={vessel} onChange={e=>setVessel(e.target.value)}/><input placeholder="Report title" value={title} onChange={e=>setTitle(e.target.value)}/><button onClick={add}>Create report</button></div><div className="recordGrid">{reports.map(r=><article className="recordCard" key={r.id}><span className="recordStatus">{r.status}</span><h3>{r.title}</h3><p>{r.vessel}</p><button onClick={()=>cycle(r.id)}>Advance status</button></article>)}</div></div>
 }
 
 function AI({chat,setChat,voice}) {

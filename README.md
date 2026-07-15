@@ -1,4 +1,4 @@
-# FSQ Right Hand v2
+# FSQ Right Hand v3
 
 A deployable Next.js application for FSQ marine projects and workshop operations.
 
@@ -12,7 +12,10 @@ A deployable Next.js application for FSQ marine projects and workshop operations
 - Workshop task board with local persistence
 - Project overview with local persistence
 - AI assistant demonstration
-- Navigation prepared for quotations, reports, documents, drone, warehouse, finance and administration
+- Working quotation pipeline with local persistence
+- Working service report register with local persistence
+- Quick actions from the operations dashboard
+- Navigation prepared for documents, drone, warehouse, finance and administration
 - Azure App Service standalone deployment workflow
 
 ## Deploy
