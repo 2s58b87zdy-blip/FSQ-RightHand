@@ -1,30 +1,25 @@
-# FSQ Right Hand v1
+# FSQ Right Hand v2
 
-Deployable Next.js starter for Azure App Service.
+A deployable Next.js application for FSQ marine projects and workshop operations.
 
-## Local run
-1. Install Node.js 20+
-2. `npm install`
-3. `npm run dev`
-4. Open http://localhost:3000
+## Demo login
+- Flemming / fsq2027
+- Jakob / fsq2027
 
-## Demo users
-- Flemming
-- Jakob
-- Demo password shown in login field
+## Included now
+- JARVIS-inspired login with optional spoken greeting
+- FSQ dark blue responsive dashboard
+- Workshop task board with local persistence
+- Project overview with local persistence
+- AI assistant demonstration
+- Navigation prepared for quotations, reports, documents, drone, warehouse, finance and administration
+- Azure App Service standalone deployment workflow
 
-## Current state
-- JARVIS/FSQ login and dashboard
-- Spoken login greeting using browser speech synthesis
-- Responsive desktop/tablet/mobile layout
-- Project creation and local persistence
-- All V1 modules represented in the interface
+## Deploy
+Upload the contents of this folder to the root of the GitHub repository. Keep the existing repository secret:
+`AZURE_WEBAPP_PUBLISH_PROFILE`
 
-## Azure production wiring still required
-- Azure Database for PostgreSQL
-- Azure Blob Storage
-- Secure server-side authentication and password hashing
-- Shared multi-user data
-- Audit history and backups
+The workflow deploys `.next/standalone` and copies static assets correctly.
 
-Do not treat the demo password or browser localStorage as production security.
+## Important
+This version stores demo projects and workshop tasks in the browser. Shared multi-user storage, secure production login, document uploads and database-backed modules are the next infrastructure layer.
