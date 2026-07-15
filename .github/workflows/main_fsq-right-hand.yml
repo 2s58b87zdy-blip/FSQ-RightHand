@@ -20,7 +20,10 @@ jobs:
           node-version: "24"
 
       - name: Installer pakker
-        run: npm install
+  run: |
+    rm -f package-lock.json
+    npm config set registry https://registry.npmjs.org/
+    npm install --registry=https://registry.npmjs.org/
 
       - name: Byg appen
         run: npm run build
