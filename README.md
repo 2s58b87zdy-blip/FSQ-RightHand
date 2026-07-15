@@ -1,17 +1,16 @@
-# FSQ Right Hand v3.4.1
+# FSQ Right Hand v3.4.2
 
-Project lifecycle management release.
+Project types added before testing.
 
-## New in v3.4.1
-- Complete projects
-- Archive projects
-- Reopen completed or archived projects
-- Duplicate projects
-- Move projects to trash
-- Restore projects from trash
-- Permanently delete projects from trash
-- Filters for Active, Completed, Archived, All and Trash
-- Completed projects automatically reach 100 percent progress
+## New
+- Marine projects
+- Workshop projects
+- Inspection projects
+- Internal projects
+- Service jobs
+- Project type selector in New Project wizard
+- Filters for each project type
+- Workshop-specific readiness checklist
+- Existing archive, duplicate, trash and restore functions retained
 
-## Important
-Data remains stored locally in each browser. Azure database is required before this can be treated as permanent company records.
+Data is still stored locally in each browser.
