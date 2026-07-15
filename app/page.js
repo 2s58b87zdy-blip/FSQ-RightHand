@@ -78,6 +78,25 @@ const DEFAULT_REPORTS = [
   { id: 3, vessel: 'Wind Orca', title: 'BWTS pipe removal', status: 'Open' }
 ];
 
+const DEFAULT_DOCUMENTS = [
+  { id: 1, name: 'Wind Orca Repair Plan.pdf', project: 'Wind Orca', category: 'Method Statements', version: 2, size: '1.2 MB', uploadedBy: 'Flemming', date: '2026-07-15', dataUrl: '' },
+  { id: 2, name: 'TORM Splendid Inspection Report.docx', project: 'TORM Splendid', category: 'Service Reports', version: 1, size: '640 KB', uploadedBy: 'Jakob', date: '2026-07-14', dataUrl: '' },
+  { id: 3, name: 'WPQR 131 SMO254.pdf', project: 'General', category: 'WPQR / WPS', version: 3, size: '2.1 MB', uploadedBy: 'Flemming', date: '2026-07-10', dataUrl: '' }
+];
+
+const DOCUMENT_CATEGORIES = [
+  'Quotations',
+  'Service Reports',
+  'Drawings',
+  'Risk Assessments',
+  'Method Statements',
+  'WPQR / WPS',
+  'Packing Lists',
+  'Certificates',
+  'Photos',
+  'Other'
+];
+
 function speak(text, enabled) {
   if (!enabled || typeof window === 'undefined' || !('speechSynthesis' in window)) return;
   window.speechSynthesis.cancel();
@@ -143,13 +162,14 @@ function Login({ onLogin }) {
 
 function AppShell({ session, onLogout }) {
   const [active, setActive] = useState('dashboard');
-  const [projects, setProjects] = useStoredState('fsq-v32-projects', DEFAULT_PROJECTS);
-  const [tasks, setTasks] = useStoredState('fsq-v32-tasks', DEFAULT_TASKS);
-  const [people, setPeople] = useStoredState('fsq-v32-people', DEFAULT_PEOPLE);
-  const [machines, setMachines] = useStoredState('fsq-v32-machines', DEFAULT_MACHINES);
-  const [materials, setMaterials] = useStoredState('fsq-v32-materials', DEFAULT_MATERIALS);
-  const [quotes, setQuotes] = useStoredState('fsq-v32-quotes', DEFAULT_QUOTES);
-  const [reports, setReports] = useStoredState('fsq-v32-reports', DEFAULT_REPORTS);
+  const [projects, setProjects] = useStoredState('fsq-v33-projects', DEFAULT_PROJECTS);
+  const [tasks, setTasks] = useStoredState('fsq-v33-tasks', DEFAULT_TASKS);
+  const [people, setPeople] = useStoredState('fsq-v33-people', DEFAULT_PEOPLE);
+  const [machines, setMachines] = useStoredState('fsq-v33-machines', DEFAULT_MACHINES);
+  const [materials, setMaterials] = useStoredState('fsq-v33-materials', DEFAULT_MATERIALS);
+  const [quotes, setQuotes] = useStoredState('fsq-v33-quotes', DEFAULT_QUOTES);
+  const [reports, setReports] = useStoredState('fsq-v33-reports', DEFAULT_REPORTS);
+  const [documents, setDocuments] = useStoredState('fsq-v33-documents', DEFAULT_DOCUMENTS);
   const [chat, setChat] = useState([{ from: 'ai', text: `Good morning ${session.name}. Workshop Control Center is ready.` }]);
   const [voice, setVoice] = useState(session.voice);
 
@@ -182,9 +202,10 @@ function AppShell({ session, onLogout }) {
         {active === 'projects' && <Projects projects={projects} setProjects={setProjects} />}
         {active === 'quotes' && <Quotes quotes={quotes} setQuotes={setQuotes} />}
         {active === 'reports' && <Reports reports={reports} setReports={setReports} />}
+        {active === 'documents' && <DocumentCenter documents={documents} setDocuments={setDocuments} projects={projects} session={session} />}
         {active === 'admin' && <Admin people={people} setPeople={setPeople} machines={machines} setMachines={setMachines} materials={materials} setMaterials={setMaterials} />}
         {active === 'ai' && <AI chat={chat} setChat={setChat} voice={voice} stats={stats} />}
-        {!['dashboard','workshop','crew','projects','quotes','reports','admin','ai'].includes(active) && <ModulePlaceholder title={NAV.find(n=>n[0]===active)?.[1]} />}
+        {!['dashboard','workshop','crew','projects','quotes','reports','documents','admin','ai'].includes(active) && <ModulePlaceholder title={NAV.find(n=>n[0]===active)?.[1]} />}
       </main>
     </div>
   );
@@ -237,11 +258,29 @@ function WorkshopControl({ tasks, setTasks, people, machines, setMachines, mater
   const [title,setTitle]=useState('');
   const [person,setPerson]=useState('Tommy');
   const [project,setProject]=useState('Workshop');
+  const [priority,setPriority]=useState('Normal');
+  const [due,setDue]=useState('Today');
+  const [taskError,setTaskError]=useState('');
 
-  function addTask(){
-    if(!title.trim()) return;
-    setTasks([...tasks,{id:Date.now(),title,person,priority:'Normal',status:'Planned',due:'Today',project}]);
+  function addTask(event){
+    event?.preventDefault();
+    const cleanTitle = title.trim();
+    if(!cleanTitle) {
+      setTaskError('Skriv en opgavebeskrivelse først.');
+      return;
+    }
+    const newTask = {
+      id: Date.now(),
+      title: cleanTitle,
+      person,
+      priority,
+      status: 'Planned',
+      due,
+      project
+    };
+    setTasks(current => [...current, newTask]);
     setTitle('');
+    setTaskError('');
   }
   function cycleTask(id){
     const order=['Planned','In progress','Waiting','Completed'];
@@ -268,12 +307,15 @@ function WorkshopControl({ tasks, setTasks, people, machines, setMachines, mater
       </article>)}
     </section>
 
-    <section className="panel taskCreator">
-      <input placeholder="New workshop task" value={title} onChange={e=>setTitle(e.target.value)} />
+    <form className="panel taskCreator taskCreatorV33" onSubmit={addTask}>
+      <input autoFocus placeholder="New workshop task" value={title} onChange={e=>setTitle(e.target.value)} />
       <select value={person} onChange={e=>setPerson(e.target.value)}>{people.map(p=><option key={p.id}>{p.name}</option>)}</select>
       <select value={project} onChange={e=>setProject(e.target.value)}><option>Workshop</option>{projects.map(p=><option key={p.id}>{p.name}</option>)}</select>
-      <button onClick={addTask}>Add task</button>
-    </section>
+      <select value={priority} onChange={e=>setPriority(e.target.value)}><option>Normal</option><option>High</option></select>
+      <select value={due} onChange={e=>setDue(e.target.value)}><option>Today</option><option>Tomorrow</option><option>This week</option><option>Later</option></select>
+      <button type="submit">Add task</button>
+      {taskError && <div className="taskError">{taskError}</div>}
+    </form>
 
     <section className="kanban four">
       {['Planned','In progress','Waiting','Completed'].map(status=><TaskColumn key={status} title={status} tasks={tasks.filter(t=>t.status===status)} cycle={cycleTask} />)}
@@ -296,7 +338,7 @@ function WorkshopControl({ tasks, setTasks, people, machines, setMachines, mater
 
 function Summary({label,value,warning}) { return <div className={`summaryCard ${warning?'warning':''}`}><small>{label}</small><strong>{value}</strong></div> }
 function Stat({label,value,delta,danger}) { return <div className={`stat ${danger?'dangerStat':''}`}><small>{label}</small><strong>{value}</strong><span>{delta}</span></div> }
-function TaskColumn({title,tasks,cycle}) { return <div className="column"><h3>{title}<span>{tasks.length}</span></h3>{tasks.map(t=><button className="taskCard" key={t.id} onClick={()=>cycle(t.id)}><small>{t.priority} · {t.due}</small><b>{t.title}</b><span>{t.person} · {t.project}</span></button>)}</div> }
+function TaskColumn({title,tasks,cycle}) { return <div className="column"><h3>{title}<span>{tasks.length}</span></h3>{tasks.map(t=><button type="button" className="taskCard" key={t.id} onClick={()=>cycle(t.id)} title="Click to move task to next status"><small>{t.priority} · {t.due}</small><b>{t.title}</b><span>{t.person} · {t.project}</span></button>)}</div> }
 
 function MachineCard({ machine, machines, setMachines }) {
   const states=['Ready','In use','Service','Out of service'];
@@ -444,6 +486,146 @@ function Reports({reports,setReports}) {
   function add(){if(!title.trim())return;setReports([...reports,{id:Date.now(),vessel:vessel||'Unassigned',title,status:'Draft'}]);setVessel('');setTitle('')}
   function cycle(id){setReports(reports.map(r=>r.id===id?{...r,status:r.status==='Draft'?'Final review':r.status==='Final review'?'Completed':'Draft'}:r))}
   return <div className="content"><div className="sectionIntro"><h1>Service Reports</h1><p>Register and progress vessel reports.</p></div><div className="panel addBar"><input placeholder="Vessel" value={vessel} onChange={e=>setVessel(e.target.value)}/><input placeholder="Report title" value={title} onChange={e=>setTitle(e.target.value)}/><button onClick={add}>New report</button></div><div className="panel">{reports.map(r=><button className="listRow" key={r.id} onClick={()=>cycle(r.id)}><div><b>{r.vessel} · {r.title}</b><small>Click to change status</small></div><em>{r.status}</em></button>)}</div></div>
+}
+
+
+function DocumentCenter({ documents, setDocuments, projects, session }) {
+  const [search,setSearch]=useState('');
+  const [project,setProject]=useState('All');
+  const [category,setCategory]=useState('All');
+  const [uploadProject,setUploadProject]=useState(projects[0]?.name || 'General');
+  const [uploadCategory,setUploadCategory]=useState('Service Reports');
+  const [message,setMessage]=useState('');
+
+  const filtered = documents.filter(doc => {
+    const matchesSearch = `${doc.name} ${doc.project} ${doc.category}`.toLowerCase().includes(search.toLowerCase());
+    const matchesProject = project === 'All' || doc.project === project;
+    const matchesCategory = category === 'All' || doc.category === category;
+    return matchesSearch && matchesProject && matchesCategory;
+  });
+
+  function formatSize(bytes) {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+    return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  }
+
+  function uploadFiles(event) {
+    const files = Array.from(event.target.files || []);
+    if (!files.length) return;
+
+    files.forEach(file => {
+      if (file.size > 2 * 1024 * 1024) {
+        setMessage(`${file.name} er større end 2 MB. Azure Storage bliver nødvendig til store filer.`);
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = () => {
+        const existingVersions = documents
+          .filter(d => d.name.toLowerCase() === file.name.toLowerCase() && d.project === uploadProject)
+          .map(d => d.version || 1);
+        const version = existingVersions.length ? Math.max(...existingVersions) + 1 : 1;
+
+        const newDoc = {
+          id: Date.now() + Math.random(),
+          name: file.name,
+          project: uploadProject || 'General',
+          category: uploadCategory,
+          version,
+          size: formatSize(file.size),
+          uploadedBy: session.name,
+          date: new Date().toISOString().slice(0,10),
+          dataUrl: reader.result
+        };
+        setDocuments(current => [newDoc, ...current]);
+        setMessage(`${file.name} uploaded as version ${version}.`);
+      };
+      reader.onerror = () => setMessage(`Could not read ${file.name}.`);
+      reader.readAsDataURL(file);
+    });
+    event.target.value = '';
+  }
+
+  function removeDocument(id) {
+    setDocuments(documents.filter(d => d.id !== id));
+  }
+
+  function openDocument(doc) {
+    if (!doc.dataUrl) {
+      setMessage('This demo document has metadata only. Upload the real file to open it.');
+      return;
+    }
+    const link = document.createElement('a');
+    link.href = doc.dataUrl;
+    link.download = doc.name;
+    link.click();
+  }
+
+  return <div className="content">
+    <div className="sectionIntro documentIntro">
+      <div><h1>Document Center</h1><p>Project documents, reports, drawings, certificates and photos.</p></div>
+      <div className="documentCount"><strong>{documents.length}</strong><small>documents</small></div>
+    </div>
+
+    <section className="documentStats">
+      {DOCUMENT_CATEGORIES.slice(0,6).map(cat => <div className="summaryCard" key={cat}><small>{cat}</small><strong>{documents.filter(d=>d.category===cat).length}</strong></div>)}
+    </section>
+
+    <section className="panel uploadPanel">
+      <div>
+        <small>Project</small>
+        <select value={uploadProject} onChange={e=>setUploadProject(e.target.value)}>
+          <option>General</option>
+          {projects.map(p=><option key={p.id}>{p.name}</option>)}
+        </select>
+      </div>
+      <div>
+        <small>Category</small>
+        <select value={uploadCategory} onChange={e=>setUploadCategory(e.target.value)}>
+          {DOCUMENT_CATEGORIES.map(cat=><option key={cat}>{cat}</option>)}
+        </select>
+      </div>
+      <label className="uploadButton">
+        Upload files
+        <input type="file" multiple onChange={uploadFiles} />
+      </label>
+      <span className="uploadNote">Local demo limit: 2 MB per file</span>
+    </section>
+
+    {message && <div className="documentMessage">{message}</div>}
+
+    <section className="panel documentFilters">
+      <input placeholder="Search document, vessel, project or category" value={search} onChange={e=>setSearch(e.target.value)} />
+      <select value={project} onChange={e=>setProject(e.target.value)}>
+        <option>All</option><option>General</option>{projects.map(p=><option key={p.id}>{p.name}</option>)}
+      </select>
+      <select value={category} onChange={e=>setCategory(e.target.value)}>
+        <option>All</option>{DOCUMENT_CATEGORIES.map(cat=><option key={cat}>{cat}</option>)}
+      </select>
+    </section>
+
+    <section className="documentLayout">
+      <div className="panel folderTree">
+        <div className="panelHead"><h3>Projects</h3></div>
+        <button className={project==='All'?'activeFolder':''} onClick={()=>setProject('All')}>All documents <span>{documents.length}</span></button>
+        <button className={project==='General'?'activeFolder':''} onClick={()=>setProject('General')}>General <span>{documents.filter(d=>d.project==='General').length}</span></button>
+        {projects.map(p=><button key={p.id} className={project===p.name?'activeFolder':''} onClick={()=>setProject(p.name)}>{p.name}<span>{documents.filter(d=>d.project===p.name).length}</span></button>)}
+      </div>
+
+      <div className="panel documentTable">
+        <div className="documentHeader"><span>Name</span><span>Project</span><span>Category</span><span>Version</span><span>Date</span><span /></div>
+        {filtered.length ? filtered.map(doc=><div className="documentRow" key={doc.id}>
+          <button className="documentName" onClick={()=>openDocument(doc)}><b>{doc.name}</b><small>{doc.size} · Uploaded by {doc.uploadedBy}</small></button>
+          <span>{doc.project}</span>
+          <span>{doc.category}</span>
+          <span className="versionBadge">V{doc.version}</span>
+          <span>{doc.date}</span>
+          <button className="deleteDocument" onClick={()=>removeDocument(doc.id)}>×</button>
+        </div>) : <div className="empty">No documents match the selected filters.</div>}
+      </div>
+    </section>
+  </div>
 }
 
 function Admin({people,setPeople,machines,setMachines,materials,setMaterials}) {

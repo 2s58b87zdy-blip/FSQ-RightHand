@@ -23,3 +23,32 @@
 .groupPerson small{color:#7599b0;margin-top:3px}
 @media(max-width:1100px){.crewStats{grid-template-columns:repeat(3,1fr)}.crewLayout{grid-template-columns:1fr}.crewGroups{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:700px){.crewIntro{display:block}.crewStats,.crewGroups,.crewFormGrid,.crewInfoGrid{grid-template-columns:1fr}}
+
+.taskCreatorV33{grid-template-columns:minmax(220px,1fr) 150px 170px 110px 120px 130px;align-items:end}
+.taskCreatorV33 .taskError{grid-column:1/-1;color:#ff9aa4;font-size:12px}
+.documentIntro{display:flex;justify-content:space-between;align-items:start}
+.documentCount{display:grid;text-align:right}.documentCount strong{font-size:36px;color:#75e3ff}.documentCount small{color:#789bb1}
+.documentStats{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:16px}
+.uploadPanel{display:grid;grid-template-columns:220px 220px 150px 1fr;gap:12px;align-items:end;margin-bottom:12px}
+.uploadPanel>div{display:grid;gap:6px}.uploadPanel small,.uploadNote{color:#789bb0;font-size:11px}
+.uploadPanel select,.documentFilters input,.documentFilters select{background:#071421;border:1px solid #235274;color:#fff;padding:12px;border-radius:6px}
+.uploadButton{position:relative;overflow:hidden;background:linear-gradient(90deg,#0d77d8,#1ad7f1);color:white;border-radius:6px;padding:13px;text-align:center;font-weight:800;cursor:pointer}
+.uploadButton input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.documentMessage{padding:11px 14px;margin-bottom:12px;border:1px solid #1e6687;background:#0a2436;color:#9ceaff;border-radius:6px}
+.documentFilters{display:grid;grid-template-columns:1fr 200px 220px;gap:10px;margin-bottom:16px}
+.documentLayout{display:grid;grid-template-columns:250px 1fr;gap:16px}
+.folderTree{display:grid;align-content:start;gap:4px}
+.folderTree button{display:flex;justify-content:space-between;background:transparent;color:#8eb1c7;border:0;padding:10px;border-radius:5px;text-align:left;cursor:pointer}
+.folderTree button:hover,.folderTree button.activeFolder{background:#0d2b42;color:#fff}
+.folderTree button span{background:#173c56;padding:2px 7px;border-radius:10px;font-size:10px}
+.documentTable{overflow:auto}
+.documentHeader,.documentRow{display:grid;grid-template-columns:minmax(250px,2fr) 140px 160px 70px 100px 35px;gap:12px;align-items:center;min-width:850px}
+.documentHeader{color:#6f96ae;font-size:10px;text-transform:uppercase;letter-spacing:.08em;padding:0 8px 10px}
+.documentRow{border-top:1px solid #17364d;padding:12px 8px}
+.documentName{display:grid;background:transparent;color:white;border:0;text-align:left;cursor:pointer}
+.documentName small{color:#7196ad;margin-top:4px}
+.documentRow>span{color:#92b1c3;font-size:12px}
+.versionBadge{color:#50ddff!important}
+.deleteDocument{background:#351521;color:#ff8c98;border:1px solid #6b2638;border-radius:50%;width:27px;height:27px;cursor:pointer}
+@media(max-width:1200px){.taskCreatorV33{grid-template-columns:1fr 1fr 1fr}.documentStats{grid-template-columns:repeat(3,1fr)}.uploadPanel{grid-template-columns:1fr 1fr}.documentLayout{grid-template-columns:1fr}.folderTree{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:700px){.taskCreatorV33,.documentStats,.uploadPanel,.documentFilters,.folderTree{grid-template-columns:1fr}.documentIntro{display:block}}

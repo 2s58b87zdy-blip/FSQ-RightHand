@@ -1,6 +1,6 @@
 {
-  "name": "fsq-right-hand-v321",
-  "version": "3.2.1",
+  "name": "fsq-right-hand-v33",
+  "version": "3.3.0",
   "private": true,
   "scripts": {
     "dev": "next dev",

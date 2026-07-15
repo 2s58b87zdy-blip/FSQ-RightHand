@@ -1,28 +1,23 @@
-# FSQ Right Hand v3.2.1
+# FSQ Right Hand v3.3
 
-Workshop Control Center release.
+Document Center release and workshop task fix.
 
-## New in v3.2.1
-- Mathias added to employee list
-- New Crew Management module
-- Employee location planning
-- Project assignment
-- Skills and certificate overview
-- Workshop / office / offshore / travel / course / free grouping
-
-## Included from v3.2
-- Workshop staff cards
-- Four-stage task board: Planned, In progress, Waiting, Completed
-- Machine status management
-- Materials and low-stock alerts
-- Workshop summary dashboard
-- Project-linked workshop tasks
-- No time registration; e-conomic remains the time system
-- Existing Operations Dashboard, Projects, Quotations, Reports and AI retained
+## New in v3.3
+- Fixed creation of workshop tasks
+- Task validation and clear error message
+- Priority and due-date selection
+- Document Center
+- Search and filters
+- Project and category folders
+- Local file upload up to 2 MB
+- Automatic document version number
+- Download and delete uploaded files
+- Document categories for reports, drawings, WPQR/WPS, certificates and photos
 
 ## Demo login
 - Flemming / fsq2027
 - Jakob / fsq2027
 
 ## Important
-Data is stored locally in each browser. Shared Azure database comes later.
+Documents and other data are stored locally in each browser in this demo.
+For shared files, larger uploads and multi-user access, Azure Storage and a shared database are required.
