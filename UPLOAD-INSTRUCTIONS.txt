@@ -1,0 +1,14 @@
+FSQ RIGHT HAND - KLAR TIL GITHUB
+
+1. Pak ZIP-filen ud.
+2. Aabn GitHub repository: FSQ-RightHand.
+3. Upload INDHOLDET af denne mappe direkte til repositoryets rod.
+4. Overskriv eksisterende filer, hvis GitHub spoerger.
+5. Commit direkte til main med teksten:
+   Fix Azure standalone deployment
+6. Aabn GitHub Actions og vent paa groent flueben.
+7. Genindlaes Azure-siden med Ctrl+F5.
+
+Vigtigt:
+- GitHub Secret AZURE_WEBAPP_PUBLISH_PROFILE skal stadig eksistere.
+- Upload ikke PublishSettings-filen til repositoryet.
