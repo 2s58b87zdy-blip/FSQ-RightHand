@@ -8,18 +8,12 @@ const USERS = {
 };
 
 const NAV = [
-  ['dashboard', 'Operations Dashboard', '◈'],
-  ['workshop', 'Workshop Control', '⚙'],
-  ['crew', 'Crew Management', '◉'],
-  ['projects', 'Marine Projects', '◫'],
-  ['quotes', 'Quotations', '▤'],
-  ['reports', 'Service Reports', '▧'],
+  ['dashboard', 'Dashboard', '◈'],
+  ['projects', 'Projects', '◫'],
+  ['crew', 'People', '◉'],
   ['documents', 'Documents', '▱'],
-  ['drone', 'Drone', '⌁'],
-  ['warehouse', 'Warehouse', '▦'],
-  ['finance', 'Finance', '◒'],
-  ['ai', 'AI Assistant', '◎'],
-  ['admin', 'Administration', '⚙']
+  ['ai', 'Right Hand AI', '◎'],
+  ['admin', 'Settings', '⚙']
 ];
 
 const DEFAULT_PROJECTS = [
@@ -84,6 +78,22 @@ const DEFAULT_DOCUMENTS = [
   { id: 2, name: 'TORM Splendid Inspection Report.docx', project: 'TORM Splendid', category: 'Service Reports', version: 1, size: '640 KB', uploadedBy: 'Jakob', date: '2026-07-14', dataUrl: '' },
   { id: 3, name: 'WPQR 131 SMO254.pdf', project: 'General', category: 'WPQR / WPS', version: 3, size: '2.1 MB', uploadedBy: 'Flemming', date: '2026-07-10', dataUrl: '' }
 ];
+
+
+const DEFAULT_DRONE_INSPECTIONS = [
+  { id: 1, project: 'TORM Splendid', title: 'Scrubber internal inspection', date: '2026-07-12', operator: 'Flemming', status: 'Review', findings: 3, images: 42, notes: 'Check weld seams and internal supports.' },
+  { id: 2, project: 'Wind Orca', title: 'Pre-mobilisation visual inspection', date: '2026-07-15', operator: 'Jakob', status: 'Open', findings: 1, images: 18, notes: 'Document fabrication and access conditions.' }
+];
+
+const PROJECT_TYPES = [
+  'Vessel',
+  'Workshop',
+  'Inspection',
+  'Drone Inspection',
+  'Internal',
+  'Service'
+];
+
 
 const DOCUMENT_CATEGORIES = [
   'Quotations',
@@ -164,15 +174,16 @@ function Login({ onLogin }) {
 function AppShell({ session, onLogout }) {
   const [active, setActive] = useState('dashboard');
   const [activeProjectId, setActiveProjectId] = useState(null);
-  const [projects, setProjects] = useStoredState('fsq-v341-projects', DEFAULT_PROJECTS);
-  const [tasks, setTasks] = useStoredState('fsq-v341-tasks', DEFAULT_TASKS);
-  const [people, setPeople] = useStoredState('fsq-v341-people', DEFAULT_PEOPLE);
-  const [machines, setMachines] = useStoredState('fsq-v341-machines', DEFAULT_MACHINES);
-  const [materials, setMaterials] = useStoredState('fsq-v341-materials', DEFAULT_MATERIALS);
-  const [quotes, setQuotes] = useStoredState('fsq-v341-quotes', DEFAULT_QUOTES);
-  const [reports, setReports] = useStoredState('fsq-v341-reports', DEFAULT_REPORTS);
-  const [documents, setDocuments] = useStoredState('fsq-v341-documents', DEFAULT_DOCUMENTS);
-  const [deletedProjects, setDeletedProjects] = useStoredState('fsq-v341-deleted-projects', []);
+  const [projects, setProjects] = useStoredState('fsq-v40-projects', DEFAULT_PROJECTS);
+  const [tasks, setTasks] = useStoredState('fsq-v40-tasks', DEFAULT_TASKS);
+  const [people, setPeople] = useStoredState('fsq-v40-people', DEFAULT_PEOPLE);
+  const [machines, setMachines] = useStoredState('fsq-v40-machines', DEFAULT_MACHINES);
+  const [materials, setMaterials] = useStoredState('fsq-v40-materials', DEFAULT_MATERIALS);
+  const [quotes, setQuotes] = useStoredState('fsq-v40-quotes', DEFAULT_QUOTES);
+  const [reports, setReports] = useStoredState('fsq-v40-reports', DEFAULT_REPORTS);
+  const [droneInspections, setDroneInspections] = useStoredState('fsq-v40-drone-inspections', DEFAULT_DRONE_INSPECTIONS);
+  const [documents, setDocuments] = useStoredState('fsq-v40-documents', DEFAULT_DOCUMENTS);
+  const [deletedProjects, setDeletedProjects] = useStoredState('fsq-v40-deleted-projects', []);
   const [chat, setChat] = useState([{ from: 'ai', text: `Good morning ${session.name}. Workshop Control Center is ready.` }]);
   const [voice, setVoice] = useState(session.voice);
 
@@ -199,17 +210,14 @@ function AppShell({ session, onLogout }) {
           <div className="topActions"><label><input type="checkbox" checked={voice} onChange={e => setVoice(e.target.checked)} /> Voice</label><span className="clock">{new Date().toLocaleDateString('da-DK')}</span></div>
         </header>
 
-        {active === 'dashboard' && <Dashboard session={session} stats={stats} projects={projects} tasks={tasks} people={people} machines={machines} materials={materials} setActive={setActive} deletedProjects={deletedProjects} setDeletedProjects={setDeletedProjects} setActiveProjectId={setActiveProjectId} />}
-        {active === 'workshop' && <WorkshopControl tasks={tasks} setTasks={setTasks} people={people} machines={machines} setMachines={setMachines} materials={materials} setMaterials={setMaterials} projects={projects} />}
+        {active === 'dashboard' && <Dashboard session={session} stats={stats} projects={projects} tasks={tasks} people={people} machines={machines} materials={materials} setActive={setActive} deletedProjects={deletedProjects} setDeletedProjects={setDeletedProjects} setActiveProjectId={setActiveProjectId} droneInspections={droneInspections} setDroneInspections={setDroneInspections} />}
         {active === 'crew' && <CrewManagement people={people} setPeople={setPeople} projects={projects} />}
         {active === 'projects' && <Projects projects={projects} setProjects={setProjects} deletedProjects={deletedProjects} setDeletedProjects={setDeletedProjects} setActive={setActive} setActiveProjectId={setActiveProjectId} />}
         {active === 'projectHub' && <ProjectHub project={projects.find(p=>p.id===activeProjectId)} projects={projects} setProjects={setProjects} people={people} tasks={tasks} setTasks={setTasks} documents={documents} materials={materials} quotes={quotes} reports={reports} setActive={setActive} />}
-        {active === 'quotes' && <Quotes quotes={quotes} setQuotes={setQuotes} />}
-        {active === 'reports' && <Reports reports={reports} setReports={setReports} />}
         {active === 'documents' && <DocumentCenter documents={documents} setDocuments={setDocuments} projects={projects} session={session} />}
         {active === 'admin' && <Admin people={people} setPeople={setPeople} machines={machines} setMachines={setMachines} materials={materials} setMaterials={setMaterials} />}
         {active === 'ai' && <AI chat={chat} setChat={setChat} voice={voice} stats={stats} />}
-        {!['dashboard','workshop','crew','projects','projectHub','quotes','reports','documents','admin','ai'].includes(active) && <ModulePlaceholder title={NAV.find(n=>n[0]===active)?.[1]} />}
+        {!['dashboard','crew','projects','projectHub','documents','admin','ai'].includes(active) && <ModulePlaceholder title={NAV.find(n=>n[0]===active)?.[1]} />}
       </main>
     </div>
   );
@@ -223,7 +231,7 @@ function Dashboard({ session, stats, projects, tasks, people, machines, material
         <p className="eyebrow">GOOD MORNING, {session.name.toUpperCase()}</p>
         <h1>Workshop and marine operations.</h1>
         <p>{stats.projects} active projects · {stats.people} people active · {stats.openTasks} open tasks</p>
-        <div className="heroActions"><button onClick={()=>setActive('workshop')}>Open Workshop Control</button><button onClick={()=>setActive('projects')}>Marine Projects</button></div>
+        <div className="heroActions"><button onClick={()=>setActive('workshop')}>Open Projects</button><button onClick={()=>setActive('projects')}>Projects</button></div>
       </div>
       <div className="heroCore"><div className="pulse"/><span>{stats.urgent}</span><small>URGENT ITEMS</small></div>
     </section>
@@ -495,17 +503,18 @@ function Projects({projects,setProjects,deletedProjects,setDeletedProjects,setAc
   function openProject(id){setActiveProjectId(id);setActive('projectHub')}
   function restoreProject(id){const project=deletedProjects.find(p=>p.id===id);if(!project)return;setDeletedProjects(deletedProjects.filter(p=>p.id!==id));setProjects([...normalizedProjects,{...project,lifecycle:'Archived'}])}
   const visible=normalizedProjects.filter(p=>filter==='Active'?p.lifecycle==='Active':filter==='Completed'?p.lifecycle==='Completed':filter==='Archived'?p.lifecycle==='Archived':true);
-  return <div className="content"><div className="sectionIntro projectIntro"><div><h1>Marine Projects</h1><p>Open a project hub, archive completed work or restore deleted projects.</p></div><button className="primaryBtn" onClick={()=>setShowWizard(!showWizard)}>{showWizard?'Close':'New Project'}</button></div>
+  return <div className="content"><div className="sectionIntro projectIntro"><div><h1>Projects</h1><p>Open a project hub, archive completed work or restore deleted projects.</p></div><button className="primaryBtn" onClick={()=>setShowWizard(!showWizard)}>{showWizard?'Close':'New Project'}</button></div>
   <div className="projectFilters">{['Active','Marine','Workshop','Inspection','Internal','Service Job','Completed','Archived','All'].map(x=><button key={x} className={filter===x?'active':''} onClick={()=>setFilter(x)}>{x}<span>{x==='All'?normalizedProjects.length:['Marine','Workshop','Inspection','Internal','Service Job'].includes(x)?normalizedProjects.filter(p=>(p.type||'Marine')===x).length:normalizedProjects.filter(p=>p.lifecycle===x).length}</span></button>)}<button className={filter==='Trash'?'active trashFilter':''} onClick={()=>setFilter('Trash')}>Trash<span>{deletedProjects.length}</span></button></div>
   {showWizard&&<section className="panel projectWizard"><div className="wizardHeader"><h3>Create project</h3><span>Automatic Project Hub structure</span></div><div className="wizardGrid"><label>Customer<input value={form.customer} onChange={e=>update('customer',e.target.value)} placeholder="Cadeler" /></label><label>Vessel / project<input value={form.name} onChange={e=>update('name',e.target.value)} placeholder="Wind Orca" /></label><label>IMO number<input value={form.imo} onChange={e=>update('imo',e.target.value)} placeholder="1234567" /></label><label>Project number<input value={form.projectNo} onChange={e=>update('projectNo',e.target.value)} placeholder="FSQ-26074" /></label><label>Project manager<select value={form.lead} onChange={e=>update('lead',e.target.value)}><option>Flemming</option><option>Jakob</option><option>Stefan</option></select></label><label>Location<input value={form.location} onChange={e=>update('location',e.target.value)} placeholder="Esbjerg" /></label><label>Start date<input type="date" value={form.startDate} onChange={e=>update('startDate',e.target.value)} /></label><label>Mobilisation<input type="date" value={form.mobilisation} onChange={e=>update('mobilisation',e.target.value)} /></label><label>Status<select value={form.status} onChange={e=>update('status',e.target.value)}><option>Planning</option><option>Fabrication</option><option>Inspection</option><option>Mobilisation</option><option>Completed</option></select></label><label className="wizardNotes">Notes<textarea value={form.notes} onChange={e=>update('notes',e.target.value)} placeholder="Scope, priorities and important notes" /></label></div><div className="wizardFolders">{['Quotations','Purchase Orders','Drawings','Method Statements','Risk Assessments','Service Reports','WPQR','WPS','NDT Reports','Certificates','Packing Lists','Photos','Videos','Archive'].map(x=><span key={x}>{x}</span>)}</div><button className="primaryBtn" onClick={add}>Create Project Hub</button></section>}
-  {filter!=='Trash'?<div className="projectCards projectHubCards">{visible.map(p=><article key={p.id} onClick={()=>openProject(p.id)}><div className="projectTop"><div className={`projectBadge lifecycle-${p.lifecycle.toLowerCase()}`}>{p.lifecycle}</div><span>{p.type||'Marine'} · {p.projectNo}</span></div><h3>{p.name}</h3><p>{p.customer} · {p.location||'Location TBD'}</p><div className="projectFacts"><span>IMO {p.imo||'N/A'}</span><span>Lead {p.lead}</span></div><div className="progress big"><span style={{width:`${p.progress}%`}}/></div><div className="meta"><span>{p.progress}% complete</span><span>{p.status}</span></div><p className="nextLine">Next: {p.next}</p><button className="openHub">Open Project Hub</button></article>)}{!visible.length&&<div className="empty">No projects in this view.</div>}</div>:<div className="panel trashList"><div className="panelHead"><h3>Project trash</h3><span>Projects stay here until permanently deleted</span></div>{deletedProjects.map(p=><div className="trashRow" key={p.id}><div><b>{p.name}</b><small>{p.customer} · Deleted {p.deletedAt||'recently'}</small></div><button onClick={()=>restoreProject(p.id)}>Restore</button><button className="permanentDelete" onClick={()=>{if(window.confirm(`Permanently delete ${p.name}? This cannot be undone.`)){setDeletedProjects(deletedProjects.filter(x=>x.id!==p.id))}}}>Delete permanently</button></div>)}{!deletedProjects.length&&<div className="empty">Trash is empty.</div>}</div>}</div>
+  {filter!=='Trash'?<div className="projectCards projectHubCards">{visible.map(p=><article key={p.id} onClick={()=>openProject(p.id)}><div className="projectTop"><div><div className={`projectBadge lifecycle-${p.lifecycle.toLowerCase()}`}>{p.lifecycle}</div><div className="typeBadge">{p.projectType || 'Vessel'}</div></div><span>{p.type||'Marine'} · {p.projectNo}</span></div><h3>{p.name}</h3><p>{p.customer} · {p.location||'Location TBD'}</p><div className="projectFacts"><span>IMO {p.imo||'N/A'}</span><span>Lead {p.lead}</span></div><div className="progress big"><span style={{width:`${p.progress}%`}}/></div><div className="meta"><span>{p.progress}% complete</span><span>{p.status}</span></div><p className="nextLine">Next: {p.next}</p><button className="openHub">Open Project Hub</button></article>)}{!visible.length&&<div className="empty">No projects in this view.</div>}</div>:<div className="panel trashList"><div className="panelHead"><h3>Project trash</h3><span>Projects stay here until permanently deleted</span></div>{deletedProjects.map(p=><div className="trashRow" key={p.id}><div><b>{p.name}</b><small>{p.customer} · Deleted {p.deletedAt||'recently'}</small></div><button onClick={()=>restoreProject(p.id)}>Restore</button><button className="permanentDelete" onClick={()=>{if(window.confirm(`Permanently delete ${p.name}? This cannot be undone.`)){setDeletedProjects(deletedProjects.filter(x=>x.id!==p.id))}}}>Delete permanently</button></div>)}{!deletedProjects.length&&<div className="empty">Trash is empty.</div>}</div>}</div>
 }
 
-function ProjectHub({project,projects,setProjects,people,tasks,setTasks,documents,materials,quotes,reports,setActive,deletedProjects,setDeletedProjects,setActiveProjectId}) {
+function ProjectHub({project,projects,setProjects,people,tasks,setTasks,documents,materials,quotes,reports,setActive,deletedProjects,setDeletedProjects,setActiveProjectId,droneInspections,setDroneInspections}) {
   const [tab,setTab]=useState('overview'); const [newTask,setNewTask]=useState('');
   if(!project)return <div className="content"><button onClick={()=>setActive('projects')}>Back to projects</button></div>;
   const crew=people.filter(p=>p.project===project.name||p.task?.includes(project.name)||p.detail?.includes(project.name));
   const projectTasks=tasks.filter(t=>t.project===project.name); const projectDocs=documents.filter(d=>d.project===project.name); const projectQuotes=quotes.filter(q=>q.title?.includes(project.name)||q.customer===project.customer); const projectReports=reports.filter(r=>r.vessel===project.name);
+  const projectDrone=droneInspections.filter(d=>d.project===project.name);
   function update(field,value){setProjects(projects.map(p=>p.id===project.id?{...p,[field]:value}:p))}
   function addTask(){if(!newTask.trim())return;setTasks([...tasks,{id:Date.now(),title:newTask.trim(),person:project.lead,priority:'Normal',status:'Planned',due:'This week',project:project.name}]);setNewTask('')}
   const tabs=[['overview','Overview'],['crew','Crew'],['documents','Documents'],['tasks','Tasks'],['materials','Materials'],['commercial','Commercial'],['timeline','Timeline']];
@@ -517,6 +526,68 @@ function ProjectHub({project,projects,setProjects,people,tasks,setTasks,document
   {tab==='materials'&&<section className="panel">{materials.slice(0,6).map(m=><div className={`materialRow ${m.quantity<m.minimum?'low':''}`} key={m.id}><div><b>{m.name}</b><small>Minimum {m.minimum} {m.unit}</small></div><div><strong>{m.quantity}</strong> {m.unit}</div></div>)}</section>}
   {tab==='commercial'&&<section className="hubGrid"><div className="panel"><h3>Quotations</h3>{projectQuotes.length?projectQuotes.map(q=><div className="listRow" key={q.id}><div><b>{q.reference}</b><small>{q.title}</small></div><span>DKK {q.value.toLocaleString('da-DK')}</span><em>{q.status}</em></div>):<div className="empty">No linked quotations.</div>}</div><div className="panel"><h3>Service reports</h3>{projectReports.length?projectReports.map(r=><div className="listRow" key={r.id}><div><b>{r.title}</b><small>{r.vessel}</small></div><em>{r.status}</em></div>):<div className="empty">No linked reports.</div>}</div></section>}
   {tab==='timeline'&&<section className="panel timeline">{[[project.startDate||'TBD','Project created',project.customer],['2026-07-16','Planning updated',project.lead],['2026-07-17','Workshop task created','FSQ Right Hand'],[project.mobilisation||'TBD','Mobilisation',project.location||'TBD']].map(([d,t,x],i)=><div className="timelineItem" key={i}><span/><div><small>{d}</small><b>{t}</b><p>{x}</p></div></div>)}</section>}</div>
+}
+
+
+function DroneInspectionPanel({ project, inspections, allInspections, setInspections }) {
+  const [title,setTitle]=useState('');
+  const [operator,setOperator]=useState('Flemming');
+  const [notes,setNotes]=useState('');
+  const [images,setImages]=useState(0);
+
+  function addInspection(){
+    if(!title.trim()) return;
+    const inspection={
+      id:Date.now(),
+      project:project.name,
+      title:title.trim(),
+      date:new Date().toISOString().slice(0,10),
+      operator,
+      status:'Open',
+      findings:0,
+      images:Number(images)||0,
+      notes
+    };
+    setInspections([inspection,...allInspections]);
+    setTitle('');
+    setNotes('');
+    setImages(0);
+  }
+
+  function cycleStatus(id){
+    const states=['Open','Review','Completed'];
+    setInspections(allInspections.map(i=>i.id===id?{...i,status:states[(states.indexOf(i.status)+1)%states.length]}:i));
+  }
+
+  function updateFindings(id,amount){
+    setInspections(allInspections.map(i=>i.id===id?{...i,findings:Math.max(0,(i.findings||0)+amount)}:i));
+  }
+
+  return <section className="hubGrid droneHub">
+    <div className="panel">
+      <div className="panelHead"><h3>New drone inspection</h3><span>{project.name}</span></div>
+      <div className="droneForm">
+        <label>Inspection title<input value={title} onChange={e=>setTitle(e.target.value)} placeholder="Scrubber internal inspection" /></label>
+        <label>Operator<select value={operator} onChange={e=>setOperator(e.target.value)}><option>Flemming</option><option>Jakob</option><option>Mathias</option><option>Magnus</option></select></label>
+        <label>Image count<input type="number" min="0" value={images} onChange={e=>setImages(e.target.value)} /></label>
+        <label>Notes<textarea value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Inspection scope and observations" /></label>
+        <button className="primaryBtn" onClick={addInspection}>Create drone inspection</button>
+      </div>
+    </div>
+
+    <div className="panel">
+      <div className="panelHead"><h3>Drone inspections</h3><span>{inspections.length}</span></div>
+      {inspections.length ? inspections.map(item=><article className="droneInspectionCard" key={item.id}>
+        <div className="droneInspectionTop"><div><b>{item.title}</b><small>{item.date} · {item.operator}</small></div><button onClick={()=>cycleStatus(item.id)}>{item.status}</button></div>
+        <p>{item.notes || 'No notes'}</p>
+        <div className="droneMetrics">
+          <span><strong>{item.images}</strong><small>Images</small></span>
+          <span><strong>{item.findings}</strong><small>Findings</small></span>
+          <div><button onClick={()=>updateFindings(item.id,-1)}>-</button><button onClick={()=>updateFindings(item.id,1)}>+</button></div>
+        </div>
+      </article>) : <div className="empty">No drone inspections for this project.</div>}
+    </div>
+  </section>
 }
 
 function Quotes({quotes,setQuotes}) {

@@ -62,3 +62,23 @@
 .projectFilters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}.projectFilters button{display:flex;gap:8px;align-items:center;background:#081827;color:#82a7bc;border:1px solid #173b55;padding:9px 12px;border-radius:6px;cursor:pointer}.projectFilters button.active{background:#0e4162;color:white;border-color:#2a8ab7}.projectFilters button span{background:#173d57;padding:2px 7px;border-radius:10px;font-size:10px}.projectFilters .trashFilter{border-color:#6f2b3c;color:#ff9aa5}.lifecycle-active{color:#5ae8b0!important;border-color:#25694f!important}.lifecycle-completed{color:#77d8ff!important;border-color:#25698a!important}.lifecycle-archived{color:#b6a8c8!important;border-color:#554565!important}.projectHeroRight{display:grid;gap:12px}.lifecycleActions{display:flex;justify-content:flex-end;gap:7px;flex-wrap:wrap}.lifecycleActions button,.trashRow button{background:#0d2d45;color:#8de5ff;border:1px solid #236184;padding:8px 10px;border-radius:5px;cursor:pointer}.lifecycleActions .dangerAction,.trashRow .permanentDelete{background:#3a1520;color:#ff9aa4;border-color:#7a2b3d}.trashList{display:grid;gap:4px}.trashRow{display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:center;padding:13px 0;border-top:1px solid #17364d}.trashRow>div{display:grid}.trashRow small{color:#789bb0;margin-top:4px}@media(max-width:800px){.projectHeroRight{margin-top:18px}.lifecycleActions{justify-content:flex-start}.trashRow{grid-template-columns:1fr}.projectFilters button{flex:1;justify-content:center}}
 
 .projectTypeTag{color:#7fdcf7;font-size:11px}.projectFilters{max-width:100%}
+
+.typeBadge{display:inline-block;margin-left:7px;color:#d2b7ff;border:1px solid #62477d;padding:4px 8px;border-radius:12px;font-size:10px}
+.projectTop>div{display:flex;align-items:center}
+.droneHub{align-items:start}
+.droneForm{display:grid;gap:12px}
+.droneForm label{display:grid;gap:6px;color:#91b5ca;font-size:12px}
+.droneForm input,.droneForm select,.droneForm textarea{background:#071421;border:1px solid #235274;color:#fff;padding:12px;border-radius:6px}
+.droneForm textarea{min-height:110px;resize:vertical}
+.droneInspectionCard{background:#081827;border:1px solid #19445f;border-radius:8px;padding:15px;margin-bottom:10px}
+.droneInspectionTop{display:flex;justify-content:space-between;gap:10px}
+.droneInspectionTop>div{display:grid}
+.droneInspectionTop small{color:#7499b0;margin-top:4px}
+.droneInspectionTop button{background:#0e3752;color:#80e4ff;border:1px solid #286c8e;border-radius:12px;padding:5px 9px;cursor:pointer}
+.droneInspectionCard p{color:#89aabd}
+.droneMetrics{display:flex;align-items:end;gap:18px}
+.droneMetrics>span{display:grid}
+.droneMetrics strong{font-size:22px}
+.droneMetrics small{color:#7395aa}
+.droneMetrics>div{margin-left:auto;display:flex;gap:6px}
+.droneMetrics button{width:30px;height:30px;background:#0f2b40;color:#8de5ff;border:1px solid #286080;border-radius:5px}
