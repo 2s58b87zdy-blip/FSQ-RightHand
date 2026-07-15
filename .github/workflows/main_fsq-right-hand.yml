@@ -19,9 +19,14 @@ jobs:
         with:
           node-version: "24"
 
-      - name: Installer pakker
+- name: Installer pakker
+  env:
+    NPM_CONFIG_REGISTRY: https://registry.npmjs.org/
   run: |
     rm -f package-lock.json
+    rm -f .npmrc
+    npm config delete proxy || true
+    npm config delete https-proxy || true
     npm config set registry https://registry.npmjs.org/
     npm install --registry=https://registry.npmjs.org/
 
