@@ -34,17 +34,22 @@ jobs:
       - name: Byg appen
         run: npm run build
 
-      - name: Klargør standalone-app
+      - name: Kopier CSS, JavaScript og public-filer til standalone
         run: |
-          mkdir -p .next/standalone/.next
-          cp -r .next/static .next/standalone/.next/static
+          test -f .next/standalone/server.js
+          mkdir -p .next/standalone/.next/static
+          cp -a .next/static/. .next/standalone/.next/static/
           if [ -d "public" ]; then
-            cp -r public .next/standalone/public
+            mkdir -p .next/standalone/public
+            cp -a public/. .next/standalone/public/
           fi
+          echo "Kontrollerer standalone-pakken:"
+          test -d .next/standalone/.next/static/chunks
+          find .next/standalone/.next/static -maxdepth 2 -type f | head -30
 
-      - name: Deploy til Azure
+      - name: Deploy hele projektet til Azure
         uses: azure/webapps-deploy@v3
         with:
           app-name: "fsq-right-hand"
           publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
-          package: ".next/standalone"
+          package: "."
