@@ -9,7 +9,8 @@ const USERS = {
 
 const NAV = [
   ['dashboard', 'Operations Dashboard', '◈'],
-  ['workshop', 'Workshop', '⚙'],
+  ['workshop', 'Workshop Control', '⚙'],
+  ['crew', 'Crew Management', '◉'],
   ['projects', 'Marine Projects', '◫'],
   ['quotes', 'Quotations', '▤'],
   ['reports', 'Service Reports', '▧'],
@@ -22,33 +23,48 @@ const NAV = [
 ];
 
 const DEFAULT_PROJECTS = [
-  { id: 1, name: 'Wind Orca', customer: 'Cadeler', status: 'Active', progress: 68, lead: 'Jakob', location: 'Esbjerg', next: 'Workshop fabrication' },
-  { id: 2, name: 'Wind Osprey', customer: 'Cadeler', status: 'Planning', progress: 42, lead: 'Flemming', location: 'Esbjerg', next: 'Mobilisation Friday' },
-  { id: 3, name: 'TORM Splendid', customer: 'TORM', status: 'Inspection', progress: 27, lead: 'Jakob', location: 'Rotterdam', next: 'Inspection report' }
+  { id: 1, name: 'Wind Orca', customer: 'Cadeler', status: 'Fabrication', progress: 68, lead: 'Jakob', location: 'Esbjerg', mobilisation: '5 days', next: 'Complete SMO fabrication' },
+  { id: 2, name: 'Wind Osprey', customer: 'Cadeler', status: 'Planning', progress: 42, lead: 'Flemming', location: 'Esbjerg', mobilisation: '12 days', next: 'Finalize material package' },
+  { id: 3, name: 'TORM Splendid', customer: 'TORM', status: 'Inspection', progress: 27, lead: 'Jakob', location: 'Rotterdam', mobilisation: 'In progress', next: 'Finish inspection report' }
 ];
 
 const DEFAULT_TASKS = [
   { id: 1, title: 'Klargør svejserobot til SMO', person: 'Jakob', priority: 'High', status: 'In progress', due: 'Today', project: 'Wind Orca' },
-  { id: 2, title: 'Skær sidste pinde og pak på paller', person: 'Tommy', priority: 'Normal', status: 'Open', due: 'Today', project: 'Workshop' },
-  { id: 3, title: 'Rengør plasmaskærer og skærebord', person: 'Anders', priority: 'Normal', status: 'Open', due: 'Today', project: 'Workshop' },
-  { id: 4, title: 'Drej pumpeemne på drejebænk', person: 'Jakob', priority: 'High', status: 'Open', due: 'Today', project: 'Wind Orca' },
-  { id: 5, title: 'Finalize service report', person: 'Flemming', priority: 'High', status: 'Open', due: 'Overdue', project: 'TORM Splendid' }
+  { id: 2, title: 'Skær sidste pinde og pak på paller', person: 'Tommy', priority: 'Normal', status: 'Planned', due: 'Today', project: 'Workshop' },
+  { id: 3, title: 'Rengør plasmaskærer og skærebord', person: 'Anders', priority: 'Normal', status: 'Planned', due: 'Today', project: 'Workshop' },
+  { id: 4, title: 'Drej pumpeemne på drejebænk', person: 'Jakob', priority: 'High', status: 'In progress', due: 'Today', project: 'Wind Orca' },
+  { id: 5, title: 'Afventer SMO254 6 mm', person: 'Tommy', priority: 'High', status: 'Waiting', due: 'Tomorrow', project: 'Wind Osprey' },
+  { id: 6, title: 'Finalize service report', person: 'Flemming', priority: 'High', status: 'Waiting', due: 'Overdue', project: 'TORM Splendid' },
+  { id: 7, title: 'Inspection report issued', person: 'Stefan', priority: 'Normal', status: 'Completed', due: 'Done', project: 'TORM Splendid' }
 ];
 
 const DEFAULT_PEOPLE = [
-  { id: 1, name: 'Flemming', location: 'Office', detail: 'Quotes and planning', status: 'Available' },
-  { id: 2, name: 'Jakob', location: 'Workshop', detail: 'Wind Orca fabrication', status: 'Busy' },
-  { id: 3, name: 'Tommy', location: 'Workshop', detail: 'Packing and material handling', status: 'Working' },
-  { id: 4, name: 'Anders', location: 'Workshop', detail: 'Cleaning and preparation', status: 'Working' },
-  { id: 5, name: 'Magnus', location: 'Offshore', detail: 'Wind Pace', status: 'On vessel' },
-  { id: 6, name: 'Stefan', location: 'Office', detail: 'Engineering', status: 'Available' },
-  { id: 7, name: 'Kim', location: 'Travel', detail: 'Mobilisation', status: 'Travelling' }
+  { id: 1, name: 'Flemming', location: 'Office', detail: 'Quotes and planning', status: 'Available', task: 'Commercial follow-up', progress: 55, skills: ['Management', 'Marine', 'Quotations'], certificates: [] },
+  { id: 2, name: 'Jakob', location: 'Workshop', detail: 'Wind Orca fabrication', status: 'Busy', task: 'Robot welding', progress: 68, skills: ['SMO254', 'Robot welding', 'Supervision'], certificates: ['Welding certificates'] },
+  { id: 3, name: 'Tommy', location: 'Workshop', detail: 'Packing and material handling', status: 'Working', task: 'Frame preparation', progress: 80, skills: ['Workshop', 'Material handling'], certificates: [] },
+  { id: 4, name: 'Anders', location: 'Workshop', detail: 'Cleaning and preparation', status: 'Working', task: 'Plasma area cleanup', progress: 42, skills: ['Workshop', 'Preparation'], certificates: [] },
+  { id: 5, name: 'Mathias', location: 'Workshop', detail: 'Workshop / Offshore', status: 'Available', task: 'Fabrication support', progress: 35, skills: ['SMO254', 'Montage', 'Offshore'], certificates: ['GWO', 'HLO45'] },
+  { id: 6, name: 'Magnus', location: 'Offshore', detail: 'Wind Pace', status: 'On vessel', task: 'Offshore installation', progress: 72, skills: ['Offshore', 'Installation'], certificates: ['GWO'] },
+  { id: 7, name: 'Stefan', location: 'Office', detail: 'Engineering', status: 'Available', task: 'Drawings and reports', progress: 48, skills: ['Engineering', 'Drawings'], certificates: [] },
+  { id: 8, name: 'Kim', location: 'Travel', detail: 'Mobilisation', status: 'Travelling', task: 'Mobilisation', progress: 30, skills: ['Offshore', 'Installation'], certificates: ['GWO'] }
 ];
 
-const DEFAULT_WEATHER = [
-  { id: 1, location: 'Esbjerg', temp: 16, wind: 8, condition: 'Cloudy', note: 'Suitable for mobilisation' },
-  { id: 2, location: 'Rotterdam', temp: 19, wind: 6, condition: 'Light rain', note: 'Plan covered work area' },
-  { id: 3, location: 'Nibe Workshop', temp: 17, wind: 4, condition: 'Partly cloudy', note: 'Normal operations' }
+const DEFAULT_MACHINES = [
+  { id: 1, name: 'Welding robot', status: 'In use', note: 'Wind Orca SMO welding', lastService: '2026-06-18' },
+  { id: 2, name: 'Plasma cutter', status: 'Ready', note: 'Available', lastService: '2026-05-12' },
+  { id: 3, name: 'Lathe', status: 'In use', note: 'Pump component', lastService: '2026-04-30' },
+  { id: 4, name: 'Press brake', status: 'Service', note: 'Maintenance tomorrow', lastService: '2026-07-01' },
+  { id: 5, name: 'Crane 2', status: 'Out of service', note: 'Awaiting inspection', lastService: '2026-03-15' },
+  { id: 6, name: 'Forklift', status: 'Ready', note: 'Available', lastService: '2026-06-02' }
+];
+
+const DEFAULT_MATERIALS = [
+  { id: 1, name: 'SMO254 6 mm', quantity: 3, unit: 'plates', minimum: 5 },
+  { id: 2, name: 'SMO254 8 mm', quantity: 7, unit: 'plates', minimum: 4 },
+  { id: 3, name: '2507 plate', quantity: 6, unit: 'plates', minimum: 4 },
+  { id: 4, name: '2507 pipe', quantity: 8, unit: 'lengths', minimum: 5 },
+  { id: 5, name: 'Shielding gas', quantity: 14, unit: 'bottles', minimum: 8 },
+  { id: 6, name: 'Grinding discs', quantity: 38, unit: 'pcs', minimum: 20 }
 ];
 
 const DEFAULT_QUOTES = [
@@ -98,7 +114,7 @@ function Login({ onLogin }) {
       setError('Forkert adgangskode');
       return;
     }
-    const greeting = `Good morning, ${user}. FSQ Right Hand is now online. All systems operational. How can I assist you today?`;
+    const greeting = `Good morning, ${user}. FSQ Right Hand is now online. Workshop control is ready. How can I assist you today?`;
     speak(greeting, voice);
     onLogin({ name: user, role: USERS[user].role, voice });
   }
@@ -119,7 +135,7 @@ function Login({ onLogin }) {
           {error && <div className="error">{error}</div>}
           <button className="primaryBtn">INITIALIZE SYSTEM</button>
         </form>
-        <div className="systemLine"><span/> Azure online <span/> GitHub connected <span/> Local data active</div>
+        <div className="systemLine"><span/> Azure online <span/> Workshop control active <span/> No time registration</div>
       </section>
     </main>
   );
@@ -127,21 +143,24 @@ function Login({ onLogin }) {
 
 function AppShell({ session, onLogout }) {
   const [active, setActive] = useState('dashboard');
-  const [projects, setProjects] = useStoredState('fsq-v31-projects', DEFAULT_PROJECTS);
-  const [tasks, setTasks] = useStoredState('fsq-v31-tasks', DEFAULT_TASKS);
-  const [people, setPeople] = useStoredState('fsq-v31-people', DEFAULT_PEOPLE);
-  const [weather, setWeather] = useStoredState('fsq-v31-weather', DEFAULT_WEATHER);
-  const [quotes, setQuotes] = useStoredState('fsq-v31-quotes', DEFAULT_QUOTES);
-  const [reports, setReports] = useStoredState('fsq-v31-reports', DEFAULT_REPORTS);
-  const [chat, setChat] = useState([{ from: 'ai', text: `Good morning ${session.name}. Operations dashboard is ready.` }]);
+  const [projects, setProjects] = useStoredState('fsq-v32-projects', DEFAULT_PROJECTS);
+  const [tasks, setTasks] = useStoredState('fsq-v32-tasks', DEFAULT_TASKS);
+  const [people, setPeople] = useStoredState('fsq-v32-people', DEFAULT_PEOPLE);
+  const [machines, setMachines] = useStoredState('fsq-v32-machines', DEFAULT_MACHINES);
+  const [materials, setMaterials] = useStoredState('fsq-v32-materials', DEFAULT_MATERIALS);
+  const [quotes, setQuotes] = useStoredState('fsq-v32-quotes', DEFAULT_QUOTES);
+  const [reports, setReports] = useStoredState('fsq-v32-reports', DEFAULT_REPORTS);
+  const [chat, setChat] = useState([{ from: 'ai', text: `Good morning ${session.name}. Workshop Control Center is ready.` }]);
   const [voice, setVoice] = useState(session.voice);
 
   const stats = useMemo(() => ({
     projects: projects.filter(p => p.status !== 'Completed').length,
-    today: tasks.filter(t => t.due === 'Today' && t.status !== 'Completed').length,
+    openTasks: tasks.filter(t => t.status !== 'Completed').length,
     urgent: tasks.filter(t => (t.priority === 'High' || t.due === 'Overdue') && t.status !== 'Completed').length,
-    activePeople: people.filter(p => !['Free', 'Off'].includes(p.status)).length
-  }), [projects, tasks, people]);
+    people: people.filter(p => !['Free', 'Off'].includes(p.status)).length,
+    lowStock: materials.filter(m => m.quantity < m.minimum).length,
+    machinesDown: machines.filter(m => ['Service','Out of service'].includes(m.status)).length
+  }), [projects, tasks, people, materials, machines]);
 
   return (
     <div className="appShell">
@@ -157,93 +176,259 @@ function AppShell({ session, onLogout }) {
           <div className="topActions"><label><input type="checkbox" checked={voice} onChange={e => setVoice(e.target.checked)} /> Voice</label><span className="clock">{new Date().toLocaleDateString('da-DK')}</span></div>
         </header>
 
-        {active === 'dashboard' && <OperationsDashboard session={session} stats={stats} tasks={tasks} people={people} projects={projects} weather={weather} setActive={setActive} />}
-        {active === 'workshop' && <Workshop tasks={tasks} setTasks={setTasks} />}
+        {active === 'dashboard' && <Dashboard session={session} stats={stats} projects={projects} tasks={tasks} people={people} machines={machines} materials={materials} setActive={setActive} />}
+        {active === 'workshop' && <WorkshopControl tasks={tasks} setTasks={setTasks} people={people} machines={machines} setMachines={setMachines} materials={materials} setMaterials={setMaterials} projects={projects} />}
+        {active === 'crew' && <CrewManagement people={people} setPeople={setPeople} projects={projects} />}
         {active === 'projects' && <Projects projects={projects} setProjects={setProjects} />}
         {active === 'quotes' && <Quotes quotes={quotes} setQuotes={setQuotes} />}
         {active === 'reports' && <Reports reports={reports} setReports={setReports} />}
-        {active === 'admin' && <People people={people} setPeople={setPeople} weather={weather} setWeather={setWeather} />}
-        {active === 'ai' && <AI chat={chat} setChat={setChat} voice={voice} tasks={tasks} projects={projects} />}
-        {!['dashboard','workshop','projects','quotes','reports','admin','ai'].includes(active) && <ModulePlaceholder title={NAV.find(n=>n[0]===active)?.[1]} />}
+        {active === 'admin' && <Admin people={people} setPeople={setPeople} machines={machines} setMachines={setMachines} materials={materials} setMaterials={setMaterials} />}
+        {active === 'ai' && <AI chat={chat} setChat={setChat} voice={voice} stats={stats} />}
+        {!['dashboard','workshop','crew','projects','quotes','reports','admin','ai'].includes(active) && <ModulePlaceholder title={NAV.find(n=>n[0]===active)?.[1]} />}
       </main>
     </div>
   );
 }
 
-function OperationsDashboard({ session, stats, tasks, people, projects, weather, setActive }) {
+function Dashboard({ session, stats, projects, tasks, people, machines, materials, setActive }) {
   const urgent = tasks.filter(t => (t.priority === 'High' || t.due === 'Overdue') && t.status !== 'Completed');
-  const todays = tasks.filter(t => t.due === 'Today' && t.status !== 'Completed');
-
   return <div className="content">
-    <section className="hero operationsHero">
+    <section className="hero">
       <div>
         <p className="eyebrow">GOOD MORNING, {session.name.toUpperCase()}</p>
-        <h1>Operations at a glance.</h1>
-        <p>{stats.projects} active projects · {stats.activePeople} people planned · {stats.urgent} urgent items</p>
-        <div className="heroActions">
-          <button onClick={() => setActive('workshop')}>Open workshop</button>
-          <button onClick={() => setActive('projects')}>Open projects</button>
-        </div>
+        <h1>Workshop and marine operations.</h1>
+        <p>{stats.projects} active projects · {stats.people} people active · {stats.openTasks} open tasks</p>
+        <div className="heroActions"><button onClick={()=>setActive('workshop')}>Open Workshop Control</button><button onClick={()=>setActive('projects')}>Marine Projects</button></div>
       </div>
-      <div className="heroCore"><div className="pulse"/><span>{stats.today}</span><small>TASKS TODAY</small></div>
+      <div className="heroCore"><div className="pulse"/><span>{stats.urgent}</span><small>URGENT ITEMS</small></div>
     </section>
 
-    <section className="statGrid">
-      <Stat label="Today's tasks" value={stats.today} delta={`${tasks.filter(t=>t.status==='In progress').length} in progress`} />
-      <Stat label="People active" value={stats.activePeople} delta={`${people.filter(p=>p.location==='Workshop').length} in workshop`} />
-      <Stat label="Active vessels" value={stats.projects} delta={`${projects.filter(p=>p.status==='Active').length} live`} />
-      <Stat label="Urgent items" value={stats.urgent} delta={`${tasks.filter(t=>t.due==='Overdue'&&t.status!=='Completed').length} overdue`} danger={stats.urgent>0} />
+    <section className="statGrid six">
+      <Stat label="People active" value={stats.people} delta={`${people.filter(p=>p.location==='Workshop').length} in workshop`} />
+      <Stat label="Active projects" value={stats.projects} delta={`${projects.filter(p=>p.status==='Fabrication').length} in fabrication`} />
+      <Stat label="Open tasks" value={stats.openTasks} delta={`${tasks.filter(t=>t.status==='In progress').length} in progress`} />
+      <Stat label="Urgent tasks" value={stats.urgent} delta={`${tasks.filter(t=>t.due==='Overdue'&&t.status!=='Completed').length} overdue`} danger={stats.urgent>0} />
+      <Stat label="Low stock" value={stats.lowStock} delta="Materials below minimum" danger={stats.lowStock>0} />
+      <Stat label="Machines attention" value={stats.machinesDown} delta="Service or unavailable" danger={stats.machinesDown>0} />
     </section>
 
-    <section className="opsGrid">
+    <section className="dashboardGrid">
       <div className="panel">
-        <div className="panelHead"><h3>📅 Today's tasks</h3><button onClick={()=>setActive('workshop')}>Open board</button></div>
-        {todays.length ? todays.map(t => <div className="opsRow" key={t.id}><span className={t.priority==='High'?'priority high':'priority'}>{t.priority}</span><div><b>{t.title}</b><small>{t.person} · {t.project}</small></div><em>{t.status}</em></div>) : <Empty text="No tasks due today" />}
+        <div className="panelHead"><h3>Today's workshop priorities</h3><button onClick={()=>setActive('workshop')}>Open board</button></div>
+        {tasks.filter(t=>t.status!=='Completed').slice(0,6).map(t=><div className="opsRow" key={t.id}><span className={`priority ${t.priority==='High'?'high':''}`}>{t.priority}</span><div><b>{t.title}</b><small>{t.person} · {t.project}</small></div><em>{t.status}</em></div>)}
       </div>
-
       <div className="panel">
-        <div className="panelHead"><h3>👷 Who is where</h3><button onClick={()=>setActive('admin')}>Update</button></div>
-        <div className="peopleGrid">{people.map(p=><div className="personTile" key={p.id}><div className="avatar mini">{p.name[0]}</div><div><b>{p.name}</b><small>{p.location} · {p.detail}</small></div><span className={`personStatus ${p.status.toLowerCase().replace(' ','-')}`}>{p.status}</span></div>)}</div>
+        <div className="panelHead"><h3>Who is where</h3><button onClick={()=>setActive('admin')}>Update</button></div>
+        {people.map(p=><div className="personTile" key={p.id}><div className="avatar mini">{p.name[0]}</div><div><b>{p.name}</b><small>{p.location} · {p.task}</small></div><span>{p.progress}%</span></div>)}
       </div>
-
       <div className="panel">
-        <div className="panelHead"><h3>🚢 Active vessels</h3><button onClick={()=>setActive('projects')}>View all</button></div>
-        {projects.map(p=><div className="vesselRow" key={p.id}><div><b>{p.name}</b><small>{p.customer} · {p.location}</small><small>Next: {p.next}</small></div><div className="vesselProgress"><span style={{width:`${p.progress}%`}}/><em>{p.progress}%</em></div></div>)}
+        <div className="panelHead"><h3>Active marine projects</h3><button onClick={()=>setActive('projects')}>View all</button></div>
+        {projects.map(p=><div className="vesselRow" key={p.id}><div><b>{p.name}</b><small>{p.customer} · {p.status}</small><small>Mobilisation: {p.mobilisation}</small></div><div className="vesselProgress"><span style={{width:`${p.progress}%`}}/><em>{p.progress}%</em></div></div>)}
       </div>
-
       <div className="panel urgentPanel">
-        <div className="panelHead"><h3>⚠ Urgent tasks</h3><span className="alertCount">{urgent.length}</span></div>
-        {urgent.length ? urgent.map(t=><div className="urgentRow" key={t.id}><div className="alertIcon">!</div><div><b>{t.title}</b><small>{t.person} · {t.project} · {t.due}</small></div></div>) : <Empty text="No urgent tasks" />}
+        <div className="panelHead"><h3>Critical items</h3><span className="alertCount">{urgent.length}</span></div>
+        {urgent.map(t=><div className="urgentRow" key={t.id}><div className="alertIcon">!</div><div><b>{t.title}</b><small>{t.person} · {t.project} · {t.due}</small></div></div>)}
       </div>
-    </section>
-
-    <section className="weatherSection">
-      <div className="sectionTitle"><div><h3>🌤 Project weather</h3><p>Manual project weather for v3.1. Live weather connection comes next.</p></div></div>
-      <div className="weatherGrid">{weather.map(w=><article className="weatherCard" key={w.id}><div className="weatherTop"><div><small>PROJECT LOCATION</small><h3>{w.location}</h3></div><strong>{w.temp}°</strong></div><div className="weatherMeta"><span>{w.condition}</span><span>Wind {w.wind} m/s</span></div><p>{w.note}</p></article>)}</div>
     </section>
   </div>
 }
 
-function Stat({label,value,delta,danger}) { return <div className={`stat ${danger?'dangerStat':''}`}><small>{label}</small><strong>{value}</strong><span>{delta}</span></div> }
-function Empty({text}) { return <div className="empty">{text}</div> }
-
-function Workshop({ tasks, setTasks }) {
+function WorkshopControl({ tasks, setTasks, people, machines, setMachines, materials, setMaterials, projects }) {
   const [title,setTitle]=useState('');
   const [person,setPerson]=useState('Tommy');
-  function add(){ if(!title.trim())return; setTasks([...tasks,{id:Date.now(),title,person,priority:'Normal',status:'Open',due:'Today',project:'Workshop'}]); setTitle(''); }
-  function cycle(id){ setTasks(tasks.map(t=>t.id===id?{...t,status:t.status==='Open'?'In progress':t.status==='In progress'?'Completed':'Open'}:t)); }
-  return <div className="content"><div className="sectionIntro"><h1>Workshop control board</h1><p>Live production status, people and machine overview.</p></div>
-    <div className="machineStrip"><Machine name="Welding robot" status="Running"/><Machine name="Plasma cutter" status="Ready"/><Machine name="Lathe" status="Running"/><Machine name="Press brake" status="Ready"/><Machine name="Crane 2" status="Service" bad/></div>
-    <div className="panel addBar"><input placeholder="New workshop task" value={title} onChange={e=>setTitle(e.target.value)}/><select value={person} onChange={e=>setPerson(e.target.value)}>{['Tommy','Jakob','Anders','Magnus','Stefan','Kim','Flemming'].map(x=><option key={x}>{x}</option>)}</select><button onClick={add}>Add task</button></div>
-    <div className="kanban"><TaskColumn title="Open" tasks={tasks.filter(t=>t.status==='Open')} cycle={cycle}/><TaskColumn title="In progress" tasks={tasks.filter(t=>t.status==='In progress')} cycle={cycle}/><TaskColumn title="Completed" tasks={tasks.filter(t=>t.status==='Completed')} cycle={cycle}/></div>
+  const [project,setProject]=useState('Workshop');
+
+  function addTask(){
+    if(!title.trim()) return;
+    setTasks([...tasks,{id:Date.now(),title,person,priority:'Normal',status:'Planned',due:'Today',project}]);
+    setTitle('');
+  }
+  function cycleTask(id){
+    const order=['Planned','In progress','Waiting','Completed'];
+    setTasks(tasks.map(t=>t.id===id?{...t,status:order[(order.indexOf(t.status)+1)%order.length]}:t));
+  }
+
+  return <div className="content">
+    <div className="sectionIntro"><h1>Workshop Control Center</h1><p>People, production, machines and materials. Time registration remains in e-conomic.</p></div>
+
+    <section className="workshopSummary">
+      <Summary label="Workshop staff" value={people.filter(p=>p.location==='Workshop').length} />
+      <Summary label="Tasks in progress" value={tasks.filter(t=>t.status==='In progress').length} />
+      <Summary label="Waiting tasks" value={tasks.filter(t=>t.status==='Waiting').length} warning />
+      <Summary label="Machines ready" value={machines.filter(m=>m.status==='Ready').length} />
+      <Summary label="Low stock items" value={materials.filter(m=>m.quantity<m.minimum).length} warning />
+    </section>
+
+    <section className="peopleCards">
+      {people.filter(p=>p.location==='Workshop'||p.location==='Office').map(p=><article key={p.id}>
+        <div className="personHead"><div className="avatar">{p.name[0]}</div><div><h3>{p.name}</h3><small>{p.location} · {p.status}</small></div></div>
+        <p>{p.task}</p>
+        <div className="progress big"><span style={{width:`${p.progress}%`}}/></div>
+        <div className="personFooter"><span>{p.progress}%</span><small>{p.detail}</small></div>
+      </article>)}
+    </section>
+
+    <section className="panel taskCreator">
+      <input placeholder="New workshop task" value={title} onChange={e=>setTitle(e.target.value)} />
+      <select value={person} onChange={e=>setPerson(e.target.value)}>{people.map(p=><option key={p.id}>{p.name}</option>)}</select>
+      <select value={project} onChange={e=>setProject(e.target.value)}><option>Workshop</option>{projects.map(p=><option key={p.id}>{p.name}</option>)}</select>
+      <button onClick={addTask}>Add task</button>
+    </section>
+
+    <section className="kanban four">
+      {['Planned','In progress','Waiting','Completed'].map(status=><TaskColumn key={status} title={status} tasks={tasks.filter(t=>t.status===status)} cycle={cycleTask} />)}
+    </section>
+
+    <section className="workshopLowerGrid">
+      <div className="panel">
+        <div className="panelHead"><h3>Machine status</h3><button onClick={()=>setMachines(DEFAULT_MACHINES)}>Reset</button></div>
+        <div className="machineGrid">
+          {machines.map(m=><MachineCard key={m.id} machine={m} setMachines={setMachines} machines={machines} />)}
+        </div>
+      </div>
+      <div className="panel">
+        <div className="panelHead"><h3>Material overview</h3><button onClick={()=>setMaterials(DEFAULT_MATERIALS)}>Reset</button></div>
+        {materials.map(m=><MaterialRow key={m.id} material={m} materials={materials} setMaterials={setMaterials} />)}
+      </div>
+    </section>
   </div>
 }
-function Machine({name,status,bad}) { return <div className="machine"><i className={bad?'bad':''}/><div><b>{name}</b><small>{status}</small></div></div> }
+
+function Summary({label,value,warning}) { return <div className={`summaryCard ${warning?'warning':''}`}><small>{label}</small><strong>{value}</strong></div> }
+function Stat({label,value,delta,danger}) { return <div className={`stat ${danger?'dangerStat':''}`}><small>{label}</small><strong>{value}</strong><span>{delta}</span></div> }
 function TaskColumn({title,tasks,cycle}) { return <div className="column"><h3>{title}<span>{tasks.length}</span></h3>{tasks.map(t=><button className="taskCard" key={t.id} onClick={()=>cycle(t.id)}><small>{t.priority} · {t.due}</small><b>{t.title}</b><span>{t.person} · {t.project}</span></button>)}</div> }
+
+function MachineCard({ machine, machines, setMachines }) {
+  const states=['Ready','In use','Service','Out of service'];
+  function cycle(){ setMachines(machines.map(m=>m.id===machine.id?{...m,status:states[(states.indexOf(m.status)+1)%states.length]}:m)); }
+  return <button className={`machineCard ${machine.status.toLowerCase().replaceAll(' ','-')}`} onClick={cycle}>
+    <div className="machineIndicator" />
+    <div><b>{machine.name}</b><small>{machine.note}</small><small>Last service: {machine.lastService}</small></div>
+    <em>{machine.status}</em>
+  </button>
+}
+
+function MaterialRow({ material, materials, setMaterials }) {
+  const low=material.quantity<material.minimum;
+  function change(amount){setMaterials(materials.map(m=>m.id===material.id?{...m,quantity:Math.max(0,m.quantity+amount)}:m))}
+  return <div className={`materialRow ${low?'low':''}`}>
+    <div><b>{material.name}</b><small>Minimum {material.minimum} {material.unit}</small></div>
+    <div className="materialControls"><button onClick={()=>change(-1)}>-</button><strong>{material.quantity}</strong><span>{material.unit}</span><button onClick={()=>change(1)}>+</button></div>
+  </div>
+}
+
+
+function CrewManagement({ people, setPeople, projects }) {
+  const locations = ['Workshop', 'Office', 'Offshore', 'Travel', 'Course', 'Free'];
+  const [selected, setSelected] = useState(people[0]?.id || null);
+
+  function updatePerson(id, field, value) {
+    setPeople(people.map(p => p.id === id ? { ...p, [field]: value } : p));
+  }
+
+  function addPerson() {
+    const id = Date.now();
+    setPeople([...people, {
+      id,
+      name: 'New employee',
+      location: 'Workshop',
+      detail: 'Role not assigned',
+      status: 'Available',
+      task: 'No task assigned',
+      progress: 0,
+      skills: [],
+      certificates: []
+    }]);
+    setSelected(id);
+  }
+
+  const current = people.find(p => p.id === selected);
+
+  return <div className="content">
+    <div className="sectionIntro crewIntro">
+      <div><h1>Crew Management</h1><p>Plan workshop, office, offshore, travel, courses and availability.</p></div>
+      <button className="primaryBtn" onClick={addPerson}>Add employee</button>
+    </div>
+
+    <section className="crewStats">
+      {locations.map(location => <div className="summaryCard" key={location}>
+        <small>{location}</small>
+        <strong>{people.filter(p => p.location === location).length}</strong>
+      </div>)}
+    </section>
+
+    <section className="crewLayout">
+      <div className="panel crewRoster">
+        <div className="panelHead"><h3>Employee roster</h3><span>{people.length} employees</span></div>
+        {people.map(p => <button
+          key={p.id}
+          className={`crewRow ${selected === p.id ? 'selected' : ''}`}
+          onClick={() => setSelected(p.id)}
+        >
+          <div className="avatar">{p.name?.[0] || '?'}</div>
+          <div>
+            <b>{p.name}</b>
+            <small>{p.location} · {p.status}</small>
+            <small>{p.task}</small>
+          </div>
+          <span>{p.progress || 0}%</span>
+        </button>)}
+      </div>
+
+      <div className="panel crewEditor">
+        {current ? <>
+          <div className="panelHead"><h3>Employee details</h3><span>{current.location}</span></div>
+
+          <label>Name<input value={current.name} onChange={e => updatePerson(current.id, 'name', e.target.value)} /></label>
+          <div className="crewFormGrid">
+            <label>Location<select value={current.location} onChange={e => updatePerson(current.id, 'location', e.target.value)}>
+              {locations.map(x => <option key={x}>{x}</option>)}
+            </select></label>
+            <label>Status<select value={current.status} onChange={e => updatePerson(current.id, 'status', e.target.value)}>
+              {['Available','Working','Busy','On vessel','Travelling','Course','Free'].map(x => <option key={x}>{x}</option>)}
+            </select></label>
+          </div>
+
+          <label>Role / detail<input value={current.detail || ''} onChange={e => updatePerson(current.id, 'detail', e.target.value)} /></label>
+          <label>Current task<input value={current.task || ''} onChange={e => updatePerson(current.id, 'task', e.target.value)} /></label>
+          <label>Assigned project<select value={current.project || ''} onChange={e => updatePerson(current.id, 'project', e.target.value)}>
+            <option value="">No project assigned</option>
+            {projects.map(p => <option key={p.id}>{p.name}</option>)}
+          </select></label>
+
+          <label>Progress: {current.progress || 0}%
+            <input type="range" min="0" max="100" value={current.progress || 0} onChange={e => updatePerson(current.id, 'progress', Number(e.target.value))} />
+          </label>
+
+          <div className="crewInfoGrid">
+            <div>
+              <small>Skills</small>
+              <p>{(current.skills || []).join(' · ') || 'No skills registered'}</p>
+            </div>
+            <div>
+              <small>Certificates</small>
+              <p>{(current.certificates || []).join(' · ') || 'No certificates registered'}</p>
+            </div>
+          </div>
+        </> : <div className="empty">Select an employee</div>}
+      </div>
+    </section>
+
+    <section className="crewGroups">
+      {locations.map(location => <div className="panel" key={location}>
+        <div className="panelHead"><h3>{location}</h3><span>{people.filter(p => p.location === location).length}</span></div>
+        {people.filter(p => p.location === location).map(p => <div className="groupPerson" key={p.id}>
+          <div className="avatar mini">{p.name[0]}</div>
+          <div><b>{p.name}</b><small>{p.task}</small></div>
+        </div>)}
+      </div>)}
+    </section>
+  </div>
+}
 
 function Projects({projects,setProjects}) {
   const [name,setName]=useState(''); const [customer,setCustomer]=useState('');
-  function add(){if(!name.trim())return;setProjects([...projects,{id:Date.now(),name,customer:customer||'Unassigned',status:'Planning',progress:5,lead:'Flemming',location:'TBD',next:'Planning'}]);setName('');setCustomer('')}
+  function add(){if(!name.trim())return;setProjects([...projects,{id:Date.now(),name,customer:customer||'Unassigned',status:'Planning',progress:5,lead:'Flemming',location:'TBD',mobilisation:'TBD',next:'Planning'}]);setName('');setCustomer('')}
   return <div className="content"><div className="sectionIntro"><h1>Marine projects</h1><p>Shared project overview for vessels, repairs and inspections.</p></div><div className="panel addBar"><input placeholder="Project or vessel name" value={name} onChange={e=>setName(e.target.value)}/><input placeholder="Customer" value={customer} onChange={e=>setCustomer(e.target.value)}/><button onClick={add}>Create project</button></div><div className="projectCards">{projects.map(p=><article key={p.id}><div className="projectBadge">{p.status}</div><h3>{p.name}</h3><p>{p.customer} · {p.location}</p><div className="meta"><span>Lead {p.lead}</span><span>{p.progress}%</span></div><div className="progress big"><span style={{width:`${p.progress}%`}}/></div><p className="nextLine">Next: {p.next}</p></article>)}</div></div>
 }
 
@@ -261,35 +446,33 @@ function Reports({reports,setReports}) {
   return <div className="content"><div className="sectionIntro"><h1>Service Reports</h1><p>Register and progress vessel reports.</p></div><div className="panel addBar"><input placeholder="Vessel" value={vessel} onChange={e=>setVessel(e.target.value)}/><input placeholder="Report title" value={title} onChange={e=>setTitle(e.target.value)}/><button onClick={add}>New report</button></div><div className="panel">{reports.map(r=><button className="listRow" key={r.id} onClick={()=>cycle(r.id)}><div><b>{r.vessel} · {r.title}</b><small>Click to change status</small></div><em>{r.status}</em></button>)}</div></div>
 }
 
-function People({people,setPeople,weather,setWeather}) {
+function Admin({people,setPeople,machines,setMachines,materials,setMaterials}) {
   function cyclePerson(id){const states=['Office','Workshop','Offshore','Travel','Course','Free'];setPeople(people.map(p=>p.id===id?{...p,location:states[(states.indexOf(p.location)+1)%states.length]}:p))}
-  function bumpWeather(id, field, amount){setWeather(weather.map(w=>w.id===id?{...w,[field]:w[field]+amount}:w))}
-  return <div className="content"><div className="sectionIntro"><h1>Operations administration</h1><p>Update staff locations and project weather manually.</p></div>
-    <div className="twoCol">
-      <div className="panel"><div className="panelHead"><h3>Who is where</h3></div>{people.map(p=><button className="listRow" key={p.id} onClick={()=>cyclePerson(p.id)}><div><b>{p.name}</b><small>{p.detail}</small></div><em>{p.location}</em></button>)}</div>
-      <div className="panel"><div className="panelHead"><h3>Weather values</h3></div>{weather.map(w=><div className="weatherAdmin" key={w.id}><div><b>{w.location}</b><small>{w.condition}</small></div><button onClick={()=>bumpWeather(w.id,'temp',-1)}>-°</button><strong>{w.temp}°</strong><button onClick={()=>bumpWeather(w.id,'temp',1)}>+°</button><button onClick={()=>bumpWeather(w.id,'wind',-1)}>-wind</button><strong>{w.wind} m/s</strong><button onClick={()=>bumpWeather(w.id,'wind',1)}>+wind</button></div>)}</div>
+  return <div className="content"><div className="sectionIntro"><h1>Administration</h1><p>Update personnel, machines and materials.</p></div>
+    <div className="dashboardGrid">
+      <div className="panel"><h3>Personnel location</h3>{people.map(p=><button className="listRow" key={p.id} onClick={()=>cyclePerson(p.id)}><div><b>{p.name}</b><small>{p.task}</small></div><em>{p.location}</em></button>)}</div>
+      <div className="panel"><h3>Machine reset</h3><button className="primaryBtn" onClick={()=>setMachines(DEFAULT_MACHINES)}>Restore default machines</button></div>
+      <div className="panel"><h3>Material reset</h3><button className="primaryBtn" onClick={()=>setMaterials(DEFAULT_MATERIALS)}>Restore default materials</button></div>
     </div>
   </div>
 }
 
-function AI({chat,setChat,voice,tasks,projects}) {
+function AI({chat,setChat,voice,stats}) {
   const [text,setText]=useState('');
   function send(){
     if(!text.trim())return;
-    const q=text;
-    setChat([...chat,{from:'user',text:q}]);
-    setText('');
+    const q=text; setChat([...chat,{from:'user',text:q}]); setText('');
     setTimeout(()=>{
       const lower=q.toLowerCase();
-      let answer='I have registered your request. In the database version I will search all FSQ records before answering.';
-      if(lower.includes('urgent')||lower.includes('haste')) answer=`There are ${tasks.filter(t=>(t.priority==='High'||t.due==='Overdue')&&t.status!=='Completed').length} urgent items.`;
-      else if(lower.includes('where')||lower.includes('hvor')) answer='Open Operations Dashboard to see the current staff locations.';
-      else if(lower.includes('ship')||lower.includes('skib')) answer=`There are ${projects.length} active vessel projects in the current overview.`;
-      else if(lower.includes('workshop')) answer=`There are ${tasks.filter(t=>t.status!=='Completed').length} open workshop and operations tasks.`;
+      let answer='I have registered your request. Shared database integration will make this fully operational across all users.';
+      if(lower.includes('workshop')) answer=`Workshop status: ${stats.openTasks} open tasks, ${stats.lowStock} low-stock items and ${stats.machinesDown} machines requiring attention.`;
+      else if(lower.includes('material')) answer=`There are ${stats.lowStock} materials below minimum stock.`;
+      else if(lower.includes('machine')) answer=`There are ${stats.machinesDown} machines in service or out of service.`;
+      else if(lower.includes('urgent')||lower.includes('haste')) answer=`There are ${stats.urgent} urgent tasks.`;
       setChat(c=>[...c,{from:'ai',text:answer}]); speak(answer,voice);
     },400)
   }
-  return <div className="content aiLayout"><div className="sectionIntro"><h1>Right Hand AI</h1><p>Ask about today's work, personnel, vessels and urgent items.</p></div><div className="chatPanel">{chat.map((m,i)=><div key={i} className={`bubble ${m.from}`}>{m.text}</div>)}<div className="chatInput"><input value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>e.key==='Enter'&&send()} placeholder="Ask FSQ Right Hand..."/><button onClick={send}>Send</button></div></div></div>
+  return <div className="content aiLayout"><div className="sectionIntro"><h1>Right Hand AI</h1><p>Ask about workshop status, machines, materials and priorities.</p></div><div className="chatPanel">{chat.map((m,i)=><div key={i} className={`bubble ${m.from}`}>{m.text}</div>)}<div className="chatInput"><input value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>e.key==='Enter'&&send()} placeholder="Ask FSQ Right Hand..."/><button onClick={send}>Send</button></div></div></div>
 }
 
 function ModulePlaceholder({title}) { return <div className="content"><div className="sectionIntro"><h1>{title}</h1><p>This module is included in the navigation and ready for connection to the shared database.</p></div><div className="panel placeholder"><div className="core small"><div className="coreRing r1"/><div className="coreDot"/></div><h3>{title} module</h3><p>UI foundation ready. Database, files and approval workflows are the next deployment layer.</p></div></div> }
