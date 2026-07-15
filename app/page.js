@@ -384,6 +384,18 @@ function CrewManagement({ people, setPeople, projects }) {
     setSelected(id);
   }
 
+  function deletePerson(id) {
+    const person = people.find(p => p.id === id);
+    if (!person) return;
+
+    const confirmed = window.confirm(`Delete ${person.name} from the employee list?`);
+    if (!confirmed) return;
+
+    const remaining = people.filter(p => p.id !== id);
+    setPeople(remaining);
+    setSelected(remaining[0]?.id || null);
+  }
+
   const current = people.find(p => p.id === selected);
 
   return <div className="content">
@@ -419,7 +431,7 @@ function CrewManagement({ people, setPeople, projects }) {
 
       <div className="panel crewEditor">
         {current ? <>
-          <div className="panelHead"><h3>Employee details</h3><span>{current.location}</span></div>
+          <div className="panelHead"><h3>Employee details</h3><div className="employeeHeaderActions"><span>{current.location}</span><button className="deleteEmployee" onClick={() => deletePerson(current.id)}>Delete employee</button></div></div>
 
           <label>Name<input value={current.name} onChange={e => updatePerson(current.id, 'name', e.target.value)} /></label>
           <div className="crewFormGrid">

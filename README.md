@@ -1,8 +1,13 @@
-# FSQ Right Hand v3.3
+# FSQ Right Hand v3.3.1
 
 Document Center release and workshop task fix.
 
-## New in v3.3
+## New in v3.3.1
+- Employees can now be deleted from Crew Management
+- Confirmation dialog before deletion
+- Selection automatically moves to the next employee
+
+## Included from v3.3
 - Fixed creation of workshop tasks
 - Task validation and clear error message
 - Priority and due-date selection
