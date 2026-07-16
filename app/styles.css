@@ -148,3 +148,15 @@ button:disabled,
   font-size: 11px;
   font-weight: 700;
 }
+
+.permissionLocked {
+  opacity: .55;
+  pointer-events: none;
+}
+
+.permissionOwnerNote {
+  margin-top: 8px;
+  color: #ffbd6b;
+  font-size: 11px;
+  font-weight: 700;
+}

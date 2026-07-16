@@ -157,37 +157,6 @@ function chooseEnglishFemaleVoice() {
 }
 
 
-function canApproveTackAndComplete(session) {
-  if (!session) return false;
-
-  const role = String(session.role || '').trim().toLowerCase();
-  const name = String(session.name || session.user || '').trim().toLowerCase();
-  const permissions = Array.isArray(session.permissions)
-    ? session.permissions.map(value => String(value).toLowerCase())
-    : [];
-
-  return [
-    'administrator',
-    'admin',
-    'workshop manager',
-    'workshopmanager',
-    'qa inspector',
-    'quality inspector',
-    'supervisor'
-  ].includes(role)
-    || permissions.includes('approve_welding')
-    || permissions.includes('workshop_qa_approve')
-    || ['flemming', 'flemming bach', 'jakob'].includes(name);
-}
-
-function approvalIdentity(session) {
-  return {
-    approvedBy: session?.name || session?.user || 'Unknown user',
-    approvedRole: session?.role || 'Unknown role',
-    approvedAt: new Date().toISOString()
-  };
-}
-
 
 function canApproveTackAndComplete(session) {
   if (!session) return false;
@@ -204,6 +173,35 @@ function canApproveTackAndComplete(session) {
     'jakob kjaer danielsen'
   ].includes(name);
 }
+
+
+function canManagePermissions(session) {
+  if (!session) return false;
+
+  const name = String(session.name || session.user || session.username || '')
+    .trim()
+    .toLowerCase();
+
+  return ['flemming', 'flemming bach'].includes(name);
+}
+
+function requirePermissionManager(session) {
+  if (canManagePermissions(session)) return true;
+  alert('Only Flemming can assign or change user permissions.');
+  return false;
+}
+
+
+
+function approvalIdentity(session) {
+  return {
+    approvedBy: session?.name || session?.user || 'Unknown user',
+    approvedRole: session?.role || 'Unknown role',
+    approvedAt: new Date().toISOString()
+  };
+}
+
+
 
 function approvalIdentity(session) {
   return {
