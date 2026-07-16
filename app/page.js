@@ -388,7 +388,7 @@ function AppShell({ session, onLogout, users, setUsers }) {
         </header>
         {voiceMessage&&<div className="voiceStatus">{voiceMessage}</div>}
 
-        {active === 'dashboard' && <Dashboard session={session} stats={stats} projects={visibleProjects} tasks={visibleTasks} people={people} machines={machines} materials={materials} setActive={setActive} deletedProjects={deletedProjects} setDeletedProjects={setDeletedProjects} setActiveProjectId={setActiveProjectId} droneInspections={droneInspections} setDroneInspections={setDroneInspections} />}
+        {active === 'dashboard' && <Dashboard session={session} stats={stats} projects={visibleProjects} tasks={visibleTasks} people={people} machines={machines} materials={materials} quotes={quotes} droneInspections={droneInspections} setActive={setActive} />}
         {active === 'myjobs' && <MyJobs session={session} tasks={tasks} setTasks={setTasks} projects={projects} />}
         {active === 'approvals' && <JobApprovals session={session} tasks={tasks} setTasks={setTasks} projects={projects} />}
         {active === 'crew' && <CrewManagement people={people} setPeople={setPeople} projects={projects} />}
@@ -536,49 +536,100 @@ function JobApprovals({session,tasks,setTasks,projects}){
 }
 
 
-function Dashboard({ session, stats, projects, tasks, people, machines, materials, setActive }) {
-  const urgent = tasks.filter(t => (t.priority === 'High' || t.due === 'Overdue') && t.status !== 'Completed');
-  return <div className="content">
-    <section className="hero">
+function Dashboard({ session, stats, projects, tasks, people, machines, materials, quotes, droneInspections, setActive }) {
+  const activeProjects=projects.filter(project=>project.status!=='Completed' && project.lifecycle!=='Archived');
+  const workshopProjects=activeProjects.filter(project=>['Workshop','Fabrication'].includes(project.type) || project.location?.toLowerCase().includes('workshop'));
+  const marineProjects=activeProjects.filter(project=>['Marine','Vessel','Inspection'].includes(project.type));
+  const pendingApprovals=tasks.filter(task=>task.jobStatus==='Awaiting approval' || task.status==='Waiting');
+  const criticalJobs=tasks.filter(task=>(task.priority==='High'||task.priority==='Critical'||task.due==='Overdue') && task.status!=='Completed');
+  const peopleWorking=people.filter(person=>!['Free','Off'].includes(person.status));
+  const materialAlerts=materials.filter(material=>material.quantity<material.minimum);
+  const openDrone=droneInspections.filter(item=>!['Completed','Closed'].includes(item.status));
+  const quoteReplies=quotes.filter(quote=>['Draft','Awaiting approval','Sent','Awaiting reply'].includes(quote.status));
+  const tackApprovals=tasks.filter(task=>task.qaStage==='Tack inspection' || task.jobStatus==='Awaiting tack approval');
+  const finalApprovals=tasks.filter(task=>task.qaStage==='Final inspection' || task.jobStatus==='Awaiting final approval');
+  const releasedToday=tasks.filter(task=>task.jobStatus==='Approved' && task.approvedAt && new Date(task.approvedAt).toDateString()===new Date().toDateString());
+  const visiblePeople=peopleWorking.slice(0,8);
+  const machineStatus=(status)=>{
+    if(['Out of service','Fault'].includes(status))return 'fault';
+    if(status==='Service')return 'service';
+    if(status==='In use')return 'running';
+    return 'ready';
+  };
+  const greeting=new Date().getHours()<12?'GOOD MORNING':new Date().getHours()<18?'GOOD AFTERNOON':'GOOD EVENING';
+
+  return <div className="content phase3Dashboard">
+    <section className="commandHero">
       <div>
-        <p className="eyebrow">{new Date().getHours()<12?'GOOD MORNING':new Date().getHours()<18?'GOOD AFTERNOON':'GOOD EVENING'}, {session.name.toUpperCase()}</p>
-        <h1>Workshop and marine operations.</h1>
-        <p>{stats.projects} active projects · {stats.people} people active · {stats.openTasks} open tasks</p>
-        <div className="heroActions"><button onClick={()=>setActive('workshop')}>Open Projects</button><button onClick={()=>setActive('projects')}>Projects</button></div>
+        <p className="eyebrow">{greeting}, {session.name.toUpperCase()}</p>
+        <h1>FSQ Command</h1>
+        <p className="commandSubtitle">Marine Operations Platform</p>
+        <p>{activeProjects.length} active projects · {pendingApprovals.length} approvals waiting · {peopleWorking.length} people working today</p>
+        <div className="heroActions"><button onClick={()=>setActive('projects')}>Open Projects</button><button onClick={()=>setActive('approvals')}>Approval Queue</button></div>
       </div>
-      <div className="heroCore"><div className="pulse"/><span>{stats.urgent}</span><small>URGENT ITEMS</small></div>
+      <div className="commandPulse"><div className="pulseRing"/><strong>{criticalJobs.length}</strong><span>CRITICAL JOBS</span></div>
     </section>
 
-    <section className="statGrid six">
-      <Stat label="People active" value={stats.people} delta={`${people.filter(p=>p.location==='Workshop').length} in workshop`} />
-      <Stat label="Active projects" value={stats.projects} delta={`${projects.filter(p=>p.status==='Fabrication').length} in fabrication`} />
-      <Stat label="Open tasks" value={stats.openTasks} delta={`${tasks.filter(t=>t.status==='In progress').length} in progress`} />
-      <Stat label="Urgent tasks" value={stats.urgent} delta={`${tasks.filter(t=>t.due==='Overdue'&&t.status!=='Completed').length} overdue`} danger={stats.urgent>0} />
-      <Stat label="Low stock" value={stats.lowStock} delta="Materials below minimum" danger={stats.lowStock>0} />
-      <Stat label="Machines attention" value={stats.machinesDown} delta="Service or unavailable" danger={stats.machinesDown>0} />
+    <section className="phase3Kpis">
+      <button className="phase3Kpi" onClick={()=>setActive('projects')}><span>ACTIVE PROJECTS</span><strong>{activeProjects.length}</strong><small>{marineProjects.length} marine · {workshopProjects.length} workshop</small></button>
+      <button className="phase3Kpi" onClick={()=>setActive('projects')}><span>WORKSHOP JOBS</span><strong>{workshopProjects.length}</strong><small>{tasks.filter(task=>task.status==='In progress'&&workshopProjects.some(p=>p.name===task.project)).length} tasks in progress</small></button>
+      <button className={`phase3Kpi ${pendingApprovals.length?'attention':''}`} onClick={()=>setActive('approvals')}><span>AWAITING APPROVAL</span><strong>{pendingApprovals.length}</strong><small>{tackApprovals.length} tack · {finalApprovals.length} final</small></button>
+      <button className={`phase3Kpi ${criticalJobs.length?'danger':''}`} onClick={()=>setActive('projects')}><span>CRITICAL JOBS</span><strong>{criticalJobs.length}</strong><small>{criticalJobs.filter(task=>task.due==='Overdue').length} overdue</small></button>
+      <button className="phase3Kpi" onClick={()=>setActive('crew')}><span>STAFF WORKING TODAY</span><strong>{peopleWorking.length}</strong><small>{peopleWorking.filter(person=>person.location==='Workshop').length} in workshop</small></button>
+      <button className={`phase3Kpi ${materialAlerts.length?'attention':''}`} onClick={()=>setActive('projects')}><span>MATERIAL ALERTS</span><strong>{materialAlerts.length}</strong><small>Below minimum stock</small></button>
+      <button className="phase3Kpi" onClick={()=>setActive('projects')}><span>DRONE INSPECTIONS</span><strong>{openDrone.length}</strong><small>{openDrone.reduce((sum,item)=>sum+(item.findings||0),0)} open findings</small></button>
+      <button className="phase3Kpi" onClick={()=>setActive('projects')}><span>QUOTATIONS</span><strong>{quoteReplies.length}</strong><small>Awaiting action or reply</small></button>
     </section>
 
-    <section className="dashboardGrid">
-      <div className="panel">
-        <div className="panelHead"><h3>Today's workshop priorities</h3><button onClick={()=>setActive('workshop')}>Open board</button></div>
-        {tasks.filter(t=>t.status!=='Completed').slice(0,6).map(t=><div className="opsRow" key={t.id}><span className={`priority ${t.priority==='High'?'high':''}`}>{t.priority}</span><div><b>{t.title}</b><small>{t.person} · {t.project}</small></div><em>{t.status}</em></div>)}
+    <section className="phase3Grid">
+      <div className="glassPanel liveOperations">
+        <div className="panelHead"><div><p className="panelEyebrow">LIVE OPERATIONS</p><h3>Who is where</h3></div><button onClick={()=>setActive('crew')}>Manage people</button></div>
+        <div className="livePeopleGrid">{visiblePeople.map(person=><article key={person.id} className="livePerson">
+          <div className="avatar">{person.name[0]}</div>
+          <div><b>{person.name}</b><small>{person.location} · {person.task}</small></div>
+          <span className={`liveState ${person.status==='Working'||person.status==='Busy'||person.status==='On vessel'?'working':person.status==='Available'?'available':'waiting'}`}>{person.status}</span>
+        </article>)}</div>
       </div>
-      <div className="panel">
-        <div className="panelHead"><h3>Who is where</h3><button onClick={()=>setActive('admin')}>Update</button></div>
-        {people.map(p=><div className="personTile" key={p.id}><div className="avatar mini">{p.name[0]}</div><div><b>{p.name}</b><small>{p.location} · {p.task}</small></div><span>{p.progress}%</span></div>)}
+
+      <div className="glassPanel qaPanel">
+        <div className="panelHead"><div><p className="panelEyebrow">QA CONTROL</p><h3>Approval queue</h3></div><button onClick={()=>setActive('approvals')}>Open queue</button></div>
+        <div className="qaMetric"><span>Awaiting tack approval</span><strong>{tackApprovals.length}</strong></div>
+        <div className="qaMetric"><span>Awaiting final weld approval</span><strong>{finalApprovals.length}</strong></div>
+        <div className="qaMetric"><span>Jobs awaiting release</span><strong>{tasks.filter(task=>task.jobStatus==='Awaiting approval').length}</strong></div>
+        <div className="qaMetric released"><span>Released today</span><strong>{releasedToday.length}</strong></div>
+        <div className="approvalMiniList">{pendingApprovals.slice(0,4).map(task=><div key={task.id}><span className="statusDot warning"/><div><b>{task.title}</b><small>{task.project} · {task.person}</small></div></div>)}{!pendingApprovals.length&&<p className="emptySmall">No approvals are waiting.</p>}</div>
       </div>
-      <div className="panel">
-        <div className="panelHead"><h3>Active marine projects</h3><button onClick={()=>setActive('projects')}>View all</button></div>
-        {projects.map(p=><div className="vesselRow" key={p.id}><div><b>{p.name}</b><small>{p.customer} · {p.status}</small><small>Mobilisation: {p.mobilisation}</small></div><div className="vesselProgress"><span style={{width:`${p.progress}%`}}/><em>{p.progress}%</em></div></div>)}
+
+      <div className="glassPanel marinePanel">
+        <div className="panelHead"><div><p className="panelEyebrow">MARINE & PROJECTS</p><h3>Active project status</h3></div><button onClick={()=>setActive('projects')}>View all</button></div>
+        {activeProjects.slice(0,6).map(project=><article className="commandProjectRow" key={project.id}>
+          <div><b>{project.name}</b><small>{project.customer} · {project.location||'Location TBD'}</small></div>
+          <div className="commandProjectProgress"><div><span style={{width:`${project.progress||0}%`}}/></div><em>{project.progress||0}%</em></div>
+          <span className={`projectState ${String(project.status).toLowerCase().replaceAll(' ','-')}`}>{project.status}</span>
+        </article>)}
       </div>
-      <div className="panel urgentPanel">
-        <div className="panelHead"><h3>Critical items</h3><span className="alertCount">{urgent.length}</span></div>
-        {urgent.map(t=><div className="urgentRow" key={t.id}><div className="alertIcon">!</div><div><b>{t.title}</b><small>{t.person} · {t.project} · {t.due}</small></div></div>)}
+
+      <div className="glassPanel machinePanel">
+        <div className="panelHead"><div><p className="panelEyebrow">WORKSHOP</p><h3>Machine status</h3></div><span>{machines.filter(machine=>['Service','Out of service'].includes(machine.status)).length} need attention</span></div>
+        <div className="commandMachineGrid">{machines.map(machine=><article key={machine.id} className={`commandMachine ${machineStatus(machine.status)}`}>
+          <span className="machineLight"/><div><b>{machine.name}</b><small>{machine.note}</small></div><em>{machine.status}</em>
+        </article>)}</div>
+      </div>
+
+      <div className="glassPanel materialPanel">
+        <div className="panelHead"><div><p className="panelEyebrow">SUPPLY</p><h3>Materials requiring action</h3></div><span>{materialAlerts.length}</span></div>
+        {materialAlerts.map(material=><div className="materialAlertRow" key={material.id}><div><b>{material.name}</b><small>Minimum {material.minimum} {material.unit}</small></div><strong>{material.quantity} {material.unit}</strong></div>)}
+        {!materialAlerts.length&&<p className="emptySmall">All materials are above minimum stock.</p>}
+      </div>
+
+      <div className="glassPanel priorityPanel">
+        <div className="panelHead"><div><p className="panelEyebrow">PRIORITIES</p><h3>Critical and overdue work</h3></div><span>{criticalJobs.length}</span></div>
+        {criticalJobs.slice(0,6).map(task=><article className="priorityCommandRow" key={task.id}><span className="alertIcon">!</span><div><b>{task.title}</b><small>{task.project} · {task.person} · {task.due}</small></div><em>{task.status}</em></article>)}
+        {!criticalJobs.length&&<p className="emptySmall">No critical jobs.</p>}
       </div>
     </section>
   </div>
 }
-
 function WorkshopControl({ tasks, setTasks, people, machines, setMachines, materials, setMaterials, projects }) {
   const [title,setTitle]=useState('');
   const [person,setPerson]=useState('Tommy');
