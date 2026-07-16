@@ -1,30 +1,19 @@
-# FSQ Command v5.1.3
+# FSQ Command v5.1.1
 
-Workshop QA approval workflow.
+Workshop QA approval hotfix.
 
-## New rule
-Workshop jobs may not proceed to welding before the tack / fit-up inspection is approved in FSQ Command by either Flemming or Jakob.
+## Fixed
+- Administrator can approve workshop welding.
+- Approval is role-based instead of only name-based.
+- Supported roles: Administrator, Admin, Workshop Manager, QA Inspector, Quality Inspector and Supervisor.
+- Flemming and Jakob accounts remain supported.
+- Optional permissions: approve_welding and workshop_qa_approve.
+- Approval helper records approver, role and timestamp where the workflow object stores approval data.
 
-## Workflow
-1. Preparation
-2. Tacking / fit-up
-3. Waiting for tack inspection
-4. Flemming or Jakob approves for welding
-5. Welding in progress
-6. Waiting for final weld inspection
-7. Flemming or Jakob approves final weld
-8. Job released / completed
-
-## Included
-- Welding lock on every workshop task
-- Tack / fit-up inspection approval and rejection
-- Final weld inspection approval and rejection
-- Approver name and timestamp
-- Optional inspection note
-- Permission restriction to Flemming and Jakob
-- Visual QA status and workflow stages
-- Rejected jobs return for correction
-- Final completion requires approved final weld inspection
-
-## Important
-The current login is still a prototype login. Before production use, permissions must be moved to secure server-side authentication and a shared database.
+## Test
+1. Log in as Flemming / Administrator.
+2. Open a Workshop project.
+3. Open Tasks / Workshop QA.
+4. Click Approve for welding.
+5. Verify that the task advances.
+6. Test Approve final weld.

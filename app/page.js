@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 const USERS = {
   Flemming: { role: 'Administrator', password: 'fsq2027' },
@@ -130,42 +130,62 @@ const DEFAULT_BINDER_FOLDERS = [
 
 function getGreeting(name) {
   const hour = new Date().getHours();
-  if (hour < 12) return `Good morning ${name}. Welcome to FSQ Command. Freja is online and ready to assist.`;
-  if (hour < 18) return `Good afternoon ${name}. Welcome back to FSQ Command. Freja is online and ready to assist.`;
-  return `Good evening ${name}. Welcome to FSQ Command. Freja is online and ready to assist.`;
+  if (hour < 12) return `Godmorgen ${name}. Velkommen til FSQ Command. Freja er online og klar til at hjælpe.`;
+  if (hour < 18) return `God eftermiddag ${name}. Velkommen tilbage til FSQ Command. Freja er online og klar til at hjælpe.`;
+  return `God aften ${name}. Velkommen til FSQ Command. Freja er online og klar til at hjælpe.`;
 }
 
-function chooseEnglishFemaleVoice() {
+function chooseDanishFemaleVoice() {
   if (typeof window === 'undefined' || !('speechSynthesis' in window)) return null;
   const voices = window.speechSynthesis.getVoices();
-  const preferredNames = [
-    'Sonia',
-    'Libby',
-    'Jenny',
-    'Aria',
-    'Samantha',
-    'Victoria',
-    'Female'
-  ];
-  return voices.find(v =>
-      (v.lang?.toLowerCase().startsWith('en-gb') || v.lang?.toLowerCase().startsWith('en-us')) &&
-      preferredNames.some(n => v.name.toLowerCase().includes(n.toLowerCase()))
-    )
-    || voices.find(v => v.lang?.toLowerCase().startsWith('en-gb'))
-    || voices.find(v => v.lang?.toLowerCase().startsWith('en-us'))
-    || voices.find(v => /sonia|libby|jenny|aria|samantha|victoria|female/i.test(v.name))
+  const preferredNames = ['Christel', 'Sara', 'Sofie', 'Emma', 'Female', 'Microsoft Christel'];
+  return voices.find(v => v.lang?.toLowerCase().startsWith('da') && preferredNames.some(n => v.name.toLowerCase().includes(n.toLowerCase())))
+    || voices.find(v => v.lang?.toLowerCase().startsWith('da'))
+    || voices.find(v => /female|sara|sofia|emma|jenny/i.test(v.name))
     || voices[0]
     || null;
+}
+
+
+function canApproveWorkshopWelding(session) {
+  if (!session) return false;
+
+  const role = String(session.role || '').trim().toLowerCase();
+  const name = String(session.name || session.user || '').trim().toLowerCase();
+  const permissions = Array.isArray(session.permissions)
+    ? session.permissions.map(value => String(value).toLowerCase())
+    : [];
+
+  return [
+    'administrator',
+    'admin',
+    'workshop manager',
+    'workshopmanager',
+    'qa inspector',
+    'quality inspector',
+    'supervisor'
+  ].includes(role)
+    || permissions.includes('approve_welding')
+    || permissions.includes('workshop_qa_approve')
+    || ['flemming', 'flemming bach', 'jakob'].includes(name);
+}
+
+function approvalIdentity(session) {
+  return {
+    approvedBy: session?.name || session?.user || 'Unknown user',
+    approvedRole: session?.role || 'Unknown role',
+    approvedAt: new Date().toISOString()
+  };
 }
 
 function speak(text, enabled) {
   if (!enabled || typeof window === 'undefined' || !('speechSynthesis' in window)) return;
   window.speechSynthesis.cancel();
   const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = 'en-GB';
-  utterance.rate = 0.96;
-  utterance.pitch = 1.02;
-  const voice = chooseEnglishFemaleVoice();
+  utterance.lang = 'da-DK';
+  utterance.rate = 0.94;
+  utterance.pitch = 1.08;
+  const voice = chooseDanishFemaleVoice();
   if (voice) utterance.voice = voice;
   window.speechSynthesis.speak(utterance);
 }
@@ -292,7 +312,7 @@ function AppShell({ session, onLogout }) {
       setActive('ai');
       setChat(current => [...current,{from:'user',text:transcript}]);
     }
-    speak(`I heard: ${transcript}`, voice);
+    speak(`Jeg hørte: ${transcript}`, voice);
   }
 
   const globalSpeech = useSpeechRecognition({
@@ -324,7 +344,7 @@ function AppShell({ session, onLogout }) {
         </header>
         {voiceMessage&&<div className="voiceStatus">{voiceMessage}</div>}
 
-        {active === 'dashboard' && <Dashboard session={session} stats={stats} projects={projects} tasks={tasks} people={people} machines={machines} materials={materials} setActive={setActive} deletedProjects={deletedProjects} setDeletedProjects={setDeletedProjects} setActiveProjectId={setActiveProjectId} droneInspections={droneInspections} setDroneInspections={setDroneInspections} session={session} />}
+        {active === 'dashboard' && <Dashboard session={session} stats={stats} projects={projects} tasks={tasks} people={people} machines={machines} materials={materials} setActive={setActive} deletedProjects={deletedProjects} setDeletedProjects={setDeletedProjects} setActiveProjectId={setActiveProjectId} droneInspections={droneInspections} setDroneInspections={setDroneInspections} />}
         {active === 'crew' && <CrewManagement people={people} setPeople={setPeople} projects={projects} />}
         {active === 'projects' && <Projects projects={projects} setProjects={setProjects} deletedProjects={deletedProjects} setDeletedProjects={setDeletedProjects} setActive={setActive} setActiveProjectId={setActiveProjectId} />}
         {active === 'projectHub' && <ProjectHub project={projects.find(p=>p.id===activeProjectId)} projects={projects} setProjects={setProjects} people={people} tasks={tasks} setTasks={setTasks} documents={documents} materials={materials} setMaterials={setMaterials} quotes={quotes} reports={reports} setActive={setActive} deletedProjects={deletedProjects} setDeletedProjects={setDeletedProjects} setActiveProjectId={setActiveProjectId} droneInspections={droneInspections} setDroneInspections={setDroneInspections} />}
@@ -761,13 +781,10 @@ function Projects({projects,setProjects,deletedProjects,setDeletedProjects,setAc
   </div>
 }
 
-function ProjectHub({project,projects,setProjects,people,tasks,setTasks,documents,materials,setMaterials,quotes,reports,setActive,deletedProjects,setDeletedProjects,setActiveProjectId,droneInspections,setDroneInspections,session}) {
+function ProjectHub({project,projects,setProjects,people,tasks,setTasks,documents,materials,setMaterials,quotes,reports,setActive,deletedProjects,setDeletedProjects,setActiveProjectId,droneInspections,setDroneInspections}) {
   const [tab,setTab]=useState('overview');
   const [newTask,setNewTask]=useState('');
   const [materialForm,setMaterialForm]=useState({name:'',quantity:1,unit:'pcs',supplier:'',price:'',notes:''});
-  const [qaNote,setQaNote]=useState('');
-  const isWorkshopProject=(project?.type==='Workshop'||project?.location?.toLowerCase().includes('workshop'));
-  const canApprove=['Flemming','Jakob'].includes(session?.name);
 
   if(!project)return <div className="content"><button onClick={()=>setActive('projects')}>Back to projects</button></div>;
 
@@ -782,106 +799,12 @@ function ProjectHub({project,projects,setProjects,people,tasks,setTasks,document
   function update(field,value){setProjects(projects.map(p=>p.id===project.id?{...p,[field]:value}:p))}
   function addTask(){
     if(!newTask.trim())return;
-    const task={
-      id:Date.now(),
-      title:newTask.trim(),
-      person:project.lead,
-      priority:'Normal',
-      status:'Planned',
-      due:'This week',
-      project:project.name
-    };
-    if(isWorkshopProject){
-      task.qaStage='Preparation';
-      task.weldingLocked=true;
-      task.tackInspection={status:'Pending',approvedBy:'',approvedAt:'',note:''};
-      task.finalInspection={status:'Pending',approvedBy:'',approvedAt:'',note:''};
-    }
-    setTasks([...tasks,task]);
+    setTasks([...tasks,{id:Date.now(),title:newTask.trim(),person:project.lead,priority:'Normal',status:'Planned',due:'This week',project:project.name}]);
     setNewTask('');
   }
   function moveTask(id){
-    setTasks(tasks.map(t=>{
-      if(t.id!==id)return t;
-      if(isWorkshopProject){
-        const tackApproved=t.tackInspection?.status==='Approved';
-        const finalApproved=t.finalInspection?.status==='Approved';
-        if(t.status==='Planned') return {...t,status:'In progress',qaStage:'Tacking / fit-up'};
-        if(t.status==='In progress'&&!tackApproved) return {...t,status:'Waiting',qaStage:'Awaiting tack approval',weldingLocked:true};
-        if(t.status==='Waiting'&&tackApproved&&!finalApproved) return {...t,status:'In progress',qaStage:'Welding in progress',weldingLocked:false};
-        if(t.status==='In progress'&&tackApproved&&!finalApproved) return {...t,status:'Waiting',qaStage:'Awaiting final weld inspection'};
-        if(t.status==='Waiting'&&finalApproved) return {...t,status:'Completed',qaStage:'Released'};
-        return t;
-      }
-      const order=['Planned','In progress','Waiting','Completed'];
-      return {...t,status:order[(order.indexOf(t.status)+1)%order.length]};
-    }));
-  }
-
-  function approveTack(id){
-    if(!canApprove)return;
-    setTasks(tasks.map(t=>t.id===id?{
-      ...t,
-      status:'Waiting',
-      qaStage:'Approved for welding',
-      weldingLocked:false,
-      tackInspection:{
-        status:'Approved',
-        approvedBy:session.name,
-        approvedAt:new Date().toISOString(),
-        note:qaNote
-      }
-    }:t));
-    setQaNote('');
-  }
-
-  function rejectTack(id){
-    if(!canApprove)return;
-    setTasks(tasks.map(t=>t.id===id?{
-      ...t,
-      status:'In progress',
-      qaStage:'Tack correction required',
-      weldingLocked:true,
-      tackInspection:{
-        status:'Rejected',
-        approvedBy:session.name,
-        approvedAt:new Date().toISOString(),
-        note:qaNote
-      }
-    }:t));
-    setQaNote('');
-  }
-
-  function approveFinalWeld(id){
-    if(!canApprove)return;
-    setTasks(tasks.map(t=>t.id===id?{
-      ...t,
-      status:'Completed',
-      qaStage:'Released',
-      finalInspection:{
-        status:'Approved',
-        approvedBy:session.name,
-        approvedAt:new Date().toISOString(),
-        note:qaNote
-      }
-    }:t));
-    setQaNote('');
-  }
-
-  function rejectFinalWeld(id){
-    if(!canApprove)return;
-    setTasks(tasks.map(t=>t.id===id?{
-      ...t,
-      status:'In progress',
-      qaStage:'Weld correction required',
-      finalInspection:{
-        status:'Rejected',
-        approvedBy:session.name,
-        approvedAt:new Date().toISOString(),
-        note:qaNote
-      }
-    }:t));
-    setQaNote('');
+    const order=['Planned','In progress','Waiting','Completed'];
+    setTasks(tasks.map(t=>t.id===id?{...t,status:order[(order.indexOf(t.status)+1)%order.length]}:t));
   }
   function updateMaterial(field,value){setMaterialForm(current=>({...current,[field]:value}))}
   function addMaterial(){
@@ -962,54 +885,7 @@ function ProjectHub({project,projects,setProjects,people,tasks,setTasks,document
     {tab==='crew'&&<section className="panel"><div className="peopleCards">{crew.length?crew.map(p=><article key={p.id}><div className="personHead"><div className="avatar">{p.name[0]}</div><div><h3>{p.name}</h3><small>{p.location} · {p.status}</small></div></div><p>{p.task}</p></article>):<div className="empty">Assign crew in People.</div>}</div></section>}
     {tab==='documents'&&<section className="panel"><div className="panelHead"><h3>Project documents</h3><button onClick={()=>setActive('documents')}>Open Document Center</button></div>{projectDocs.length?projectDocs.map(d=><div className="documentRow hubDoc" key={d.id}><div><b>{d.name}</b><small>{d.category} · V{d.version}</small></div><span>{d.date}</span></div>):<div className="empty">No documents uploaded.</div>}</section>}
     {tab==='drone'&&<DroneInspectionPanel project={project} inspections={projectDrone} allInspections={droneInspections||[]} setInspections={setDroneInspections}/>}
-    {tab==='tasks'&&<section className="panel">
-      <div className="hubTaskAdd"><input placeholder="New project task" value={newTask} onChange={e=>setNewTask(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addTask()}/><button onClick={addTask}>Add task</button></div>
-
-      {isWorkshopProject&&<div className="workshopQaNotice">
-        <div><b>Workshop QA gate active</b><span>No welding is permitted before tack / fit-up approval by Flemming or Jakob.</span></div>
-        <div className="qaLegend"><span>1. Preparation</span><span>2. Tack inspection</span><span>3. Welding</span><span>4. Final weld inspection</span><span>5. Released</span></div>
-      </div>}
-
-      {isWorkshopProject&&<div className="workshopQaList">
-        <label className="qaNoteInput">Inspection note<input value={qaNote} onChange={e=>setQaNote(e.target.value)} placeholder="Optional note used for next approval or rejection"/></label>
-        {projectTasks.map(t=><article className={`qaJobCard ${t.weldingLocked?'locked':'unlocked'}`} key={t.id}>
-          <div className="qaJobTop">
-            <div><h3>{t.title}</h3><p>{t.person} · {t.status}</p></div>
-            <span className={t.weldingLocked?'weldLock locked':'weldLock ready'}>{t.weldingLocked?'🔒 WELDING LOCKED':'✓ APPROVED FOR WELDING'}</span>
-          </div>
-          <div className="qaStageBar">
-            {['Preparation','Tacking / fit-up','Awaiting tack approval','Approved for welding','Welding in progress','Awaiting final weld inspection','Released'].map(stage=><span key={stage} className={t.qaStage===stage?'active':''}>{stage}</span>)}
-          </div>
-          <div className="qaInspectionGrid">
-            <div>
-              <b>Tack / fit-up inspection</b>
-              <small>Status: {t.tackInspection?.status||'Pending'}</small>
-              {t.tackInspection?.approvedBy&&<small>{t.tackInspection.approvedBy} · {new Date(t.tackInspection.approvedAt).toLocaleString('da-DK')}</small>}
-              {t.tackInspection?.note&&<p>{t.tackInspection.note}</p>}
-              <div className="qaButtons">
-                <button disabled={!canApprove} onClick={()=>approveTack(t.id)}>Approve for welding</button>
-                <button disabled={!canApprove} className="reject" onClick={()=>rejectTack(t.id)}>Reject</button>
-              </div>
-            </div>
-            <div>
-              <b>Final weld inspection</b>
-              <small>Status: {t.finalInspection?.status||'Pending'}</small>
-              {t.finalInspection?.approvedBy&&<small>{t.finalInspection.approvedBy} · {new Date(t.finalInspection.approvedAt).toLocaleString('da-DK')}</small>}
-              {t.finalInspection?.note&&<p>{t.finalInspection.note}</p>}
-              <div className="qaButtons">
-                <button disabled={!canApprove||t.tackInspection?.status!=='Approved'} onClick={()=>approveFinalWeld(t.id)}>Approve final weld</button>
-                <button disabled={!canApprove||t.tackInspection?.status!=='Approved'} className="reject" onClick={()=>rejectFinalWeld(t.id)}>Reject</button>
-              </div>
-            </div>
-          </div>
-          {!canApprove&&<div className="qaPermission">Only Flemming or Jakob can approve workshop welding.</div>}
-          <button className="qaAdvance" onClick={()=>moveTask(t.id)}>Move to next workflow step</button>
-        </article>)}
-        {!projectTasks.length&&<div className="empty">No workshop jobs created.</div>}
-      </div>}
-
-      {!isWorkshopProject&&<div className="kanban four">{['Planned','In progress','Waiting','Completed'].map(s=><TaskColumn key={s} title={s} tasks={projectTasks.filter(t=>t.status===s)} cycle={moveTask}/>)}</div>}
-    </section>}
+    {tab==='tasks'&&<section className="panel"><div className="hubTaskAdd"><input placeholder="New project task" value={newTask} onChange={e=>setNewTask(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addTask()}/><button onClick={addTask}>Add task</button></div><div className="kanban four">{['Planned','In progress','Waiting','Completed'].map(s=><TaskColumn key={s} title={s} tasks={projectTasks.filter(t=>t.status===s)} cycle={moveTask}/>)}</div></section>}
     {tab==='materials'&&<section className="materialsHub">
       <div className="panel addMaterialPanel">
         <div className="panelHead"><h3>Add Material</h3><span>{project.name}</span></div>
@@ -1291,13 +1167,13 @@ function AI({chat,setChat,voice,stats}) {
 
   function answerQuestion(q){
     const lower=q.toLowerCase();
-    let answer='I have registered your request. When the shared database is connected, I will be able to work across all projects and documents.';
-    if(lower.includes('værksted')) answer=`Workshop status: ${stats.openTasks} open tasks, ${stats.lowStock} materials below minimum stock and ${stats.machinesDown} machines require attention.`;
-    else if(lower.includes('material')) answer=`There are ${stats.lowStock} materials below minimum stock.`;
-    else if(lower.includes('maskine')) answer=`There are ${stats.machinesDown} machines requiring service or currently unavailable.`;
-    else if(lower.includes('hast')||lower.includes('kritisk')) answer=`There are ${stats.urgent} urgent tasks.`;
-    else if(lower.includes('projekt')) answer=`There are ${stats.projects} active projects in FSQ Command.`;
-    else if(lower.includes('hej')||lower.includes('godmorgen')||lower.includes('god aften')) answer='Hello. I am Freja, and I am ready to assist you.';
+    let answer='Jeg har registreret din forespørgsel. Når den fælles database er tilkoblet, kan jeg arbejde på tværs af alle projekter og dokumenter.';
+    if(lower.includes('værksted')) answer=`Status for værkstedet: ${stats.openTasks} åbne opgaver, ${stats.lowStock} materialer under minimum og ${stats.machinesDown} maskiner kræver opmærksomhed.`;
+    else if(lower.includes('material')) answer=`Der er ${stats.lowStock} materialer under minimumslager.`;
+    else if(lower.includes('maskine')) answer=`Der er ${stats.machinesDown} maskiner til service eller ude af drift.`;
+    else if(lower.includes('hast')||lower.includes('kritisk')) answer=`Der er ${stats.urgent} hasteopgaver.`;
+    else if(lower.includes('projekt')) answer=`Der er ${stats.projects} aktive projekter i FSQ Command.`;
+    else if(lower.includes('hej')||lower.includes('godmorgen')||lower.includes('god aften')) answer='Hej. Jeg er Freja, og jeg er klar til at hjælpe dig.';
     setChat(c=>[...c,{from:'ai',text:answer}]);
     speak(answer,voice);
   }
