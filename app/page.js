@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 const USERS = {
   Flemming: { role: 'Administrator', password: 'fsq2027' },
@@ -138,10 +138,10 @@ function getGreeting(name) {
 function chooseDanishFemaleVoice() {
   if (typeof window === 'undefined' || !('speechSynthesis' in window)) return null;
   const voices = window.speechSynthesis.getVoices();
-  const preferredNames = ['Christel', 'Sara', 'Sofie', 'Emma', 'Female', 'Microsoft Christel'];
+  const preferredNames = ['Helle', 'Sara', 'Sofie', 'Emma', 'Female', 'Christel'];
   return voices.find(v => v.lang?.toLowerCase().startsWith('da') && preferredNames.some(n => v.name.toLowerCase().includes(n.toLowerCase())))
+    || voices.find(v => /helle|sara|sofie|sofia|emma|jenny|female/i.test(v.name))
     || voices.find(v => v.lang?.toLowerCase().startsWith('da'))
-    || voices.find(v => /female|sara|sofia|emma|jenny/i.test(v.name))
     || voices[0]
     || null;
 }
@@ -151,8 +151,8 @@ function speak(text, enabled) {
   window.speechSynthesis.cancel();
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.lang = 'da-DK';
-  utterance.rate = 0.94;
-  utterance.pitch = 1.08;
+  utterance.rate = 0.96;
+  utterance.pitch = 1.02;
   const voice = chooseDanishFemaleVoice();
   if (voice) utterance.voice = voice;
   window.speechSynthesis.speak(utterance);
