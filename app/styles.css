@@ -178,3 +178,12 @@ button:disabled,
 .materialAlertRow{display:flex;justify-content:space-between;align-items:center;padding:11px 0;border-top:1px solid rgba(31,76,102,.55)}.materialAlertRow>div{display:grid}.materialAlertRow small{color:#7498ad;margin-top:3px}.materialAlertRow strong{color:#ff9aa4}.priorityCommandRow{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;padding:11px 0;border-top:1px solid rgba(78,38,49,.55)}.priorityCommandRow>div{display:grid}.priorityCommandRow small{color:#9f7d86;margin-top:3px}.priorityCommandRow em{font-style:normal;color:#ff9ba5;font-size:10px}
 @media(max-width:1200px){.phase3Kpis{grid-template-columns:repeat(2,1fr)}.phase3Grid{grid-template-columns:1fr}.commandProjectRow{grid-template-columns:1fr 160px 90px}}
 @media(max-width:720px){.commandHero{padding:22px}.commandHero h1{font-size:35px}.commandPulse{display:none}.phase3Kpis,.livePeopleGrid,.commandMachineGrid{grid-template-columns:1fr}.commandProjectRow{grid-template-columns:1fr}.projectState{justify-self:start}}
+
+.workshopQcFlow{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;margin:16px 0}
+.workshopQcFlow>div{display:grid;place-items:center;gap:5px;padding:10px 5px;background:#091827;border:1px solid #173c56;border-radius:7px;color:#6f96ad;text-align:center}
+.workshopQcFlow>div span{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;background:#14344c;font-size:11px}
+.workshopQcFlow>div.active{border-color:#38d9ff;color:white;background:#0d3048}.workshopQcFlow>div.active span{background:#24bfe8;color:#04111b}
+.workshopQcFlow>div.done{border-color:#2e9b71;color:#6be6b2}
+.qcApprovalGrid{grid-template-columns:1fr 1fr}.workshopApprovalCard{margin-bottom:12px}.qcWarning{padding:9px 11px;background:#3c2112;border:1px solid #8b562a;color:#ffbd75;border-radius:6px;margin:8px 0}.qcRecent{margin-top:16px}
+@media(max-width:1000px){.workshopQcFlow{grid-template-columns:repeat(3,1fr)}.qcApprovalGrid{grid-template-columns:1fr}}
+@media(max-width:650px){.workshopQcFlow{grid-template-columns:repeat(2,1fr)}}

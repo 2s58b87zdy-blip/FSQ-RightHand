@@ -213,6 +213,18 @@ function approvalIdentity(session) {
   };
 }
 
+
+function isWorkshopProject(project) {
+  if (!project) return false;
+  const type = String(project.type || '').trim().toLowerCase();
+  const location = String(project.location || '').trim().toLowerCase();
+  return ['workshop', 'fabrication'].includes(type) || location.includes('workshop');
+}
+
+function workshopStageLabel(task) {
+  return task.qaStage || task.jobStatus || 'Pending';
+}
+
 function speak(text, enabled) {
   if (!enabled || typeof window === 'undefined' || !('speechSynthesis' in window)) return;
   window.speechSynthesis.cancel();
@@ -409,6 +421,8 @@ function MyJobs({ session, tasks, setTasks, projects }) {
   const [uploading,setUploading]=useState(false);
   const assigned=tasks.filter(task=>task.person===session.name);
   const selected=assigned.find(task=>task.id===selectedId) || assigned[0] || null;
+  const project=projects.find(p=>p.name===selected?.project);
+  const workshop=isWorkshopProject(project);
 
   function updateTask(id,changes){ setTasks(tasks.map(task=>task.id===id?{...task,...changes}:task)); }
 
@@ -431,8 +445,10 @@ function MyJobs({ session, tasks, setTasks, projects }) {
         uploaded.push(data.photo);
       }
       const photos=[...(selected.photos||[]),...uploaded];
-      updateTask(selected.id,{photos,jobStatus:selected.jobStatus||'Pending',photoStorage:'Azure Blob Storage'});
-      setMessage(`${uploaded.length} photo(s) uploaded to Azure. ${Math.max(0,4-photos.length)} remaining before the job can start.`);
+      updateTask(selected.id,{photos,photoStorage:'Azure Blob Storage'});
+      setMessage(workshop
+        ? `${uploaded.length} photo(s) uploaded. ${Math.max(0,4-photos.length)} remaining before final QC submission.`
+        : `${uploaded.length} photo(s) uploaded.`);
     }catch(error){
       setMessage(`Upload failed: ${error.message}`);
     }finally{setUploading(false);event.target.value='';}
@@ -451,86 +467,229 @@ function MyJobs({ session, tasks, setTasks, projects }) {
   }
 
   function startJob(){
-    const count=(selected.photos||[]).length;
-    if(count<4){setMessage(`Cannot start job. Upload ${4-count} more photo(s).`);return;}
-    updateTask(selected.id,{jobStatus:'In progress',status:'In progress',startedAt:new Date().toISOString(),startedBy:session.name});
+    if(!selected)return;
+    updateTask(selected.id,{
+      jobStatus:'In progress',
+      status:'In progress',
+      qaStage:workshop?'Fit-up':'In progress',
+      startedAt:new Date().toISOString(),
+      startedBy:session.name
+    });
     setMessage('Job started.');
   }
 
-  function finishJob(){
-    if (!canApproveTackAndComplete(session)) {
-      alert('Only Flemming or Jakob can approve tack welding and complete jobs.');
+  function submitTack(){
+    if(!selected||!workshop)return;
+    updateTask(selected.id,{
+      jobStatus:'Awaiting tack approval',
+      status:'Waiting',
+      qaStage:'Awaiting tack approval',
+      tackSubmittedAt:new Date().toISOString(),
+      tackSubmittedBy:session.name
+    });
+    setMessage('Fit-up submitted for tack approval by Flemming or Jakob.');
+  }
+
+  function startWelding(){
+    if(!selected||!workshop||selected.qaStage!=='Tack approved')return;
+    updateTask(selected.id,{
+      jobStatus:'Welding',
+      status:'In progress',
+      qaStage:'Welding',
+      weldingStartedAt:new Date().toISOString()
+    });
+    setMessage('Welding started.');
+  }
+
+  function submitFinalQC(){
+    if(!selected||!workshop)return;
+    const count=(selected.photos||[]).length;
+    if(count<4){
+      setMessage(`Cannot submit final QC. Upload ${4-count} more workshop photo(s).`);
       return;
     }
-    const count=(selected.photos||[]).length;
-    if(count<4){setMessage(`Cannot finish job. Minimum 4 photos required. Upload ${4-count} more photo(s).`);return;}
-    updateTask(selected.id,{jobStatus:'Awaiting approval',status:'Waiting',submittedAt:new Date().toISOString(),submittedBy:session.name});
-    setMessage('Job submitted for supervisor approval.');
+    updateTask(selected.id,{
+      jobStatus:'Awaiting final QC',
+      status:'Waiting',
+      qaStage:'Awaiting final QC',
+      finalSubmittedAt:new Date().toISOString(),
+      finalSubmittedBy:session.name
+    });
+    setMessage('Job submitted for final QC by Flemming or Jakob.');
+  }
+
+  function finishMarineJob(){
+    if(!selected||workshop)return;
+    updateTask(selected.id,{
+      jobStatus:'Completed',
+      status:'Completed',
+      completedAt:new Date().toISOString(),
+      completedBy:session.name
+    });
+    setMessage('Marine job marked completed.');
   }
 
   if(!assigned.length)return <div className="content"><div className="sectionIntro"><h1>My Jobs</h1><p>No jobs are assigned to you.</p></div></div>;
+
   const photoCount=(selected?.photos||[]).length;
-  const status=selected?.jobStatus || (selected?.status==='Completed'?'Approved':'Pending');
-  const canStart=photoCount>=4 && ['Pending','Rejected'].includes(status);
-  const canFinish=photoCount>=4 && status==='In progress';
-  const project=projects.find(p=>p.name===selected?.project);
+  const stage=workshopStageLabel(selected);
+  const canStart=['Pending','Rejected','Needs rework'].includes(stage) || !selected.startedAt;
+  const canSubmitTack=workshop && ['Fit-up','In progress'].includes(stage);
+  const canStartWelding=workshop && stage==='Tack approved';
+  const canSubmitFinal=workshop && stage==='Welding';
+  const canFinishMarine=!workshop && ['In progress','Pending','Rejected'].includes(stage);
 
   return <div className="content technicianJobs">
-    <div className="sectionIntro"><div><h1>My Jobs</h1><p>You only see jobs assigned to {session.name}.</p></div><span className="technicianRole">Technician</span></div>
+    <div className="sectionIntro"><div><h1>My Jobs</h1><p>You only see jobs assigned to {session.name}.</p></div><span className="technicianRole">{workshop?'Workshop job':'Marine job'}</span></div>
     <section className="technicianLayout">
       <aside className="panel jobList">
         <div className="panelHead"><h3>Assigned jobs</h3><span>{assigned.length}</span></div>
-        {assigned.map(job=>{const c=(job.photos||[]).length;const st=job.jobStatus||(job.status==='Completed'?'Approved':'Pending');return <button key={job.id} className={selected?.id===job.id?'active':''} onClick={()=>{setSelectedId(job.id);setMessage('')}}><div><b>{job.title}</b><small>{job.project} · {job.due}</small></div><span className={`jobState ${st.toLowerCase().replaceAll(' ','-')}`}>{st}</span><em>{c}/4 photos</em></button>})}
+        {assigned.map(job=>{
+          const jobProject=projects.find(p=>p.name===job.project);
+          const isWorkshop=isWorkshopProject(jobProject);
+          const c=(job.photos||[]).length;
+          const st=workshopStageLabel(job);
+          return <button key={job.id} className={selected?.id===job.id?'active':''} onClick={()=>{setSelectedId(job.id);setMessage('')}}>
+            <div><b>{job.title}</b><small>{job.project} · {job.due}</small></div>
+            <span className={`jobState ${String(st).toLowerCase().replaceAll(' ','-')}`}>{st}</span>
+            <em>{isWorkshop?`${c}/4 QC photos`:`${c} photos`}</em>
+          </button>
+        })}
       </aside>
+
       <main className="panel jobDetail">
-        <div className="jobDetailHead"><div><small>{selected.project} · {project?.location||'Location TBD'}</small><h2>{selected.title}</h2><p>Assigned to {selected.person} · Priority {selected.priority}</p></div><span className={`jobState large ${status.toLowerCase().replaceAll(' ','-')}`}>{status}</span></div>
-        {status==='Rejected'&&<div className="rejectionBox"><b>Returned for rework</b><p>{selected.rejectionReason||'No reason entered.'}</p></div>}
-        <div className="photoGate"><div><strong>{photoCount}/4</strong><small>required photos uploaded</small></div><div className="gateProgress"><span style={{width:`${Math.min(100,photoCount/4*100)}%`}}/></div><p>{photoCount<4?'Upload at least four photos before this job can be started or submitted.':'Photo requirement completed.'}</p></div>
-        <label className={`jobPhotoUpload ${uploading?'busy':''}`}>{uploading?'Uploading...':'Upload photos to Azure'}<input disabled={uploading||['Awaiting approval','Approved'].includes(status)} type="file" accept="image/*" capture="environment" multiple onChange={uploadPhotos}/></label>
+        <div className="jobDetailHead"><div><small>{selected.project} · {project?.location||'Location TBD'}</small><h2>{selected.title}</h2><p>Assigned to {selected.person} · Priority {selected.priority}</p></div><span className={`jobState large ${String(stage).toLowerCase().replaceAll(' ','-')}`}>{stage}</span></div>
+
+        {selected.rejectionReason&&<div className="rejectionBox"><b>Returned for rework</b><p>{selected.rejectionReason}</p></div>}
+
+        {workshop&&<div className="workshopQcFlow">
+          {['Fit-up','Awaiting tack approval','Tack approved','Welding','Awaiting final QC','QC approved / Released'].map((step,index)=><div key={step} className={stage===step?'active':stage==='Completed'&&index===5?'done':''}><span>{index+1}</span><small>{step}</small></div>)}
+        </div>}
+
+        {workshop&&<div className="photoGate">
+          <div><strong>{photoCount}/4</strong><small>QC photos uploaded</small></div>
+          <div className="gateProgress"><span style={{width:`${Math.min(100,photoCount/4*100)}%`}}/></div>
+          <p>{photoCount<4?'Four workshop photos are required before final QC: fabrication, fit-up/welding, completed item and detail.':'Workshop photo requirement completed.'}</p>
+        </div>}
+
+        <label className={`jobPhotoUpload ${uploading?'busy':''}`}>{uploading?'Uploading...':'Upload photos to Azure'}<input disabled={uploading||['Awaiting tack approval','Awaiting final QC','QC approved / Released','Completed'].includes(stage)} type="file" accept="image/*" capture="environment" multiple onChange={uploadPhotos}/></label>
         <div className="jobPhotoGrid">{(selected.photos||[]).map(photo=><figure key={photo.id}><a href={photo.url} target="_blank" rel="noreferrer"><img src={photo.url} alt={photo.name}/></a><figcaption>{photo.name}<button onClick={()=>removePhoto(photo)}>×</button></figcaption></figure>)}</div>
         {message&&<div className="jobMessage">{message}</div>}
+
         <div className="jobActions">
-          <button className="startJob" disabled={!canStart} onClick={startJob}>{status==='Pending'||status==='Rejected'?'Start Job':status}</button>
-          <button className="finishJob" disabled={!canFinish} onClick={finishJob}>Submit for Approval</button>
+          {canStart&&<button className="startJob" onClick={startJob}>Start Job</button>}
+          {canSubmitTack&&<button className="finishJob" onClick={submitTack}>Submit Fit-up / Tack Approval</button>}
+          {canStartWelding&&<button className="startJob" onClick={startWelding}>Start Welding</button>}
+          {canSubmitFinal&&<button className="finishJob" disabled={photoCount<4} onClick={submitFinalQC}>Submit Final QC</button>}
+          {canFinishMarine&&<button className="finishJob" onClick={finishMarineJob}>Complete Marine Job</button>}
         </div>
-        {(status==='Pending'||status==='Rejected')&&photoCount<4&&<div className="pendingNotice">Job is visible as Pending, but cannot be started until four photos are uploaded.</div>}
-        {status==='Awaiting approval'&&<div className="pendingNotice approvalPending">Work is locked while awaiting approval.</div>}
-        {status==='Approved'&&<div className="approvalSuccess">✓ Job approved by {selected.approvedBy||'Supervisor'}</div>}
+
+        {workshop&&stage==='Awaiting tack approval'&&<div className="pendingNotice approvalPending">Awaiting tack approval from Flemming or Jakob.</div>}
+        {workshop&&stage==='Awaiting final QC'&&<div className="pendingNotice approvalPending">Awaiting final QC from Flemming or Jakob.</div>}
+        {workshop&&stage==='QC approved / Released'&&<div className="approvalSuccess">✓ Released by {selected.approvedBy||'Flemming/Jakob'}</div>}
       </main>
     </section>
   </div>
 }
 
+
 function JobApprovals({session,tasks,setTasks,projects}){
-  const allowed=canApproveTackAndComplete(session)||['Project Manager','Engineer'].includes(session.role);
+  const allowed=canApproveTackAndComplete(session);
   const [reason,setReason]=useState({});
-  const pending=tasks.filter(task=>task.jobStatus==='Awaiting approval');
-  const recent=tasks.filter(task=>['Approved','Rejected'].includes(task.jobStatus)).slice(-10).reverse();
+
+  const workshopTasks=tasks.filter(task=>{
+    const project=projects.find(p=>p.name===task.project);
+    return isWorkshopProject(project);
+  });
+  const tackPending=workshopTasks.filter(task=>task.qaStage==='Awaiting tack approval'||task.jobStatus==='Awaiting tack approval');
+  const finalPending=workshopTasks.filter(task=>task.qaStage==='Awaiting final QC'||task.jobStatus==='Awaiting final QC');
+  const recent=workshopTasks.filter(task=>['Tack approved','QC approved / Released','Needs rework'].includes(task.qaStage)).slice(-12).reverse();
+
   function update(id,changes){setTasks(tasks.map(task=>task.id===id?{...task,...changes}:task))}
-  function approve(task){
+
+  function approveTack(task){
     if(!allowed)return;
-    update(task.id,{jobStatus:'Approved',status:'Completed',...approvalIdentity(session),completedAt:new Date().toISOString(),rejectionReason:''});
+    update(task.id,{
+      qaStage:'Tack approved',
+      jobStatus:'Tack approved',
+      status:'Waiting',
+      tackApprovedBy:session.name,
+      tackApprovedAt:new Date().toISOString(),
+      rejectionReason:''
+    });
   }
-  function reject(task){
+
+  function approveFinal(task){
+    if(!allowed)return;
+    if((task.photos||[]).length<4){
+      alert('Final QC cannot be approved until four workshop photos are uploaded.');
+      return;
+    }
+    update(task.id,{
+      qaStage:'QC approved / Released',
+      jobStatus:'QC approved / Released',
+      status:'Completed',
+      ...approvalIdentity(session),
+      qcApprovedAt:new Date().toISOString(),
+      completedAt:new Date().toISOString(),
+      rejectionReason:''
+    });
+  }
+
+  function reject(task,stage){
     if(!allowed)return;
     const text=(reason[task.id]||'').trim();
-    if(!text){alert('Enter a reason before rejecting the job.');return;}
-    update(task.id,{jobStatus:'Rejected',status:'Waiting',rejectedBy:session.name,rejectedAt:new Date().toISOString(),rejectionReason:text});
+    if(!text){alert('Enter a rework reason before returning the job.');return;}
+    update(task.id,{
+      qaStage:'Needs rework',
+      jobStatus:'Needs rework',
+      status:'Waiting',
+      rejectedStage:stage,
+      rejectedBy:session.name,
+      rejectedAt:new Date().toISOString(),
+      rejectionReason:text
+    });
     setReason(current=>({...current,[task.id]:''}));
   }
-  if(!allowed)return <div className="content"><div className="sectionIntro"><h1>Job Approvals</h1><p>You do not have approval permission.</p></div></div>;
-  return <div className="content approvalsPage">
-    <div className="sectionIntro"><div><h1>Job Approvals</h1><p>Review technician photos and approve or return completed work.</p></div><span className="approvalRole">{session.role}</span></div>
-    <section className="approvalGrid">
-      <div className="panel"><div className="panelHead"><h3>Awaiting approval</h3><span>{pending.length}</span></div>
-        {pending.length?pending.map(task=>{const project=projects.find(p=>p.name===task.project);return <article className="approvalCard" key={task.id}>
-          <div className="approvalCardHead"><div><small>{task.project} · {project?.location||'Location TBD'}</small><h3>{task.title}</h3><p>{task.person} submitted {task.submittedAt?new Date(task.submittedAt).toLocaleString('da-DK'):'recently'}</p></div><span>{(task.photos||[]).length} photos</span></div>
-          <div className="approvalPhotos">{(task.photos||[]).map(photo=><a key={photo.id} href={photo.url} target="_blank" rel="noreferrer"><img src={photo.url} alt={photo.name}/></a>)}</div>
-          <textarea placeholder="Reason required only when rejecting" value={reason[task.id]||''} onChange={e=>setReason(current=>({...current,[task.id]:e.target.value}))}/>
-          <div className="approvalActions"><button className="approveButton" onClick={()=>approve(task)}>Approve Job</button><button className="rejectButton" onClick={()=>reject(task)}>Return for Rework</button></div>
-        </article>}):<div className="empty">No jobs are waiting for approval.</div>}
+
+  if(!allowed)return <div className="content"><div className="sectionIntro"><h1>Workshop QC</h1><p>Only Flemming and Jakob can approve workshop fit-up and final QC.</p></div></div>;
+
+  const renderCard=(task,stage)=>{
+    const project=projects.find(p=>p.name===task.project);
+    const isFinal=stage==='final';
+    return <article className="approvalCard workshopApprovalCard" key={task.id}>
+      <div className="approvalCardHead">
+        <div><small>{task.project} · {project?.location||'Workshop'}</small><h3>{task.title}</h3><p>{task.person} · {isFinal?'Final QC':'Fit-up / Tack approval'}</p></div>
+        <span>{(task.photos||[]).length} photos</span>
       </div>
-      <div className="panel"><div className="panelHead"><h3>Recent decisions</h3><span>{recent.length}</span></div>{recent.map(task=><div className="approvalHistory" key={task.id}><div><b>{task.title}</b><small>{task.project} · {task.person}</small></div><span className={`jobState ${task.jobStatus.toLowerCase()}`}>{task.jobStatus}</span></div>)}</div>
+      <div className="approvalPhotos">{(task.photos||[]).map(photo=><a key={photo.id} href={photo.url} target="_blank" rel="noreferrer"><img src={photo.url} alt={photo.name}/></a>)}</div>
+      {isFinal&&(task.photos||[]).length<4&&<div className="qcWarning">Final QC locked: four workshop photos are required.</div>}
+      <textarea placeholder="Rework reason required when rejecting" value={reason[task.id]||''} onChange={e=>setReason(current=>({...current,[task.id]:e.target.value}))}/>
+      <div className="approvalActions">
+        {isFinal
+          ? <button className="approveButton" disabled={(task.photos||[]).length<4} onClick={()=>approveFinal(task)}>Approve Final QC & Release</button>
+          : <button className="approveButton" onClick={()=>approveTack(task)}>Approve Fit-up / Tack</button>}
+        <button className="rejectButton" onClick={()=>reject(task,stage)}>Return for Rework</button>
+      </div>
+    </article>
+  };
+
+  return <div className="content approvalsPage">
+    <div className="sectionIntro"><div><h1>Workshop QC</h1><p>Workshop-only fit-up approval and final quality control.</p></div><span className="approvalRole">{session.name}</span></div>
+    <section className="approvalGrid qcApprovalGrid">
+      <div className="panel">
+        <div className="panelHead"><h3>Awaiting Fit-up / Tack Approval</h3><span>{tackPending.length}</span></div>
+        {tackPending.length?tackPending.map(task=>renderCard(task,'tack')):<div className="empty">No workshop fit-up approvals are waiting.</div>}
+      </div>
+      <div className="panel">
+        <div className="panelHead"><h3>Awaiting Final QC</h3><span>{finalPending.length}</span></div>
+        {finalPending.length?finalPending.map(task=>renderCard(task,'final')):<div className="empty">No workshop jobs are waiting for final QC.</div>}
+      </div>
+    </section>
+    <section className="panel qcRecent">
+      <div className="panelHead"><h3>Recent Workshop QC Decisions</h3><span>{recent.length}</span></div>
+      {recent.map(task=><div className="approvalHistory" key={task.id}><div><b>{task.title}</b><small>{task.project} · {task.person}</small></div><span className={`jobState ${String(task.qaStage).toLowerCase().replaceAll(' ','-')}`}>{task.qaStage}</span></div>)}
+      {!recent.length&&<div className="empty">No recent workshop QC decisions.</div>}
     </section>
   </div>
 }
@@ -540,15 +699,19 @@ function Dashboard({ session, stats, projects, tasks, people, machines, material
   const activeProjects=projects.filter(project=>project.status!=='Completed' && project.lifecycle!=='Archived');
   const workshopProjects=activeProjects.filter(project=>['Workshop','Fabrication'].includes(project.type) || project.location?.toLowerCase().includes('workshop'));
   const marineProjects=activeProjects.filter(project=>['Marine','Vessel','Inspection'].includes(project.type));
-  const pendingApprovals=tasks.filter(task=>task.jobStatus==='Awaiting approval' || task.status==='Waiting');
+  const workshopTaskList=tasks.filter(task=>{
+    const project=projects.find(p=>p.name===task.project);
+    return isWorkshopProject(project);
+  });
+  const pendingApprovals=workshopTaskList.filter(task=>['Awaiting tack approval','Awaiting final QC'].includes(task.qaStage)||['Awaiting tack approval','Awaiting final QC'].includes(task.jobStatus));
   const criticalJobs=tasks.filter(task=>(task.priority==='High'||task.priority==='Critical'||task.due==='Overdue') && task.status!=='Completed');
   const peopleWorking=people.filter(person=>!['Free','Off'].includes(person.status));
   const materialAlerts=materials.filter(material=>material.quantity<material.minimum);
   const openDrone=droneInspections.filter(item=>!['Completed','Closed'].includes(item.status));
   const quoteReplies=quotes.filter(quote=>['Draft','Awaiting approval','Sent','Awaiting reply'].includes(quote.status));
-  const tackApprovals=tasks.filter(task=>task.qaStage==='Tack inspection' || task.jobStatus==='Awaiting tack approval');
-  const finalApprovals=tasks.filter(task=>task.qaStage==='Final inspection' || task.jobStatus==='Awaiting final approval');
-  const releasedToday=tasks.filter(task=>task.jobStatus==='Approved' && task.approvedAt && new Date(task.approvedAt).toDateString()===new Date().toDateString());
+  const tackApprovals=workshopTaskList.filter(task=>task.qaStage==='Awaiting tack approval' || task.jobStatus==='Awaiting tack approval');
+  const finalApprovals=workshopTaskList.filter(task=>task.qaStage==='Awaiting final QC' || task.jobStatus==='Awaiting final QC');
+  const releasedToday=workshopTaskList.filter(task=>task.qaStage==='QC approved / Released' && task.qcApprovedAt && new Date(task.qcApprovedAt).toDateString()===new Date().toDateString());
   const visiblePeople=peopleWorking.slice(0,8);
   const machineStatus=(status)=>{
     if(['Out of service','Fault'].includes(status))return 'fault';
@@ -592,10 +755,10 @@ function Dashboard({ session, stats, projects, tasks, people, machines, material
       </div>
 
       <div className="glassPanel qaPanel">
-        <div className="panelHead"><div><p className="panelEyebrow">QA CONTROL</p><h3>Approval queue</h3></div><button onClick={()=>setActive('approvals')}>Open queue</button></div>
+        <div className="panelHead"><div><p className="panelEyebrow">WORKSHOP QC</p><h3>Approval queue</h3></div><button onClick={()=>setActive('approvals')}>Open queue</button></div>
         <div className="qaMetric"><span>Awaiting tack approval</span><strong>{tackApprovals.length}</strong></div>
-        <div className="qaMetric"><span>Awaiting final weld approval</span><strong>{finalApprovals.length}</strong></div>
-        <div className="qaMetric"><span>Jobs awaiting release</span><strong>{tasks.filter(task=>task.jobStatus==='Awaiting approval').length}</strong></div>
+        <div className="qaMetric"><span>Awaiting final QC</span><strong>{finalApprovals.length}</strong></div>
+        <div className="qaMetric"><span>Workshop QC waiting</span><strong>{pendingApprovals.length}</strong></div>
         <div className="qaMetric released"><span>Released today</span><strong>{releasedToday.length}</strong></div>
         <div className="approvalMiniList">{pendingApprovals.slice(0,4).map(task=><div key={task.id}><span className="statusDot warning"/><div><b>{task.title}</b><small>{task.project} · {task.person}</small></div></div>)}{!pendingApprovals.length&&<p className="emptySmall">No approvals are waiting.</p>}</div>
       </div>
@@ -1116,7 +1279,7 @@ function ProjectHub({session,project,projects,setProjects,people,tasks,setTasks,
     {tab==='crew'&&<section className="panel"><div className="peopleCards">{crew.length?crew.map(p=><article key={p.id}><div className="personHead"><div className="avatar">{p.name[0]}</div><div><h3>{p.name}</h3><small>{p.location} · {p.status}</small></div></div><p>{p.task}</p></article>):<div className="empty">Assign crew in People.</div>}</div></section>}
     {tab==='documents'&&<section className="panel"><div className="panelHead"><h3>Project documents</h3><button onClick={()=>setActive('documents')}>Open Document Center</button></div>{projectDocs.length?projectDocs.map(d=><div className="documentRow hubDoc" key={d.id}><div><b>{d.name}</b><small>{d.category} · V{d.version}</small></div><span>{d.date}</span></div>):<div className="empty">No documents uploaded.</div>}</section>}
     {tab==='drone'&&<DroneInspectionPanel project={project} inspections={projectDrone} allInspections={droneInspections||[]} setInspections={setDroneInspections}/>}
-    {tab==='tasks'&&<section className="panel"><div className="hubTaskAdd taskAssignBar"><input placeholder="New project task" value={newTask} onChange={e=>setNewTask(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addTask()}/><select value={newAssignee} onChange={e=>setNewAssignee(e.target.value)}>{people.filter(p=>USERS[p.name]?.role==='Technician').map(p=><option key={p.id}>{p.name}</option>)}</select><button onClick={addTask}>Assign task</button></div><div className="projectJobTable">{projectTasks.map(t=><div key={t.id}><div><b>{t.title}</b><small>{t.person} · {(t.photos||[]).length}/4 photos</small></div><span className={`jobState ${(t.jobStatus||'Pending').toLowerCase().replaceAll(' ','-')}`}>{t.jobStatus||'Pending'}</span></div>)}</div></section>}
+    {tab==='tasks'&&<section className="panel"><div className="hubTaskAdd taskAssignBar"><input placeholder="New project task" value={newTask} onChange={e=>setNewTask(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addTask()}/><select value={newAssignee} onChange={e=>setNewAssignee(e.target.value)}>{people.filter(p=>USERS[p.name]?.role==='Technician').map(p=><option key={p.id}>{p.name}</option>)}</select><button onClick={addTask}>Assign task</button></div><div className="projectJobTable">{projectTasks.map(t=><div key={t.id}><div><b>{t.title}</b><small>{t.person} · {isWorkshopProject(project)?`${(t.photos||[]).length}/4 QC photos`:`${(t.photos||[]).length} photos`}</small></div><span className={`jobState ${(t.jobStatus||'Pending').toLowerCase().replaceAll(' ','-')}`}>{t.jobStatus||'Pending'}</span></div>)}</div></section>}
     {tab==='materials'&&<section className="materialsHub">
       <div className="panel addMaterialPanel">
         <div className="panelHead"><h3>Add Material</h3><span>{project.name}</span></div>

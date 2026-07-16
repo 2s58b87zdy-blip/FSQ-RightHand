@@ -1,21 +1,30 @@
-# FSQ Command 6.0 - Phase 3 Operations Dashboard
+# FSQ Command 6.0 – Phase 3.1 Workshop QC
 
-## Included
-- Full Operations Dashboard
-- Active project, workshop job, approval and critical-job KPI cards
-- Staff working today
-- Material alerts
-- Drone inspection status
-- Quotations awaiting action
-- Live people/location panel
-- QA approval queue summary
-- Marine and workshop project progress
-- Workshop machine status
-- Critical and overdue task list
-- Freja remains an English female voice
+## Workshop-only workflow
+- Start job
+- Fit-up
+- Submit for tack approval
+- Flemming or Jakob approves fit-up/tack
+- Welding
+- Minimum four workshop QC photos
+- Submit final QC
+- Flemming or Jakob approves final QC and releases the job
+- Rework requires a written reason
 
-## Excluded by request
-- Overtime tracking and overtime KPI
+## Four-photo rule
+The four-photo requirement applies only to Workshop/Fabrication projects.
+It is required before final QC and release, not before starting the job.
 
-## Access
-Technicians still open directly in My Jobs and only see their assigned work. Management users see the complete Operations Dashboard.
+Suggested photo coverage:
+1. Fabrication in progress
+2. Fit-up or welding stage
+3. Completed item
+4. Detail photo
+
+## Marine projects
+- No fixed four-photo requirement
+- No workshop tack/QC workflow
+- Marine timesheets and Work Done upload will be added later in the document phase
+
+## Permissions
+Only Flemming and Jakob can approve workshop tack/fit-up and final QC.
