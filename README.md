@@ -1,15 +1,13 @@
-# FSQ Command v5.1.2
+# FSQ Command v5.2.0
 
-Client-side crash hotfix.
+Technician job access and photo gate.
 
-## Fixed
-- Added missing React `useRef` import used by Freja speech recognition.
-- Prevents the application-wide client-side exception after deployment.
-- Keeps the Workshop QA role-based approval changes from v5.1.1.
+- Technicians only see their assigned jobs.
+- Pending jobs remain visible.
+- Minimum four uploaded photos before Start Job.
+- Minimum four uploaded photos before Finish Job.
+- Administrators and managers retain full navigation.
+- English female browser voice is preferred for Freja.
+- Demo technician accounts use password fsq2027.
 
-## Test
-1. Deploy and hard refresh with Ctrl+F5.
-2. Log in.
-3. Open a Workshop project.
-4. Test Tasks and Approve for welding.
-5. Test the Freja microphone button.
+Note: photos are stored locally in the browser in this version. Azure Blob upload will replace local storage in the next storage integration step.

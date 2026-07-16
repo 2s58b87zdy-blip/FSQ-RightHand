@@ -4,11 +4,18 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 const USERS = {
   Flemming: { role: 'Administrator', password: 'fsq2027' },
-  Jakob: { role: 'Project Manager', password: 'fsq2027' }
+  Jakob: { role: 'Project Manager', password: 'fsq2027' },
+  Tommy: { role: 'Technician', password: 'fsq2027' },
+  Anders: { role: 'Technician', password: 'fsq2027' },
+  Mathias: { role: 'Technician', password: 'fsq2027' },
+  Magnus: { role: 'Technician', password: 'fsq2027' },
+  Kim: { role: 'Technician', password: 'fsq2027' },
+  Stefan: { role: 'Engineer', password: 'fsq2027' }
 };
 
 const NAV = [
   ['dashboard', 'Dashboard', '◈'],
+  ['myjobs', 'My Jobs', '✓'],
   ['projects', 'Projects', '◫'],
   ['crew', 'People', '◉'],
   ['documents', 'Project Binder', '▱'],
@@ -130,18 +137,18 @@ const DEFAULT_BINDER_FOLDERS = [
 
 function getGreeting(name) {
   const hour = new Date().getHours();
-  if (hour < 12) return `Godmorgen ${name}. Velkommen til FSQ Command. Freja er online og klar til at hjælpe.`;
-  if (hour < 18) return `God eftermiddag ${name}. Velkommen tilbage til FSQ Command. Freja er online og klar til at hjælpe.`;
-  return `God aften ${name}. Velkommen til FSQ Command. Freja er online og klar til at hjælpe.`;
+  if (hour < 12) return `Good morning ${name}. Welcome to FSQ Command. Freja is online and ready to assist.`;
+  if (hour < 18) return `Good afternoon ${name}. Welcome back to FSQ Command. Freja is online and ready to assist.`;
+  return `Good evening ${name}. Welcome to FSQ Command. Freja is online and ready to assist.`;
 }
 
 function chooseDanishFemaleVoice() {
   if (typeof window === 'undefined' || !('speechSynthesis' in window)) return null;
   const voices = window.speechSynthesis.getVoices();
-  const preferredNames = ['Christel', 'Sara', 'Sofie', 'Emma', 'Female', 'Microsoft Christel'];
-  return voices.find(v => v.lang?.toLowerCase().startsWith('da') && preferredNames.some(n => v.name.toLowerCase().includes(n.toLowerCase())))
-    || voices.find(v => v.lang?.toLowerCase().startsWith('da'))
-    || voices.find(v => /female|sara|sofia|emma|jenny/i.test(v.name))
+  const preferredNames = ['Sonia', 'Libby', 'Jenny', 'Aria', 'Samantha', 'Female'];
+  return voices.find(v => v.lang?.toLowerCase().startsWith('en-gb') && preferredNames.some(n => v.name.toLowerCase().includes(n.toLowerCase())))
+    || voices.find(v => v.lang?.toLowerCase().startsWith('en') && /sonia|libby|jenny|aria|samantha|female/i.test(v.name))
+    || voices.find(v => v.lang?.toLowerCase().startsWith('en'))
     || voices[0]
     || null;
 }
@@ -182,7 +189,7 @@ function speak(text, enabled) {
   if (!enabled || typeof window === 'undefined' || !('speechSynthesis' in window)) return;
   window.speechSynthesis.cancel();
   const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = 'da-DK';
+  utterance.lang = 'en-GB';
   utterance.rate = 0.94;
   utterance.pitch = 1.08;
   const voice = chooseDanishFemaleVoice();
@@ -283,7 +290,7 @@ function Login({ onLogin }) {
 }
 
 function AppShell({ session, onLogout }) {
-  const [active, setActive] = useState('dashboard');
+  const [active, setActive] = useState(session.role === 'Technician' ? 'myjobs' : 'dashboard');
   const [activeProjectId, setActiveProjectId] = useState(null);
   const [projects, setProjects] = useStoredState('fsq-v40-projects', DEFAULT_PROJECTS);
   const [tasks, setTasks] = useStoredState('fsq-v40-tasks', DEFAULT_TASKS);
@@ -295,7 +302,7 @@ function AppShell({ session, onLogout }) {
   const [droneInspections, setDroneInspections] = useStoredState('fsq-v40-drone-inspections', DEFAULT_DRONE_INSPECTIONS);
   const [documents, setDocuments] = useStoredState('fsq-v40-documents', DEFAULT_DOCUMENTS);
   const [deletedProjects, setDeletedProjects] = useStoredState('fsq-v40-deleted-projects', []);
-  const [chat, setChat] = useState([{ from: 'ai', text: `${getGreeting(session.name)} Hvad vil du gerne arbejde med?` }]);
+  const [chat, setChat] = useState([{ from: 'ai', text: `${getGreeting(session.name)} How can I assist you today?` }]);
   const [voice, setVoice] = useState(session.voice);
   const [voiceMessage,setVoiceMessage] = useState('');
 
@@ -312,7 +319,7 @@ function AppShell({ session, onLogout }) {
       setActive('ai');
       setChat(current => [...current,{from:'user',text:transcript}]);
     }
-    speak(`Jeg hørte: ${transcript}`, voice);
+    speak(`I heard: ${transcript}`, voice);
   }
 
   const globalSpeech = useSpeechRecognition({
@@ -320,42 +327,126 @@ function AppShell({ session, onLogout }) {
     onError: error => setVoiceMessage(error==='not-supported'?'Talegenkendelse understøttes ikke i denne browser. Brug Microsoft Edge eller Chrome.':'Mikrofonen kunne ikke startes. Kontrollér browserens mikrofontilladelse.')
   });
 
+  const isTechnician = session.role === 'Technician';
+  const visibleTasks = isTechnician ? tasks.filter(task => task.person === session.name) : tasks;
+  const assignedProjectNames = new Set(visibleTasks.map(task => task.project));
+  const visibleProjects = isTechnician ? projects.filter(project => assignedProjectNames.has(project.name)) : projects;
+  const visibleNav = isTechnician
+    ? NAV.filter(item => ['dashboard','myjobs','ai'].includes(item[0]))
+    : NAV;
+
   const stats = useMemo(() => ({
-    projects: projects.filter(p => p.status !== 'Completed').length,
-    openTasks: tasks.filter(t => t.status !== 'Completed').length,
-    urgent: tasks.filter(t => (t.priority === 'High' || t.due === 'Overdue') && t.status !== 'Completed').length,
+    projects: visibleProjects.filter(p => p.status !== 'Completed').length,
+    openTasks: visibleTasks.filter(t => t.status !== 'Completed').length,
+    urgent: visibleTasks.filter(t => (t.priority === 'High' || t.due === 'Overdue') && t.status !== 'Completed').length,
     people: people.filter(p => !['Free', 'Off'].includes(p.status)).length,
     lowStock: materials.filter(m => m.quantity < m.minimum).length,
     machinesDown: machines.filter(m => ['Service','Out of service'].includes(m.status)).length
-  }), [projects, tasks, people, materials, machines]);
+  }), [visibleProjects, visibleTasks, people, materials, machines]);
 
   return (
     <div className="appShell">
       <aside className="sidebar">
         <div className="logo"><b>FSQ</b><span>COMMAND</span></div>
         <div className="online"><i/> ALL SYSTEMS OPERATIONAL</div>
-        <nav>{NAV.map(([id, label, icon]) => <button key={id} onClick={() => setActive(id)} className={active === id ? 'active' : ''}><span>{icon}</span>{label}</button>)}</nav>
+        <nav>{visibleNav.map(([id, label, icon]) => <button key={id} onClick={() => setActive(id)} className={active === id ? 'active' : ''}><span>{icon}</span>{label}</button>)}</nav>
         <div className="userCard"><div className="avatar">{session.name[0]}</div><div><b>{session.name}</b><small>{session.role}</small></div><button onClick={onLogout}>↗</button></div>
       </aside>
       <main className="workspace">
         <header className="topbar">
-          <div><p className="eyebrow">FSQ OPERATIONS CONTROL</p><h2>{NAV.find(n => n[0] === active)?.[1]}</h2></div>
+          <div><p className="eyebrow">FSQ OPERATIONS CONTROL</p><h2>{visibleNav.find(n => n[0] === active)?.[1] || 'FSQ Command'}</h2></div>
           <div className="topActions"><button className={`voiceCommand ${globalSpeech.listening?'listening':''}`} onClick={globalSpeech.toggleListening} title="Tal til Freja">{globalSpeech.listening?'● Lytter...':'🎙 Tal til Freja'}</button><label><input type="checkbox" checked={voice} onChange={e => setVoice(e.target.checked)} /> Stemme</label><span className="clock">{new Date().toLocaleDateString('da-DK')}</span></div>
         </header>
         {voiceMessage&&<div className="voiceStatus">{voiceMessage}</div>}
 
-        {active === 'dashboard' && <Dashboard session={session} stats={stats} projects={projects} tasks={tasks} people={people} machines={machines} materials={materials} setActive={setActive} deletedProjects={deletedProjects} setDeletedProjects={setDeletedProjects} setActiveProjectId={setActiveProjectId} droneInspections={droneInspections} setDroneInspections={setDroneInspections} />}
+        {active === 'dashboard' && <Dashboard session={session} stats={stats} projects={visibleProjects} tasks={visibleTasks} people={people} machines={machines} materials={materials} setActive={setActive} deletedProjects={deletedProjects} setDeletedProjects={setDeletedProjects} setActiveProjectId={setActiveProjectId} droneInspections={droneInspections} setDroneInspections={setDroneInspections} />}
+        {active === 'myjobs' && <MyJobs session={session} tasks={tasks} setTasks={setTasks} projects={projects} />}
         {active === 'crew' && <CrewManagement people={people} setPeople={setPeople} projects={projects} />}
         {active === 'projects' && <Projects projects={projects} setProjects={setProjects} deletedProjects={deletedProjects} setDeletedProjects={setDeletedProjects} setActive={setActive} setActiveProjectId={setActiveProjectId} />}
         {active === 'projectHub' && <ProjectHub project={projects.find(p=>p.id===activeProjectId)} projects={projects} setProjects={setProjects} people={people} tasks={tasks} setTasks={setTasks} documents={documents} materials={materials} setMaterials={setMaterials} quotes={quotes} reports={reports} setActive={setActive} deletedProjects={deletedProjects} setDeletedProjects={setDeletedProjects} setActiveProjectId={setActiveProjectId} droneInspections={droneInspections} setDroneInspections={setDroneInspections} />}
         {active === 'documents' && <ProjectBinder documents={documents} setDocuments={setDocuments} projects={projects} session={session} />}
         {active === 'admin' && <Admin people={people} setPeople={setPeople} machines={machines} setMachines={setMachines} materials={materials} setMaterials={setMaterials} />}
         {active === 'ai' && <AI chat={chat} setChat={setChat} voice={voice} stats={stats} />}
-        {!['dashboard','crew','projects','projectHub','documents','admin','ai'].includes(active) && <ModulePlaceholder title={NAV.find(n=>n[0]===active)?.[1]} />}
+        {!['dashboard','myjobs','crew','projects','projectHub','documents','admin','ai'].includes(active) && <ModulePlaceholder title={NAV.find(n=>n[0]===active)?.[1]} />}
       </main>
     </div>
   );
 }
+
+function MyJobs({ session, tasks, setTasks, projects }) {
+  const [selectedId,setSelectedId]=useState(null);
+  const [message,setMessage]=useState('');
+  const assigned=tasks.filter(task=>task.person===session.name);
+  const selected=assigned.find(task=>task.id===selectedId) || assigned[0] || null;
+
+  function updateTask(id,changes){ setTasks(tasks.map(task=>task.id===id?{...task,...changes}:task)); }
+
+  function uploadPhotos(event){
+    if(!selected)return;
+    const files=Array.from(event.target.files||[]).filter(file=>file.type.startsWith('image/'));
+    if(!files.length)return;
+    const current=selected.photos||[];
+    let loaded=[];
+    files.forEach(file=>{
+      if(file.size>2*1024*1024){ setMessage(`${file.name} is larger than 2 MB.`); return; }
+      const reader=new FileReader();
+      reader.onload=()=>{
+        loaded.push({id:Date.now()+Math.random(),name:file.name,dataUrl:reader.result,date:new Date().toISOString()});
+        if(loaded.length===files.filter(f=>f.size<=2*1024*1024).length){
+          const photos=[...current,...loaded];
+          updateTask(selected.id,{photos,jobStatus:selected.jobStatus||'Pending'});
+          setMessage(`${loaded.length} photo(s) uploaded. ${Math.max(0,4-photos.length)} remaining before the job can start.`);
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+    event.target.value='';
+  }
+
+  function startJob(){
+    const count=(selected.photos||[]).length;
+    if(count<4){setMessage(`Cannot start job. Upload ${4-count} more photo(s).`);return;}
+    updateTask(selected.id,{jobStatus:'In progress',status:'In progress',startedAt:new Date().toISOString()});
+    setMessage('Job started.');
+  }
+
+  function finishJob(){
+    const count=(selected.photos||[]).length;
+    if(count<4){setMessage(`Cannot finish job. Minimum 4 photos required. Upload ${4-count} more photo(s).`);return;}
+    updateTask(selected.id,{jobStatus:'Completed',status:'Completed',completedAt:new Date().toISOString()});
+    setMessage('Job completed and sent for review.');
+  }
+
+  if(!assigned.length)return <div className="content"><div className="sectionIntro"><h1>My Jobs</h1><p>No jobs are assigned to you.</p></div></div>;
+  const photoCount=(selected?.photos||[]).length;
+  const status=selected?.jobStatus || (selected?.status==='Completed'?'Completed':'Pending');
+  const canStart=photoCount>=4 && status==='Pending';
+  const canFinish=photoCount>=4 && status==='In progress';
+  const project=projects.find(p=>p.name===selected?.project);
+
+  return <div className="content technicianJobs">
+    <div className="sectionIntro"><div><h1>My Jobs</h1><p>You only see jobs assigned to {session.name}.</p></div><span className="technicianRole">Technician</span></div>
+    <section className="technicianLayout">
+      <aside className="panel jobList">
+        <div className="panelHead"><h3>Assigned jobs</h3><span>{assigned.length}</span></div>
+        {assigned.map(job=>{const c=(job.photos||[]).length;const st=job.jobStatus||(job.status==='Completed'?'Completed':'Pending');return <button key={job.id} className={selected?.id===job.id?'active':''} onClick={()=>{setSelectedId(job.id);setMessage('')}}><div><b>{job.title}</b><small>{job.project} · {job.due}</small></div><span className={`jobState ${st.toLowerCase().replaceAll(' ','-')}`}>{st}</span><em>{c}/4 photos</em></button>})}
+      </aside>
+      <main className="panel jobDetail">
+        <div className="jobDetailHead"><div><small>{selected.project} · {project?.location||'Location TBD'}</small><h2>{selected.title}</h2><p>Assigned to {selected.person} · Priority {selected.priority}</p></div><span className={`jobState large ${status.toLowerCase().replaceAll(' ','-')}`}>{status}</span></div>
+        <div className="photoGate"><div><strong>{photoCount}/4</strong><small>required photos uploaded</small></div><div className="gateProgress"><span style={{width:`${Math.min(100,photoCount/4*100)}%`}}/></div><p>{photoCount<4?'Upload at least four photos before this job can be started or completed.':'Photo requirement completed.'}</p></div>
+        <label className="jobPhotoUpload">Upload photos<input type="file" accept="image/*" multiple onChange={uploadPhotos}/></label>
+        <div className="jobPhotoGrid">{(selected.photos||[]).map(photo=><figure key={photo.id}><img src={photo.dataUrl} alt={photo.name}/><figcaption>{photo.name}</figcaption></figure>)}</div>
+        {message&&<div className="jobMessage">{message}</div>}
+        <div className="jobActions">
+          <button className="startJob" disabled={!canStart} onClick={startJob}>{status==='Pending'?'Start Job':status}</button>
+          <button className="finishJob" disabled={!canFinish} onClick={finishJob}>Finish Job</button>
+        </div>
+        {status==='Pending'&&photoCount<4&&<div className="pendingNotice">Job is visible as Pending, but cannot be started until four photos are uploaded.</div>}
+      </main>
+    </section>
+  </div>
+}
+
 
 function Dashboard({ session, stats, projects, tasks, people, machines, materials, setActive }) {
   const urgent = tasks.filter(t => (t.priority === 'High' || t.due === 'Overdue') && t.status !== 'Completed');
