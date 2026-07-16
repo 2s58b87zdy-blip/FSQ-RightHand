@@ -1,13 +1,22 @@
-# FSQ Command v5.2.0
+# FSQ Command v5.3.1
 
-Technician job access and photo gate.
+Strict workshop approval update.
 
-- Technicians only see their assigned jobs.
-- Pending jobs remain visible.
-- Minimum four uploaded photos before Start Job.
-- Minimum four uploaded photos before Finish Job.
-- Administrators and managers retain full navigation.
-- English female browser voice is preferred for Freja.
-- Demo technician accounts use password fsq2027.
+## Changed
+Only these users can:
+- approve tack welding / fit-up
+- approve final weld
+- complete or release jobs
 
-Note: photos are stored locally in the browser in this version. Azure Blob upload will replace local storage in the next storage integration step.
+Approved users:
+- Flemming
+- Flemming Bach
+- Jakob
+- Jakob Kjær Danielsen
+
+All other roles, including Administrator, Supervisor, Project Manager, QA Inspector and Engineer, are blocked unless the logged-in user's name is Flemming or Jakob.
+
+## Test
+1. Log in as Flemming and approve tack welding.
+2. Log in as Jakob and complete a job.
+3. Log in as another user and confirm that approval/completion is blocked.

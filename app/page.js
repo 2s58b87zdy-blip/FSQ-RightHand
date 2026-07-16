@@ -10,12 +10,15 @@ const USERS = {
   Mathias: { role: 'Technician', password: 'fsq2027' },
   Magnus: { role: 'Technician', password: 'fsq2027' },
   Kim: { role: 'Technician', password: 'fsq2027' },
-  Stefan: { role: 'Engineer', password: 'fsq2027' }
+  Stefan: { role: 'Engineer', password: 'fsq2027' },
+  QA: { role: 'QA Inspector', password: 'fsq2027' },
+  Supervisor: { role: 'Supervisor', password: 'fsq2027' }
 };
 
 const NAV = [
   ['dashboard', 'Dashboard', '◈'],
   ['myjobs', 'My Jobs', '✓'],
+  ['approvals', 'Job Approvals', '✓'],
   ['projects', 'Projects', '◫'],
   ['crew', 'People', '◉'],
   ['documents', 'Project Binder', '▱'],
@@ -142,7 +145,7 @@ function getGreeting(name) {
   return `Good evening ${name}. Welcome to FSQ Command. Freja is online and ready to assist.`;
 }
 
-function chooseDanishFemaleVoice() {
+function chooseEnglishFemaleVoice() {
   if (typeof window === 'undefined' || !('speechSynthesis' in window)) return null;
   const voices = window.speechSynthesis.getVoices();
   const preferredNames = ['Sonia', 'Libby', 'Jenny', 'Aria', 'Samantha', 'Female'];
@@ -154,7 +157,7 @@ function chooseDanishFemaleVoice() {
 }
 
 
-function canApproveWorkshopWelding(session) {
+function canApproveTackAndComplete(session) {
   if (!session) return false;
 
   const role = String(session.role || '').trim().toLowerCase();
@@ -185,6 +188,30 @@ function approvalIdentity(session) {
   };
 }
 
+
+function canApproveTackAndComplete(session) {
+  if (!session) return false;
+
+  const name = String(session.name || session.user || session.username || '')
+    .trim()
+    .toLowerCase();
+
+  return [
+    'flemming',
+    'flemming bach',
+    'jakob',
+    'jakob kjær danielsen',
+    'jakob kjaer danielsen'
+  ].includes(name);
+}
+
+function approvalIdentity(session) {
+  return {
+    approvedBy: session?.name || session?.user || session?.username || 'Unknown user',
+    approvedAt: new Date().toISOString()
+  };
+}
+
 function speak(text, enabled) {
   if (!enabled || typeof window === 'undefined' || !('speechSynthesis' in window)) return;
   window.speechSynthesis.cancel();
@@ -192,7 +219,7 @@ function speak(text, enabled) {
   utterance.lang = 'en-GB';
   utterance.rate = 0.94;
   utterance.pitch = 1.08;
-  const voice = chooseDanishFemaleVoice();
+  const voice = chooseEnglishFemaleVoice();
   if (voice) utterance.voice = voice;
   window.speechSynthesis.speak(utterance);
 }
@@ -332,7 +359,7 @@ function AppShell({ session, onLogout }) {
   const assignedProjectNames = new Set(visibleTasks.map(task => task.project));
   const visibleProjects = isTechnician ? projects.filter(project => assignedProjectNames.has(project.name)) : projects;
   const visibleNav = isTechnician
-    ? NAV.filter(item => ['dashboard','myjobs','ai'].includes(item[0]))
+    ? NAV.filter(item => ['myjobs','ai'].includes(item[0]))
     : NAV;
 
   const stats = useMemo(() => ({
@@ -355,19 +382,20 @@ function AppShell({ session, onLogout }) {
       <main className="workspace">
         <header className="topbar">
           <div><p className="eyebrow">FSQ OPERATIONS CONTROL</p><h2>{visibleNav.find(n => n[0] === active)?.[1] || 'FSQ Command'}</h2></div>
-          <div className="topActions"><button className={`voiceCommand ${globalSpeech.listening?'listening':''}`} onClick={globalSpeech.toggleListening} title="Tal til Freja">{globalSpeech.listening?'● Lytter...':'🎙 Tal til Freja'}</button><label><input type="checkbox" checked={voice} onChange={e => setVoice(e.target.checked)} /> Stemme</label><span className="clock">{new Date().toLocaleDateString('da-DK')}</span></div>
+          <div className="topActions"><button className={`voiceCommand ${globalSpeech.listening?'listening':''}`} onClick={globalSpeech.toggleListening} title="Talk to Freja">{globalSpeech.listening?'● Listening...':'🎙 Talk to Freja'}</button><label><input type="checkbox" checked={voice} onChange={e => setVoice(e.target.checked)} /> Voice</label><span className="clock">{new Date().toLocaleDateString('da-DK')}</span></div>
         </header>
         {voiceMessage&&<div className="voiceStatus">{voiceMessage}</div>}
 
         {active === 'dashboard' && <Dashboard session={session} stats={stats} projects={visibleProjects} tasks={visibleTasks} people={people} machines={machines} materials={materials} setActive={setActive} deletedProjects={deletedProjects} setDeletedProjects={setDeletedProjects} setActiveProjectId={setActiveProjectId} droneInspections={droneInspections} setDroneInspections={setDroneInspections} />}
         {active === 'myjobs' && <MyJobs session={session} tasks={tasks} setTasks={setTasks} projects={projects} />}
+        {active === 'approvals' && <JobApprovals session={session} tasks={tasks} setTasks={setTasks} projects={projects} />}
         {active === 'crew' && <CrewManagement people={people} setPeople={setPeople} projects={projects} />}
         {active === 'projects' && <Projects projects={projects} setProjects={setProjects} deletedProjects={deletedProjects} setDeletedProjects={setDeletedProjects} setActive={setActive} setActiveProjectId={setActiveProjectId} />}
-        {active === 'projectHub' && <ProjectHub project={projects.find(p=>p.id===activeProjectId)} projects={projects} setProjects={setProjects} people={people} tasks={tasks} setTasks={setTasks} documents={documents} materials={materials} setMaterials={setMaterials} quotes={quotes} reports={reports} setActive={setActive} deletedProjects={deletedProjects} setDeletedProjects={setDeletedProjects} setActiveProjectId={setActiveProjectId} droneInspections={droneInspections} setDroneInspections={setDroneInspections} />}
+        {active === 'projectHub' && <ProjectHub session={session} project={projects.find(p=>p.id===activeProjectId)} projects={projects} setProjects={setProjects} people={people} tasks={tasks} setTasks={setTasks} documents={documents} materials={materials} setMaterials={setMaterials} quotes={quotes} reports={reports} setActive={setActive} deletedProjects={deletedProjects} setDeletedProjects={setDeletedProjects} setActiveProjectId={setActiveProjectId} droneInspections={droneInspections} setDroneInspections={setDroneInspections} />}
         {active === 'documents' && <ProjectBinder documents={documents} setDocuments={setDocuments} projects={projects} session={session} />}
         {active === 'admin' && <Admin people={people} setPeople={setPeople} machines={machines} setMachines={setMachines} materials={materials} setMaterials={setMaterials} />}
         {active === 'ai' && <AI chat={chat} setChat={setChat} voice={voice} stats={stats} />}
-        {!['dashboard','myjobs','crew','projects','projectHub','documents','admin','ai'].includes(active) && <ModulePlaceholder title={NAV.find(n=>n[0]===active)?.[1]} />}
+        {!['dashboard','myjobs','approvals','crew','projects','projectHub','documents','admin','ai'].includes(active) && <ModulePlaceholder title={NAV.find(n=>n[0]===active)?.[1]} />}
       </main>
     </div>
   );
@@ -376,51 +404,72 @@ function AppShell({ session, onLogout }) {
 function MyJobs({ session, tasks, setTasks, projects }) {
   const [selectedId,setSelectedId]=useState(null);
   const [message,setMessage]=useState('');
+  const [uploading,setUploading]=useState(false);
   const assigned=tasks.filter(task=>task.person===session.name);
   const selected=assigned.find(task=>task.id===selectedId) || assigned[0] || null;
 
   function updateTask(id,changes){ setTasks(tasks.map(task=>task.id===id?{...task,...changes}:task)); }
 
-  function uploadPhotos(event){
+  async function uploadPhotos(event){
     if(!selected)return;
     const files=Array.from(event.target.files||[]).filter(file=>file.type.startsWith('image/'));
     if(!files.length)return;
-    const current=selected.photos||[];
-    let loaded=[];
-    files.forEach(file=>{
-      if(file.size>2*1024*1024){ setMessage(`${file.name} is larger than 2 MB.`); return; }
-      const reader=new FileReader();
-      reader.onload=()=>{
-        loaded.push({id:Date.now()+Math.random(),name:file.name,dataUrl:reader.result,date:new Date().toISOString()});
-        if(loaded.length===files.filter(f=>f.size<=2*1024*1024).length){
-          const photos=[...current,...loaded];
-          updateTask(selected.id,{photos,jobStatus:selected.jobStatus||'Pending'});
-          setMessage(`${loaded.length} photo(s) uploaded. ${Math.max(0,4-photos.length)} remaining before the job can start.`);
-        }
-      };
-      reader.readAsDataURL(file);
-    });
-    event.target.value='';
+    setUploading(true);setMessage('Uploading photos to Azure...');
+    try{
+      const uploaded=[];
+      for(const file of files){
+        const form=new FormData();
+        form.append('file',file);
+        form.append('project',selected.project||'General');
+        form.append('taskId',String(selected.id));
+        form.append('technician',session.name);
+        const response=await fetch('/api/job-photos',{method:'POST',body:form});
+        const data=await response.json();
+        if(!response.ok) throw new Error(data.error||`Upload failed for ${file.name}`);
+        uploaded.push(data.photo);
+      }
+      const photos=[...(selected.photos||[]),...uploaded];
+      updateTask(selected.id,{photos,jobStatus:selected.jobStatus||'Pending',photoStorage:'Azure Blob Storage'});
+      setMessage(`${uploaded.length} photo(s) uploaded to Azure. ${Math.max(0,4-photos.length)} remaining before the job can start.`);
+    }catch(error){
+      setMessage(`Upload failed: ${error.message}`);
+    }finally{setUploading(false);event.target.value='';}
+  }
+
+  async function removePhoto(photo){
+    if(!selected||!window.confirm(`Delete ${photo.name}?`))return;
+    try{
+      if(photo.blobName){
+        const response=await fetch(`/api/job-photos?blob=${encodeURIComponent(photo.blobName)}`,{method:'DELETE'});
+        if(!response.ok){const data=await response.json();throw new Error(data.error||'Delete failed');}
+      }
+      updateTask(selected.id,{photos:(selected.photos||[]).filter(item=>item.id!==photo.id)});
+      setMessage('Photo deleted.');
+    }catch(error){setMessage(`Delete failed: ${error.message}`)}
   }
 
   function startJob(){
     const count=(selected.photos||[]).length;
     if(count<4){setMessage(`Cannot start job. Upload ${4-count} more photo(s).`);return;}
-    updateTask(selected.id,{jobStatus:'In progress',status:'In progress',startedAt:new Date().toISOString()});
+    updateTask(selected.id,{jobStatus:'In progress',status:'In progress',startedAt:new Date().toISOString(),startedBy:session.name});
     setMessage('Job started.');
   }
 
   function finishJob(){
+    if (!canApproveTackAndComplete(session)) {
+      alert('Only Flemming or Jakob can approve tack welding and complete jobs.');
+      return;
+    }
     const count=(selected.photos||[]).length;
     if(count<4){setMessage(`Cannot finish job. Minimum 4 photos required. Upload ${4-count} more photo(s).`);return;}
-    updateTask(selected.id,{jobStatus:'Completed',status:'Completed',completedAt:new Date().toISOString()});
-    setMessage('Job completed and sent for review.');
+    updateTask(selected.id,{jobStatus:'Awaiting approval',status:'Waiting',submittedAt:new Date().toISOString(),submittedBy:session.name});
+    setMessage('Job submitted for supervisor approval.');
   }
 
   if(!assigned.length)return <div className="content"><div className="sectionIntro"><h1>My Jobs</h1><p>No jobs are assigned to you.</p></div></div>;
   const photoCount=(selected?.photos||[]).length;
-  const status=selected?.jobStatus || (selected?.status==='Completed'?'Completed':'Pending');
-  const canStart=photoCount>=4 && status==='Pending';
+  const status=selected?.jobStatus || (selected?.status==='Completed'?'Approved':'Pending');
+  const canStart=photoCount>=4 && ['Pending','Rejected'].includes(status);
   const canFinish=photoCount>=4 && status==='In progress';
   const project=projects.find(p=>p.name===selected?.project);
 
@@ -429,20 +478,57 @@ function MyJobs({ session, tasks, setTasks, projects }) {
     <section className="technicianLayout">
       <aside className="panel jobList">
         <div className="panelHead"><h3>Assigned jobs</h3><span>{assigned.length}</span></div>
-        {assigned.map(job=>{const c=(job.photos||[]).length;const st=job.jobStatus||(job.status==='Completed'?'Completed':'Pending');return <button key={job.id} className={selected?.id===job.id?'active':''} onClick={()=>{setSelectedId(job.id);setMessage('')}}><div><b>{job.title}</b><small>{job.project} · {job.due}</small></div><span className={`jobState ${st.toLowerCase().replaceAll(' ','-')}`}>{st}</span><em>{c}/4 photos</em></button>})}
+        {assigned.map(job=>{const c=(job.photos||[]).length;const st=job.jobStatus||(job.status==='Completed'?'Approved':'Pending');return <button key={job.id} className={selected?.id===job.id?'active':''} onClick={()=>{setSelectedId(job.id);setMessage('')}}><div><b>{job.title}</b><small>{job.project} · {job.due}</small></div><span className={`jobState ${st.toLowerCase().replaceAll(' ','-')}`}>{st}</span><em>{c}/4 photos</em></button>})}
       </aside>
       <main className="panel jobDetail">
         <div className="jobDetailHead"><div><small>{selected.project} · {project?.location||'Location TBD'}</small><h2>{selected.title}</h2><p>Assigned to {selected.person} · Priority {selected.priority}</p></div><span className={`jobState large ${status.toLowerCase().replaceAll(' ','-')}`}>{status}</span></div>
-        <div className="photoGate"><div><strong>{photoCount}/4</strong><small>required photos uploaded</small></div><div className="gateProgress"><span style={{width:`${Math.min(100,photoCount/4*100)}%`}}/></div><p>{photoCount<4?'Upload at least four photos before this job can be started or completed.':'Photo requirement completed.'}</p></div>
-        <label className="jobPhotoUpload">Upload photos<input type="file" accept="image/*" multiple onChange={uploadPhotos}/></label>
-        <div className="jobPhotoGrid">{(selected.photos||[]).map(photo=><figure key={photo.id}><img src={photo.dataUrl} alt={photo.name}/><figcaption>{photo.name}</figcaption></figure>)}</div>
+        {status==='Rejected'&&<div className="rejectionBox"><b>Returned for rework</b><p>{selected.rejectionReason||'No reason entered.'}</p></div>}
+        <div className="photoGate"><div><strong>{photoCount}/4</strong><small>required photos uploaded</small></div><div className="gateProgress"><span style={{width:`${Math.min(100,photoCount/4*100)}%`}}/></div><p>{photoCount<4?'Upload at least four photos before this job can be started or submitted.':'Photo requirement completed.'}</p></div>
+        <label className={`jobPhotoUpload ${uploading?'busy':''}`}>{uploading?'Uploading...':'Upload photos to Azure'}<input disabled={uploading||['Awaiting approval','Approved'].includes(status)} type="file" accept="image/*" capture="environment" multiple onChange={uploadPhotos}/></label>
+        <div className="jobPhotoGrid">{(selected.photos||[]).map(photo=><figure key={photo.id}><a href={photo.url} target="_blank" rel="noreferrer"><img src={photo.url} alt={photo.name}/></a><figcaption>{photo.name}<button onClick={()=>removePhoto(photo)}>×</button></figcaption></figure>)}</div>
         {message&&<div className="jobMessage">{message}</div>}
         <div className="jobActions">
-          <button className="startJob" disabled={!canStart} onClick={startJob}>{status==='Pending'?'Start Job':status}</button>
-          <button className="finishJob" disabled={!canFinish} onClick={finishJob}>Finish Job</button>
+          <button className="startJob" disabled={!canStart} onClick={startJob}>{status==='Pending'||status==='Rejected'?'Start Job':status}</button>
+          <button className="finishJob" disabled={!canFinish} onClick={finishJob}>Submit for Approval</button>
         </div>
-        {status==='Pending'&&photoCount<4&&<div className="pendingNotice">Job is visible as Pending, but cannot be started until four photos are uploaded.</div>}
+        {(status==='Pending'||status==='Rejected')&&photoCount<4&&<div className="pendingNotice">Job is visible as Pending, but cannot be started until four photos are uploaded.</div>}
+        {status==='Awaiting approval'&&<div className="pendingNotice approvalPending">Work is locked while awaiting approval.</div>}
+        {status==='Approved'&&<div className="approvalSuccess">✓ Job approved by {selected.approvedBy||'Supervisor'}</div>}
       </main>
+    </section>
+  </div>
+}
+
+function JobApprovals({session,tasks,setTasks,projects}){
+  const allowed=canApproveTackAndComplete(session)||['Project Manager','Engineer'].includes(session.role);
+  const [reason,setReason]=useState({});
+  const pending=tasks.filter(task=>task.jobStatus==='Awaiting approval');
+  const recent=tasks.filter(task=>['Approved','Rejected'].includes(task.jobStatus)).slice(-10).reverse();
+  function update(id,changes){setTasks(tasks.map(task=>task.id===id?{...task,...changes}:task))}
+  function approve(task){
+    if(!allowed)return;
+    update(task.id,{jobStatus:'Approved',status:'Completed',...approvalIdentity(session),completedAt:new Date().toISOString(),rejectionReason:''});
+  }
+  function reject(task){
+    if(!allowed)return;
+    const text=(reason[task.id]||'').trim();
+    if(!text){alert('Enter a reason before rejecting the job.');return;}
+    update(task.id,{jobStatus:'Rejected',status:'Waiting',rejectedBy:session.name,rejectedAt:new Date().toISOString(),rejectionReason:text});
+    setReason(current=>({...current,[task.id]:''}));
+  }
+  if(!allowed)return <div className="content"><div className="sectionIntro"><h1>Job Approvals</h1><p>You do not have approval permission.</p></div></div>;
+  return <div className="content approvalsPage">
+    <div className="sectionIntro"><div><h1>Job Approvals</h1><p>Review technician photos and approve or return completed work.</p></div><span className="approvalRole">{session.role}</span></div>
+    <section className="approvalGrid">
+      <div className="panel"><div className="panelHead"><h3>Awaiting approval</h3><span>{pending.length}</span></div>
+        {pending.length?pending.map(task=>{const project=projects.find(p=>p.name===task.project);return <article className="approvalCard" key={task.id}>
+          <div className="approvalCardHead"><div><small>{task.project} · {project?.location||'Location TBD'}</small><h3>{task.title}</h3><p>{task.person} submitted {task.submittedAt?new Date(task.submittedAt).toLocaleString('da-DK'):'recently'}</p></div><span>{(task.photos||[]).length} photos</span></div>
+          <div className="approvalPhotos">{(task.photos||[]).map(photo=><a key={photo.id} href={photo.url} target="_blank" rel="noreferrer"><img src={photo.url} alt={photo.name}/></a>)}</div>
+          <textarea placeholder="Reason required only when rejecting" value={reason[task.id]||''} onChange={e=>setReason(current=>({...current,[task.id]:e.target.value}))}/>
+          <div className="approvalActions"><button className="approveButton" onClick={()=>approve(task)}>Approve Job</button><button className="rejectButton" onClick={()=>reject(task)}>Return for Rework</button></div>
+        </article>}):<div className="empty">No jobs are waiting for approval.</div>}
+      </div>
+      <div className="panel"><div className="panelHead"><h3>Recent decisions</h3><span>{recent.length}</span></div>{recent.map(task=><div className="approvalHistory" key={task.id}><div><b>{task.title}</b><small>{task.project} · {task.person}</small></div><span className={`jobState ${task.jobStatus.toLowerCase()}`}>{task.jobStatus}</span></div>)}</div>
     </section>
   </div>
 }
@@ -453,7 +539,7 @@ function Dashboard({ session, stats, projects, tasks, people, machines, material
   return <div className="content">
     <section className="hero">
       <div>
-        <p className="eyebrow">{new Date().getHours()<12?'GODMORGEN':new Date().getHours()<18?'GOD EFTERMIDDAG':'GOD AFTEN'}, {session.name.toUpperCase()}</p>
+        <p className="eyebrow">{new Date().getHours()<12?'GOOD MORNING':new Date().getHours()<18?'GOOD AFTERNOON':'GOOD EVENING'}, {session.name.toUpperCase()}</p>
         <h1>Workshop and marine operations.</h1>
         <p>{stats.projects} active projects · {stats.people} people active · {stats.openTasks} open tasks</p>
         <div className="heroActions"><button onClick={()=>setActive('workshop')}>Open Projects</button><button onClick={()=>setActive('projects')}>Projects</button></div>
@@ -872,9 +958,10 @@ function Projects({projects,setProjects,deletedProjects,setDeletedProjects,setAc
   </div>
 }
 
-function ProjectHub({project,projects,setProjects,people,tasks,setTasks,documents,materials,setMaterials,quotes,reports,setActive,deletedProjects,setDeletedProjects,setActiveProjectId,droneInspections,setDroneInspections}) {
+function ProjectHub({session,project,projects,setProjects,people,tasks,setTasks,documents,materials,setMaterials,quotes,reports,setActive,deletedProjects,setDeletedProjects,setActiveProjectId,droneInspections,setDroneInspections}) {
   const [tab,setTab]=useState('overview');
   const [newTask,setNewTask]=useState('');
+  const [newAssignee,setNewAssignee]=useState('Tommy');
   const [materialForm,setMaterialForm]=useState({name:'',quantity:1,unit:'pcs',supplier:'',price:'',notes:''});
 
   if(!project)return <div className="content"><button onClick={()=>setActive('projects')}>Back to projects</button></div>;
@@ -890,7 +977,7 @@ function ProjectHub({project,projects,setProjects,people,tasks,setTasks,document
   function update(field,value){setProjects(projects.map(p=>p.id===project.id?{...p,[field]:value}:p))}
   function addTask(){
     if(!newTask.trim())return;
-    setTasks([...tasks,{id:Date.now(),title:newTask.trim(),person:project.lead,priority:'Normal',status:'Planned',due:'This week',project:project.name}]);
+    setTasks([...tasks,{id:Date.now(),title:newTask.trim(),person:newAssignee,priority:'Normal',status:'Planned',jobStatus:'Pending',photos:[],due:'This week',project:project.name}]);
     setNewTask('');
   }
   function moveTask(id){
@@ -976,7 +1063,7 @@ function ProjectHub({project,projects,setProjects,people,tasks,setTasks,document
     {tab==='crew'&&<section className="panel"><div className="peopleCards">{crew.length?crew.map(p=><article key={p.id}><div className="personHead"><div className="avatar">{p.name[0]}</div><div><h3>{p.name}</h3><small>{p.location} · {p.status}</small></div></div><p>{p.task}</p></article>):<div className="empty">Assign crew in People.</div>}</div></section>}
     {tab==='documents'&&<section className="panel"><div className="panelHead"><h3>Project documents</h3><button onClick={()=>setActive('documents')}>Open Document Center</button></div>{projectDocs.length?projectDocs.map(d=><div className="documentRow hubDoc" key={d.id}><div><b>{d.name}</b><small>{d.category} · V{d.version}</small></div><span>{d.date}</span></div>):<div className="empty">No documents uploaded.</div>}</section>}
     {tab==='drone'&&<DroneInspectionPanel project={project} inspections={projectDrone} allInspections={droneInspections||[]} setInspections={setDroneInspections}/>}
-    {tab==='tasks'&&<section className="panel"><div className="hubTaskAdd"><input placeholder="New project task" value={newTask} onChange={e=>setNewTask(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addTask()}/><button onClick={addTask}>Add task</button></div><div className="kanban four">{['Planned','In progress','Waiting','Completed'].map(s=><TaskColumn key={s} title={s} tasks={projectTasks.filter(t=>t.status===s)} cycle={moveTask}/>)}</div></section>}
+    {tab==='tasks'&&<section className="panel"><div className="hubTaskAdd taskAssignBar"><input placeholder="New project task" value={newTask} onChange={e=>setNewTask(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addTask()}/><select value={newAssignee} onChange={e=>setNewAssignee(e.target.value)}>{people.filter(p=>USERS[p.name]?.role==='Technician').map(p=><option key={p.id}>{p.name}</option>)}</select><button onClick={addTask}>Assign task</button></div><div className="projectJobTable">{projectTasks.map(t=><div key={t.id}><div><b>{t.title}</b><small>{t.person} · {(t.photos||[]).length}/4 photos</small></div><span className={`jobState ${(t.jobStatus||'Pending').toLowerCase().replaceAll(' ','-')}`}>{t.jobStatus||'Pending'}</span></div>)}</div></section>}
     {tab==='materials'&&<section className="materialsHub">
       <div className="panel addMaterialPanel">
         <div className="panelHead"><h3>Add Material</h3><span>{project.name}</span></div>
