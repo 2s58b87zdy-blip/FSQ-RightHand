@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 const USERS = {
   Flemming: { role: 'Administrator', password: 'fsq2027' },
