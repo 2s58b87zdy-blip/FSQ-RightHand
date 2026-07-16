@@ -1,30 +1,16 @@
-# FSQ Command 6.0 – Phase 3.1 Workshop QC
+# FSQ Command 6.0.3.1 Stability Hotfix
 
-## Workshop-only workflow
-- Start job
-- Fit-up
-- Submit for tack approval
-- Flemming or Jakob approves fit-up/tack
-- Welding
-- Minimum four workshop QC photos
-- Submit final QC
-- Flemming or Jakob approves final QC and releases the job
-- Rework requires a written reason
+No new modules are included.
 
-## Four-photo rule
-The four-photo requirement applies only to Workshop/Fabrication projects.
-It is required before final QC and release, not before starting the job.
+## Fixed
+- Validates all local browser state before loading it.
+- Removes malformed or incompatible FSQ localStorage entries.
+- Prevents invalid saved arrays from crashing the application.
+- Adds a recovery screen instead of the black Next.js client exception page.
+- Recovery button clears only keys beginning with `fsq-`.
+- Azure Blob files are not deleted by local recovery.
 
-Suggested photo coverage:
-1. Fabrication in progress
-2. Fit-up or welding stage
-3. Completed item
-4. Detail photo
-
-## Marine projects
-- No fixed four-photo requirement
-- No workshop tack/QC workflow
-- Marine timesheets and Work Done upload will be added later in the document phase
-
-## Permissions
-Only Flemming and Jakob can approve workshop tack/fit-up and final QC.
+## Test
+1. Deploy and hard-refresh with Ctrl+F5.
+2. Log in and open Dashboard, My Jobs, Projects and Workshop QC.
+3. If the recovery screen appears, click Reset local data and restart.

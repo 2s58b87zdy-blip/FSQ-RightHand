@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Component, useEffect, useMemo, useRef, useState } from 'react';
 
 const ROLE_DEFINITIONS = {
   Owner: ['manage_users','manage_permissions','view_all_projects','approve_tack','approve_final','complete_jobs'],
@@ -276,18 +276,74 @@ function useSpeechRecognition({ onResult, onError }) {
   return { listening, toggleListening, supported: typeof window !== 'undefined' && !!(window.SpeechRecognition || window.webkitSpeechRecognition) };
 }
 
+function sanitizeStoredValue(parsed, initialValue) {
+  if (Array.isArray(initialValue)) {
+    if (!Array.isArray(parsed)) return initialValue;
+    return parsed.filter(item => item && typeof item === 'object');
+  }
+  if (initialValue && typeof initialValue === 'object') {
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : initialValue;
+  }
+  return typeof parsed === typeof initialValue ? parsed : initialValue;
+}
+
 function useStoredState(key, initialValue) {
   const [value, setValue] = useState(initialValue);
+  const [hydrated, setHydrated] = useState(false);
+
   useEffect(() => {
     try {
       const saved = localStorage.getItem(key);
-      if (saved) setValue(JSON.parse(saved));
-    } catch {}
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        setValue(sanitizeStoredValue(parsed, initialValue));
+      }
+    } catch (error) {
+      console.warn(`FSQ Command removed invalid local data for ${key}.`, error);
+      try { localStorage.removeItem(key); } catch {}
+      setValue(initialValue);
+    } finally {
+      setHydrated(true);
+    }
   }, [key]);
+
   useEffect(() => {
-    try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
-  }, [key, value]);
+    if (!hydrated) return;
+    try { localStorage.setItem(key, JSON.stringify(value)); } catch (error) {
+      console.warn(`FSQ Command could not save ${key}.`, error);
+    }
+  }, [key, value, hydrated]);
+
   return [value, setValue];
+}
+
+class AppErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+
+  componentDidCatch(error, info) {
+    console.error('FSQ Command runtime error', error, info);
+  }
+
+  resetBrowserData = () => {
+    try {
+      Object.keys(localStorage)
+        .filter(key => key.startsWith('fsq-'))
+        .forEach(key => localStorage.removeItem(key));
+    } catch {}
+    window.location.reload();
+  };
+
+  render() {
+    if (!this.state.error) return this.props.children;
+    return <main className="recoveryShell"><section className="recoveryPanel"><p className="eyebrow">FSQ COMMAND RECOVERY</p><h1>The application stopped safely.</h1><p>Old or incompatible browser data may be causing the problem. Resetting local FSQ data does not delete Azure files.</p><details><summary>Technical details</summary><pre>{String(this.state.error?.message || this.state.error)}</pre></details><button className="primaryBtn" onClick={this.resetBrowserData}>Reset local data and restart</button></section></main>;
+  }
 }
 
 function Login({ onLogin, users }) {
@@ -1639,4 +1695,4 @@ function AI({chat,setChat,voice,stats}) {
 
 function ModulePlaceholder({title}) { return <div className="content"><div className="sectionIntro"><h1>{title}</h1><p>This module is included in the navigation and ready for connection to the shared database.</p></div><div className="panel placeholder"><div className="core small"><div className="coreRing r1"/><div className="coreDot"/></div><h3>{title} module</h3><p>UI foundation ready. Database, files and approval workflows are the next deployment layer.</p></div></div> }
 
-export default function Page(){ const [session,setSession]=useState(null); const [users,setUsers]=useStoredState('fsq-v60-users',DEFAULT_USERS); return session?<AppShell session={session} onLogout={()=>setSession(null)} users={users} setUsers={setUsers}/>:<Login onLogin={setSession} users={users}/> }
+export default function Page(){ const [session,setSession]=useState(null); const [users,setUsers]=useStoredState('fsq-v60-users',DEFAULT_USERS); const safeUsers=Array.isArray(users)?users:DEFAULT_USERS; return <AppErrorBoundary>{session?<AppShell session={session} onLogout={()=>setSession(null)} users={safeUsers} setUsers={setUsers}/>:<Login onLogin={setSession} users={safeUsers}/>}</AppErrorBoundary> }
