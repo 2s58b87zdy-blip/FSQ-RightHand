@@ -324,7 +324,7 @@ function AppShell({ session, onLogout }) {
         </header>
         {voiceMessage&&<div className="voiceStatus">{voiceMessage}</div>}
 
-        {active === 'dashboard' && <Dashboard session={session} stats={stats} projects={projects} tasks={tasks} people={people} machines={machines} materials={materials} setActive={setActive} deletedProjects={deletedProjects} setDeletedProjects={setDeletedProjects} setActiveProjectId={setActiveProjectId} droneInspections={droneInspections} setDroneInspections={setDroneInspections} />}
+        {active === 'dashboard' && <Dashboard session={session} stats={stats} projects={projects} tasks={tasks} people={people} machines={machines} materials={materials} setActive={setActive} deletedProjects={deletedProjects} setDeletedProjects={setDeletedProjects} setActiveProjectId={setActiveProjectId} droneInspections={droneInspections} setDroneInspections={setDroneInspections} session={session} />}
         {active === 'crew' && <CrewManagement people={people} setPeople={setPeople} projects={projects} />}
         {active === 'projects' && <Projects projects={projects} setProjects={setProjects} deletedProjects={deletedProjects} setDeletedProjects={setDeletedProjects} setActive={setActive} setActiveProjectId={setActiveProjectId} />}
         {active === 'projectHub' && <ProjectHub project={projects.find(p=>p.id===activeProjectId)} projects={projects} setProjects={setProjects} people={people} tasks={tasks} setTasks={setTasks} documents={documents} materials={materials} setMaterials={setMaterials} quotes={quotes} reports={reports} setActive={setActive} deletedProjects={deletedProjects} setDeletedProjects={setDeletedProjects} setActiveProjectId={setActiveProjectId} droneInspections={droneInspections} setDroneInspections={setDroneInspections} />}
@@ -761,10 +761,13 @@ function Projects({projects,setProjects,deletedProjects,setDeletedProjects,setAc
   </div>
 }
 
-function ProjectHub({project,projects,setProjects,people,tasks,setTasks,documents,materials,setMaterials,quotes,reports,setActive,deletedProjects,setDeletedProjects,setActiveProjectId,droneInspections,setDroneInspections}) {
+function ProjectHub({project,projects,setProjects,people,tasks,setTasks,documents,materials,setMaterials,quotes,reports,setActive,deletedProjects,setDeletedProjects,setActiveProjectId,droneInspections,setDroneInspections,session}) {
   const [tab,setTab]=useState('overview');
   const [newTask,setNewTask]=useState('');
   const [materialForm,setMaterialForm]=useState({name:'',quantity:1,unit:'pcs',supplier:'',price:'',notes:''});
+  const [qaNote,setQaNote]=useState('');
+  const isWorkshopProject=(project?.type==='Workshop'||project?.location?.toLowerCase().includes('workshop'));
+  const canApprove=['Flemming','Jakob'].includes(session?.name);
 
   if(!project)return <div className="content"><button onClick={()=>setActive('projects')}>Back to projects</button></div>;
 
@@ -779,12 +782,106 @@ function ProjectHub({project,projects,setProjects,people,tasks,setTasks,document
   function update(field,value){setProjects(projects.map(p=>p.id===project.id?{...p,[field]:value}:p))}
   function addTask(){
     if(!newTask.trim())return;
-    setTasks([...tasks,{id:Date.now(),title:newTask.trim(),person:project.lead,priority:'Normal',status:'Planned',due:'This week',project:project.name}]);
+    const task={
+      id:Date.now(),
+      title:newTask.trim(),
+      person:project.lead,
+      priority:'Normal',
+      status:'Planned',
+      due:'This week',
+      project:project.name
+    };
+    if(isWorkshopProject){
+      task.qaStage='Preparation';
+      task.weldingLocked=true;
+      task.tackInspection={status:'Pending',approvedBy:'',approvedAt:'',note:''};
+      task.finalInspection={status:'Pending',approvedBy:'',approvedAt:'',note:''};
+    }
+    setTasks([...tasks,task]);
     setNewTask('');
   }
   function moveTask(id){
-    const order=['Planned','In progress','Waiting','Completed'];
-    setTasks(tasks.map(t=>t.id===id?{...t,status:order[(order.indexOf(t.status)+1)%order.length]}:t));
+    setTasks(tasks.map(t=>{
+      if(t.id!==id)return t;
+      if(isWorkshopProject){
+        const tackApproved=t.tackInspection?.status==='Approved';
+        const finalApproved=t.finalInspection?.status==='Approved';
+        if(t.status==='Planned') return {...t,status:'In progress',qaStage:'Tacking / fit-up'};
+        if(t.status==='In progress'&&!tackApproved) return {...t,status:'Waiting',qaStage:'Awaiting tack approval',weldingLocked:true};
+        if(t.status==='Waiting'&&tackApproved&&!finalApproved) return {...t,status:'In progress',qaStage:'Welding in progress',weldingLocked:false};
+        if(t.status==='In progress'&&tackApproved&&!finalApproved) return {...t,status:'Waiting',qaStage:'Awaiting final weld inspection'};
+        if(t.status==='Waiting'&&finalApproved) return {...t,status:'Completed',qaStage:'Released'};
+        return t;
+      }
+      const order=['Planned','In progress','Waiting','Completed'];
+      return {...t,status:order[(order.indexOf(t.status)+1)%order.length]};
+    }));
+  }
+
+  function approveTack(id){
+    if(!canApprove)return;
+    setTasks(tasks.map(t=>t.id===id?{
+      ...t,
+      status:'Waiting',
+      qaStage:'Approved for welding',
+      weldingLocked:false,
+      tackInspection:{
+        status:'Approved',
+        approvedBy:session.name,
+        approvedAt:new Date().toISOString(),
+        note:qaNote
+      }
+    }:t));
+    setQaNote('');
+  }
+
+  function rejectTack(id){
+    if(!canApprove)return;
+    setTasks(tasks.map(t=>t.id===id?{
+      ...t,
+      status:'In progress',
+      qaStage:'Tack correction required',
+      weldingLocked:true,
+      tackInspection:{
+        status:'Rejected',
+        approvedBy:session.name,
+        approvedAt:new Date().toISOString(),
+        note:qaNote
+      }
+    }:t));
+    setQaNote('');
+  }
+
+  function approveFinalWeld(id){
+    if(!canApprove)return;
+    setTasks(tasks.map(t=>t.id===id?{
+      ...t,
+      status:'Completed',
+      qaStage:'Released',
+      finalInspection:{
+        status:'Approved',
+        approvedBy:session.name,
+        approvedAt:new Date().toISOString(),
+        note:qaNote
+      }
+    }:t));
+    setQaNote('');
+  }
+
+  function rejectFinalWeld(id){
+    if(!canApprove)return;
+    setTasks(tasks.map(t=>t.id===id?{
+      ...t,
+      status:'In progress',
+      qaStage:'Weld correction required',
+      finalInspection:{
+        status:'Rejected',
+        approvedBy:session.name,
+        approvedAt:new Date().toISOString(),
+        note:qaNote
+      }
+    }:t));
+    setQaNote('');
   }
   function updateMaterial(field,value){setMaterialForm(current=>({...current,[field]:value}))}
   function addMaterial(){
@@ -865,7 +962,54 @@ function ProjectHub({project,projects,setProjects,people,tasks,setTasks,document
     {tab==='crew'&&<section className="panel"><div className="peopleCards">{crew.length?crew.map(p=><article key={p.id}><div className="personHead"><div className="avatar">{p.name[0]}</div><div><h3>{p.name}</h3><small>{p.location} · {p.status}</small></div></div><p>{p.task}</p></article>):<div className="empty">Assign crew in People.</div>}</div></section>}
     {tab==='documents'&&<section className="panel"><div className="panelHead"><h3>Project documents</h3><button onClick={()=>setActive('documents')}>Open Document Center</button></div>{projectDocs.length?projectDocs.map(d=><div className="documentRow hubDoc" key={d.id}><div><b>{d.name}</b><small>{d.category} · V{d.version}</small></div><span>{d.date}</span></div>):<div className="empty">No documents uploaded.</div>}</section>}
     {tab==='drone'&&<DroneInspectionPanel project={project} inspections={projectDrone} allInspections={droneInspections||[]} setInspections={setDroneInspections}/>}
-    {tab==='tasks'&&<section className="panel"><div className="hubTaskAdd"><input placeholder="New project task" value={newTask} onChange={e=>setNewTask(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addTask()}/><button onClick={addTask}>Add task</button></div><div className="kanban four">{['Planned','In progress','Waiting','Completed'].map(s=><TaskColumn key={s} title={s} tasks={projectTasks.filter(t=>t.status===s)} cycle={moveTask}/>)}</div></section>}
+    {tab==='tasks'&&<section className="panel">
+      <div className="hubTaskAdd"><input placeholder="New project task" value={newTask} onChange={e=>setNewTask(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addTask()}/><button onClick={addTask}>Add task</button></div>
+
+      {isWorkshopProject&&<div className="workshopQaNotice">
+        <div><b>Workshop QA gate active</b><span>No welding is permitted before tack / fit-up approval by Flemming or Jakob.</span></div>
+        <div className="qaLegend"><span>1. Preparation</span><span>2. Tack inspection</span><span>3. Welding</span><span>4. Final weld inspection</span><span>5. Released</span></div>
+      </div>}
+
+      {isWorkshopProject&&<div className="workshopQaList">
+        <label className="qaNoteInput">Inspection note<input value={qaNote} onChange={e=>setQaNote(e.target.value)} placeholder="Optional note used for next approval or rejection"/></label>
+        {projectTasks.map(t=><article className={`qaJobCard ${t.weldingLocked?'locked':'unlocked'}`} key={t.id}>
+          <div className="qaJobTop">
+            <div><h3>{t.title}</h3><p>{t.person} · {t.status}</p></div>
+            <span className={t.weldingLocked?'weldLock locked':'weldLock ready'}>{t.weldingLocked?'🔒 WELDING LOCKED':'✓ APPROVED FOR WELDING'}</span>
+          </div>
+          <div className="qaStageBar">
+            {['Preparation','Tacking / fit-up','Awaiting tack approval','Approved for welding','Welding in progress','Awaiting final weld inspection','Released'].map(stage=><span key={stage} className={t.qaStage===stage?'active':''}>{stage}</span>)}
+          </div>
+          <div className="qaInspectionGrid">
+            <div>
+              <b>Tack / fit-up inspection</b>
+              <small>Status: {t.tackInspection?.status||'Pending'}</small>
+              {t.tackInspection?.approvedBy&&<small>{t.tackInspection.approvedBy} · {new Date(t.tackInspection.approvedAt).toLocaleString('da-DK')}</small>}
+              {t.tackInspection?.note&&<p>{t.tackInspection.note}</p>}
+              <div className="qaButtons">
+                <button disabled={!canApprove} onClick={()=>approveTack(t.id)}>Approve for welding</button>
+                <button disabled={!canApprove} className="reject" onClick={()=>rejectTack(t.id)}>Reject</button>
+              </div>
+            </div>
+            <div>
+              <b>Final weld inspection</b>
+              <small>Status: {t.finalInspection?.status||'Pending'}</small>
+              {t.finalInspection?.approvedBy&&<small>{t.finalInspection.approvedBy} · {new Date(t.finalInspection.approvedAt).toLocaleString('da-DK')}</small>}
+              {t.finalInspection?.note&&<p>{t.finalInspection.note}</p>}
+              <div className="qaButtons">
+                <button disabled={!canApprove||t.tackInspection?.status!=='Approved'} onClick={()=>approveFinalWeld(t.id)}>Approve final weld</button>
+                <button disabled={!canApprove||t.tackInspection?.status!=='Approved'} className="reject" onClick={()=>rejectFinalWeld(t.id)}>Reject</button>
+              </div>
+            </div>
+          </div>
+          {!canApprove&&<div className="qaPermission">Only Flemming or Jakob can approve workshop welding.</div>}
+          <button className="qaAdvance" onClick={()=>moveTask(t.id)}>Move to next workflow step</button>
+        </article>)}
+        {!projectTasks.length&&<div className="empty">No workshop jobs created.</div>}
+      </div>}
+
+      {!isWorkshopProject&&<div className="kanban four">{['Planned','In progress','Waiting','Completed'].map(s=><TaskColumn key={s} title={s} tasks={projectTasks.filter(t=>t.status===s)} cycle={moveTask}/>)}</div>}
+    </section>}
     {tab==='materials'&&<section className="materialsHub">
       <div className="panel addMaterialPanel">
         <div className="panelHead"><h3>Add Material</h3><span>{project.name}</span></div>

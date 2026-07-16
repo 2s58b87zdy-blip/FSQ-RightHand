@@ -126,3 +126,16 @@
 .frejaMic{font-size:14px;padding:12px 16px}.sectionIntro{display:flex;justify-content:space-between;gap:16px;align-items:flex-start}.chatInput{grid-template-columns:1fr auto auto!important}.micMini{padding:8px 12px}
 @keyframes voicePulse{0%,100%{transform:scale(1)}50%{transform:scale(1.04)}}
 @media(max-width:700px){.sectionIntro{display:block}.frejaMic{margin-top:10px;width:100%}.voiceCommand{font-size:0}.voiceCommand:after{content:'🎙';font-size:16px}}
+
+.workshopQaNotice{display:grid;gap:10px;background:linear-gradient(90deg,#2a1709,#1a1010);border:1px solid #8d5b21;padding:14px;border-radius:8px;margin:14px 0;color:#ffd792}
+.workshopQaNotice>div:first-child{display:grid;gap:4px}.workshopQaNotice b{color:#fff;font-size:15px}.workshopQaNotice span{font-size:12px}
+.qaLegend{display:flex;gap:8px;flex-wrap:wrap}.qaLegend span{background:#37210f;border:1px solid #6d471e;padding:5px 8px;border-radius:12px}
+.workshopQaList{display:grid;gap:14px}.qaNoteInput{display:grid;gap:6px;color:#91b5ca;font-size:12px}.qaNoteInput input{background:#071421;border:1px solid #235274;color:white;padding:11px;border-radius:6px}
+.qaJobCard{border:1px solid #21435d;background:#091726;border-radius:8px;padding:14px;display:grid;gap:12px}.qaJobCard.locked{border-color:#7b3a32}.qaJobCard.unlocked{border-color:#24694f}
+.qaJobTop{display:flex;justify-content:space-between;gap:12px;align-items:start}.qaJobTop h3{margin:0 0 4px}.qaJobTop p{margin:0;color:#7fa1b5;font-size:12px}
+.weldLock{padding:7px 10px;border-radius:5px;font-size:11px;font-weight:800}.weldLock.locked{background:#3b1717;color:#ff9e9e;border:1px solid #793333}.weldLock.ready{background:#123b2e;color:#78f0ba;border:1px solid #28684f}
+.qaStageBar{display:flex;gap:5px;flex-wrap:wrap}.qaStageBar span{font-size:10px;padding:5px 7px;border-radius:10px;background:#10273a;color:#6e91a7}.qaStageBar span.active{background:#0d6b86;color:white}
+.qaInspectionGrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.qaInspectionGrid>div{display:grid;gap:5px;background:#0b1d2c;padding:12px;border-radius:6px}.qaInspectionGrid small{color:#789aad}.qaInspectionGrid p{margin:4px 0;color:#c7dbe6;font-size:12px}
+.qaButtons{display:flex;gap:7px;margin-top:6px}.qaButtons button,.qaAdvance{background:#0d5e7d;color:white;border:1px solid #1c88aa;padding:8px 10px;border-radius:5px;cursor:pointer}.qaButtons button.reject{background:#4a1b22;border-color:#853542}.qaButtons button:disabled{opacity:.35;cursor:not-allowed}.qaAdvance{justify-self:start;background:#143149;border-color:#275b79}
+.qaPermission{font-size:11px;color:#ffbf7c}
+@media(max-width:850px){.qaInspectionGrid{grid-template-columns:1fr}.qaJobTop{display:grid}}
