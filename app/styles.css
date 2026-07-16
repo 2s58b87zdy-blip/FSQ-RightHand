@@ -119,3 +119,10 @@
 .binderOverview{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:16px}.binderOverview button{display:flex;justify-content:space-between;align-items:center;background:#0b1726;color:#8fb2c6;border:1px solid #173d58;padding:14px;border-radius:7px;cursor:pointer}.binderOverview strong{font-size:22px;color:#d9f8ff}
 @media(max-width:1000px){.binderProjectBar{grid-template-columns:1fr 1fr}.binderLayout{grid-template-columns:1fr}.binderFolders{grid-template-columns:repeat(2,1fr);max-height:none}.binderOverview{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:700px){.binderIntro{display:block}.binderProjectBar,.binderFolders,.binderOverview{grid-template-columns:1fr}.binderHeader{display:block}.binderActions{margin-top:12px}}
+
+.voiceCommand,.frejaMic,.micMini{background:#0d3b57;color:#8eeaff;border:1px solid #2b789f;border-radius:7px;padding:9px 12px;cursor:pointer;font-weight:700}
+.voiceCommand.listening,.frejaMic.listening,.micMini.listening{background:#5a1427;color:#ff9aac;border-color:#b63c58;box-shadow:0 0 18px rgba(255,80,110,.35);animation:voicePulse 1s infinite}
+.voiceStatus{margin:0 24px 10px;padding:8px 12px;border:1px solid #205270;background:#081b2b;color:#8bdff7;border-radius:6px;font-size:12px}
+.frejaMic{font-size:14px;padding:12px 16px}.sectionIntro{display:flex;justify-content:space-between;gap:16px;align-items:flex-start}.chatInput{grid-template-columns:1fr auto auto!important}.micMini{padding:8px 12px}
+@keyframes voicePulse{0%,100%{transform:scale(1)}50%{transform:scale(1.04)}}
+@media(max-width:700px){.sectionIntro{display:block}.frejaMic{margin-top:10px;width:100%}.voiceCommand{font-size:0}.voiceCommand:after{content:'🎙';font-size:16px}}

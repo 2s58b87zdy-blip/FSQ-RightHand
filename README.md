@@ -1,38 +1,19 @@
-# FSQ Right Hand v5.0
+# FSQ Command v5.1
 
-Project Binder foundation.
+Branding and voice assistant release.
 
-## Included in Step 1
-- Documents renamed to Project Binder
-- Standard folder structure for every project
-- Project selector
-- Folder navigation
-- Search within selected folder
-- Local upload up to 2 MB per file
-- Automatic version number for repeated filenames
-- Download and delete uploaded files
-- New custom folder creation
-- Folder document counts
-- Overview of all standard binder folders
+## Included
+- FSQ Right Hand renamed to FSQ Command
+- AI assistant renamed to Freja
+- Danish time-aware greeting: Godmorgen, God eftermiddag or God aften
+- Danish female voice selection when available
+- Microphone button in the top bar
+- Speech input in Freja AI
+- Voice commands can open Dashboard, Projects, People, Project Binder, Settings and Freja AI
+- Danish spoken answers for project, workshop, material, machine and urgent-status questions
 
-## Standard folders
-- Quotations
-- Purchase Orders
-- Drawings
-- Method Statements
-- Risk Assessments
-- WPQR
-- WPS
-- Certificates
-- NDT Reports
-- Service Reports
-- Packing Lists
-- Photos
-- Videos
-- Drone Inspection
-- QA / Punch List
-- Archive
+## Browser requirements
+Speech recognition works best in Microsoft Edge or Google Chrome. The user must allow microphone access. Voice availability depends on voices installed by the browser and operating system.
 
-## Important
-This remains a browser-local prototype.
-Azure Blob Storage is required for shared files, larger uploads, backup, drag-and-drop and multi-user access.
+## Azure
+This version can be installed before the Azure Blob Storage integration. Keep the environment variables already created; they will be used by v5.2.

@@ -12,7 +12,7 @@ const NAV = [
   ['projects', 'Projects', '◫'],
   ['crew', 'People', '◉'],
   ['documents', 'Project Binder', '▱'],
-  ['ai', 'Right Hand AI', '◎'],
+  ['ai', 'Freja AI', '◎'],
   ['admin', 'Settings', '⚙']
 ];
 
@@ -128,14 +128,73 @@ const DEFAULT_BINDER_FOLDERS = [
   'Archive'
 ];
 
+function getGreeting(name) {
+  const hour = new Date().getHours();
+  if (hour < 12) return `Godmorgen ${name}. Velkommen til FSQ Command. Freja er online og klar til at hjælpe.`;
+  if (hour < 18) return `God eftermiddag ${name}. Velkommen tilbage til FSQ Command. Freja er online og klar til at hjælpe.`;
+  return `God aften ${name}. Velkommen til FSQ Command. Freja er online og klar til at hjælpe.`;
+}
+
+function chooseDanishFemaleVoice() {
+  if (typeof window === 'undefined' || !('speechSynthesis' in window)) return null;
+  const voices = window.speechSynthesis.getVoices();
+  const preferredNames = ['Christel', 'Sara', 'Sofie', 'Emma', 'Female', 'Microsoft Christel'];
+  return voices.find(v => v.lang?.toLowerCase().startsWith('da') && preferredNames.some(n => v.name.toLowerCase().includes(n.toLowerCase())))
+    || voices.find(v => v.lang?.toLowerCase().startsWith('da'))
+    || voices.find(v => /female|sara|sofia|emma|jenny/i.test(v.name))
+    || voices[0]
+    || null;
+}
+
 function speak(text, enabled) {
   if (!enabled || typeof window === 'undefined' || !('speechSynthesis' in window)) return;
   window.speechSynthesis.cancel();
   const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = 'en-GB';
-  utterance.rate = 0.92;
-  utterance.pitch = 0.88;
+  utterance.lang = 'da-DK';
+  utterance.rate = 0.94;
+  utterance.pitch = 1.08;
+  const voice = chooseDanishFemaleVoice();
+  if (voice) utterance.voice = voice;
   window.speechSynthesis.speak(utterance);
+}
+
+function useSpeechRecognition({ onResult, onError }) {
+  const recognitionRef = useRef(null);
+  const [listening, setListening] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!Recognition) return;
+    const recognition = new Recognition();
+    recognition.lang = 'da-DK';
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.onstart = () => setListening(true);
+    recognition.onend = () => setListening(false);
+    recognition.onerror = event => {
+      setListening(false);
+      onError?.(event.error || 'microphone-error');
+    };
+    recognition.onresult = event => {
+      const transcript = event.results?.[0]?.[0]?.transcript || '';
+      if (transcript) onResult?.(transcript);
+    };
+    recognitionRef.current = recognition;
+    return () => recognition.abort();
+  }, [onResult, onError]);
+
+  function toggleListening() {
+    const recognition = recognitionRef.current;
+    if (!recognition) {
+      onError?.('not-supported');
+      return;
+    }
+    if (listening) recognition.stop();
+    else recognition.start();
+  }
+
+  return { listening, toggleListening, supported: typeof window !== 'undefined' && !!(window.SpeechRecognition || window.webkitSpeechRecognition) };
 }
 
 function useStoredState(key, initialValue) {
@@ -164,7 +223,7 @@ function Login({ onLogin }) {
       setError('Forkert adgangskode');
       return;
     }
-    const greeting = `Good morning, ${user}. FSQ Right Hand is now online. Workshop control is ready. How can I assist you today?`;
+    const greeting = getGreeting(user);
     speak(greeting, voice);
     onLogin({ name: user, role: USERS[user].role, voice });
   }
@@ -173,10 +232,10 @@ function Login({ onLogin }) {
     <main className="loginShell">
       <div className="gridGlow" />
       <section className="loginPanel">
-        <div className="brandRow"><span className="brandMark">FSQ</span><span>RIGHT HAND</span></div>
+        <div className="brandRow"><span className="brandMark">FSQ</span><span>COMMAND</span></div>
         <div className="core"><div className="coreRing r1"/><div className="coreRing r2"/><div className="coreDot"/></div>
         <p className="eyebrow">MARITIME · INDUSTRIAL · WORKSHOP</p>
-        <h1>Your digital right hand</h1>
+        <h1>Your marine operations command center</h1>
         <p className="muted">Secure operations dashboard for FSQ.</p>
         <form onSubmit={submit} className="loginForm">
           <label>User<select value={user} onChange={e => setUser(e.target.value)}>{Object.keys(USERS).map(u => <option key={u}>{u}</option>)}</select></label>
@@ -204,8 +263,30 @@ function AppShell({ session, onLogout }) {
   const [droneInspections, setDroneInspections] = useStoredState('fsq-v40-drone-inspections', DEFAULT_DRONE_INSPECTIONS);
   const [documents, setDocuments] = useStoredState('fsq-v40-documents', DEFAULT_DOCUMENTS);
   const [deletedProjects, setDeletedProjects] = useStoredState('fsq-v40-deleted-projects', []);
-  const [chat, setChat] = useState([{ from: 'ai', text: `Good morning ${session.name}. Workshop Control Center is ready.` }]);
+  const [chat, setChat] = useState([{ from: 'ai', text: `${getGreeting(session.name)} Hvad vil du gerne arbejde med?` }]);
   const [voice, setVoice] = useState(session.voice);
+  const [voiceMessage,setVoiceMessage] = useState('');
+
+  function handleGlobalVoiceCommand(transcript) {
+    const command = transcript.toLowerCase();
+    setVoiceMessage(transcript);
+    if (command.includes('projektmappe') || command.includes('dokument')) setActive('documents');
+    else if (command.includes('projekt')) setActive('projects');
+    else if (command.includes('medarbejder') || command.includes('personale') || command.includes('folk')) setActive('crew');
+    else if (command.includes('indstilling')) setActive('admin');
+    else if (command.includes('freja') || command.includes('assistent') || command.includes('ai')) setActive('ai');
+    else if (command.includes('dashboard') || command.includes('forside')) setActive('dashboard');
+    else {
+      setActive('ai');
+      setChat(current => [...current,{from:'user',text:transcript}]);
+    }
+    speak(`Jeg hørte: ${transcript}`, voice);
+  }
+
+  const globalSpeech = useSpeechRecognition({
+    onResult: handleGlobalVoiceCommand,
+    onError: error => setVoiceMessage(error==='not-supported'?'Talegenkendelse understøttes ikke i denne browser. Brug Microsoft Edge eller Chrome.':'Mikrofonen kunne ikke startes. Kontrollér browserens mikrofontilladelse.')
+  });
 
   const stats = useMemo(() => ({
     projects: projects.filter(p => p.status !== 'Completed').length,
@@ -219,7 +300,7 @@ function AppShell({ session, onLogout }) {
   return (
     <div className="appShell">
       <aside className="sidebar">
-        <div className="logo"><b>FSQ</b><span>RIGHT HAND</span></div>
+        <div className="logo"><b>FSQ</b><span>COMMAND</span></div>
         <div className="online"><i/> ALL SYSTEMS OPERATIONAL</div>
         <nav>{NAV.map(([id, label, icon]) => <button key={id} onClick={() => setActive(id)} className={active === id ? 'active' : ''}><span>{icon}</span>{label}</button>)}</nav>
         <div className="userCard"><div className="avatar">{session.name[0]}</div><div><b>{session.name}</b><small>{session.role}</small></div><button onClick={onLogout}>↗</button></div>
@@ -227,8 +308,9 @@ function AppShell({ session, onLogout }) {
       <main className="workspace">
         <header className="topbar">
           <div><p className="eyebrow">FSQ OPERATIONS CONTROL</p><h2>{NAV.find(n => n[0] === active)?.[1]}</h2></div>
-          <div className="topActions"><label><input type="checkbox" checked={voice} onChange={e => setVoice(e.target.checked)} /> Voice</label><span className="clock">{new Date().toLocaleDateString('da-DK')}</span></div>
+          <div className="topActions"><button className={`voiceCommand ${globalSpeech.listening?'listening':''}`} onClick={globalSpeech.toggleListening} title="Tal til Freja">{globalSpeech.listening?'● Lytter...':'🎙 Tal til Freja'}</button><label><input type="checkbox" checked={voice} onChange={e => setVoice(e.target.checked)} /> Stemme</label><span className="clock">{new Date().toLocaleDateString('da-DK')}</span></div>
         </header>
+        {voiceMessage&&<div className="voiceStatus">{voiceMessage}</div>}
 
         {active === 'dashboard' && <Dashboard session={session} stats={stats} projects={projects} tasks={tasks} people={people} machines={machines} materials={materials} setActive={setActive} deletedProjects={deletedProjects} setDeletedProjects={setDeletedProjects} setActiveProjectId={setActiveProjectId} droneInspections={droneInspections} setDroneInspections={setDroneInspections} />}
         {active === 'crew' && <CrewManagement people={people} setPeople={setPeople} projects={projects} />}
@@ -248,7 +330,7 @@ function Dashboard({ session, stats, projects, tasks, people, machines, material
   return <div className="content">
     <section className="hero">
       <div>
-        <p className="eyebrow">GOOD MORNING, {session.name.toUpperCase()}</p>
+        <p className="eyebrow">{new Date().getHours()<12?'GODMORGEN':new Date().getHours()<18?'GOD EFTERMIDDAG':'GOD AFTEN'}, {session.name.toUpperCase()}</p>
         <h1>Workshop and marine operations.</h1>
         <p>{stats.projects} active projects · {stats.people} people active · {stats.openTasks} open tasks</p>
         <div className="heroActions"><button onClick={()=>setActive('workshop')}>Open Projects</button><button onClick={()=>setActive('projects')}>Projects</button></div>
@@ -1049,20 +1131,39 @@ function Admin({people,setPeople,machines,setMachines,materials,setMaterials}) {
 
 function AI({chat,setChat,voice,stats}) {
   const [text,setText]=useState('');
-  function send(){
-    if(!text.trim())return;
-    const q=text; setChat([...chat,{from:'user',text:q}]); setText('');
-    setTimeout(()=>{
-      const lower=q.toLowerCase();
-      let answer='I have registered your request. Shared database integration will make this fully operational across all users.';
-      if(lower.includes('workshop')) answer=`Workshop status: ${stats.openTasks} open tasks, ${stats.lowStock} low-stock items and ${stats.machinesDown} machines requiring attention.`;
-      else if(lower.includes('material')) answer=`There are ${stats.lowStock} materials below minimum stock.`;
-      else if(lower.includes('machine')) answer=`There are ${stats.machinesDown} machines in service or out of service.`;
-      else if(lower.includes('urgent')||lower.includes('haste')) answer=`There are ${stats.urgent} urgent tasks.`;
-      setChat(c=>[...c,{from:'ai',text:answer}]); speak(answer,voice);
-    },400)
+  const [speechError,setSpeechError]=useState('');
+
+  function answerQuestion(q){
+    const lower=q.toLowerCase();
+    let answer='Jeg har registreret din forespørgsel. Når den fælles database er tilkoblet, kan jeg arbejde på tværs af alle projekter og dokumenter.';
+    if(lower.includes('værksted')) answer=`Status for værkstedet: ${stats.openTasks} åbne opgaver, ${stats.lowStock} materialer under minimum og ${stats.machinesDown} maskiner kræver opmærksomhed.`;
+    else if(lower.includes('material')) answer=`Der er ${stats.lowStock} materialer under minimumslager.`;
+    else if(lower.includes('maskine')) answer=`Der er ${stats.machinesDown} maskiner til service eller ude af drift.`;
+    else if(lower.includes('hast')||lower.includes('kritisk')) answer=`Der er ${stats.urgent} hasteopgaver.`;
+    else if(lower.includes('projekt')) answer=`Der er ${stats.projects} aktive projekter i FSQ Command.`;
+    else if(lower.includes('hej')||lower.includes('godmorgen')||lower.includes('god aften')) answer='Hej. Jeg er Freja, og jeg er klar til at hjælpe dig.';
+    setChat(c=>[...c,{from:'ai',text:answer}]);
+    speak(answer,voice);
   }
-  return <div className="content aiLayout"><div className="sectionIntro"><h1>Right Hand AI</h1><p>Ask about workshop status, machines, materials and priorities.</p></div><div className="chatPanel">{chat.map((m,i)=><div key={i} className={`bubble ${m.from}`}>{m.text}</div>)}<div className="chatInput"><input value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>e.key==='Enter'&&send()} placeholder="Ask FSQ Right Hand..."/><button onClick={send}>Send</button></div></div></div>
+
+  function send(value=text){
+    const q=value.trim();
+    if(!q)return;
+    setChat(c=>[...c,{from:'user',text:q}]);
+    setText('');
+    setTimeout(()=>answerQuestion(q),250);
+  }
+
+  const speech=useSpeechRecognition({
+    onResult: transcript=>{setText(transcript);setSpeechError('');send(transcript)},
+    onError: error=>setSpeechError(error==='not-supported'?'Talegenkendelse understøttes ikke. Brug Microsoft Edge eller Chrome.':'Kontrollér, at browseren har adgang til mikrofonen.')
+  });
+
+  return <div className="content aiLayout">
+    <div className="sectionIntro"><div><h1>Freja AI</h1><p>Tal eller skriv om projekter, værksted, materialer og prioriteter.</p></div><button className={`frejaMic ${speech.listening?'listening':''}`} onClick={speech.toggleListening}>{speech.listening?'● Freja lytter...':'🎙 Tal til Freja'}</button></div>
+    {speechError&&<div className="error">{speechError}</div>}
+    <div className="chatPanel">{chat.map((m,i)=><div key={i} className={`bubble ${m.from}`}>{m.text}</div>)}<div className="chatInput"><input value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>e.key==='Enter'&&send()} placeholder="Tal eller skriv til Freja..."/><button className="micMini" onClick={speech.toggleListening}>{speech.listening?'●':'🎙'}</button><button onClick={()=>send()}>Send</button></div></div>
+  </div>
 }
 
 function ModulePlaceholder({title}) { return <div className="content"><div className="sectionIntro"><h1>{title}</h1><p>This module is included in the navigation and ready for connection to the shared database.</p></div><div className="panel placeholder"><div className="core small"><div className="coreRing r1"/><div className="coreDot"/></div><h3>{title} module</h3><p>UI foundation ready. Database, files and approval workflows are the next deployment layer.</p></div></div> }
