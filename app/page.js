@@ -2,18 +2,27 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-const USERS = {
-  Flemming: { role: 'Administrator', password: 'fsq2027' },
-  Jakob: { role: 'Project Manager', password: 'fsq2027' },
-  Tommy: { role: 'Technician', password: 'fsq2027' },
-  Anders: { role: 'Technician', password: 'fsq2027' },
-  Mathias: { role: 'Technician', password: 'fsq2027' },
-  Magnus: { role: 'Technician', password: 'fsq2027' },
-  Kim: { role: 'Technician', password: 'fsq2027' },
-  Stefan: { role: 'Engineer', password: 'fsq2027' },
-  QA: { role: 'QA Inspector', password: 'fsq2027' },
-  Supervisor: { role: 'Supervisor', password: 'fsq2027' }
+const ROLE_DEFINITIONS = {
+  Owner: ['manage_users','manage_permissions','view_all_projects','approve_tack','approve_final','complete_jobs'],
+  'Project Manager': ['view_all_projects','approve_tack','approve_final','complete_jobs'],
+  Supervisor: ['view_all_projects'],
+  Engineer: ['view_all_projects'],
+  'QA Inspector': ['view_all_projects'],
+  Technician: ['view_assigned_jobs','upload_photos','update_assigned_jobs']
 };
+
+const DEFAULT_USERS = [
+  { id: 1, name: 'Flemming', role: 'Owner', password: 'fsq2027', active: true, permissions: ROLE_DEFINITIONS.Owner },
+  { id: 2, name: 'Jakob', role: 'Project Manager', password: 'fsq2027', active: true, permissions: ROLE_DEFINITIONS['Project Manager'] },
+  { id: 3, name: 'Tommy', role: 'Technician', password: 'fsq2027', active: true, permissions: ROLE_DEFINITIONS.Technician },
+  { id: 4, name: 'Anders', role: 'Technician', password: 'fsq2027', active: true, permissions: ROLE_DEFINITIONS.Technician },
+  { id: 5, name: 'Mathias', role: 'Technician', password: 'fsq2027', active: true, permissions: ROLE_DEFINITIONS.Technician },
+  { id: 6, name: 'Magnus', role: 'Technician', password: 'fsq2027', active: true, permissions: ROLE_DEFINITIONS.Technician },
+  { id: 7, name: 'Kim', role: 'Technician', password: 'fsq2027', active: true, permissions: ROLE_DEFINITIONS.Technician },
+  { id: 8, name: 'Stefan', role: 'Engineer', password: 'fsq2027', active: true, permissions: ROLE_DEFINITIONS.Engineer },
+  { id: 9, name: 'QA', role: 'QA Inspector', password: 'fsq2027', active: true, permissions: ROLE_DEFINITIONS['QA Inspector'] },
+  { id: 10, name: 'Supervisor', role: 'Supervisor', password: 'fsq2027', active: true, permissions: ROLE_DEFINITIONS.Supervisor }
+];
 
 const NAV = [
   ['dashboard', 'Dashboard', '◈'],
@@ -193,19 +202,13 @@ function requirePermissionManager(session) {
 
 
 
-function approvalIdentity(session) {
-  return {
-    approvedBy: session?.name || session?.user || 'Unknown user',
-    approvedRole: session?.role || 'Unknown role',
-    approvedAt: new Date().toISOString()
-  };
-}
 
 
 
 function approvalIdentity(session) {
   return {
     approvedBy: session?.name || session?.user || session?.username || 'Unknown user',
+    approvedRole: session?.role || 'Unknown role',
     approvedAt: new Date().toISOString()
   };
 }
@@ -275,7 +278,7 @@ function useStoredState(key, initialValue) {
   return [value, setValue];
 }
 
-function Login({ onLogin }) {
+function Login({ onLogin, users }) {
   const [user, setUser] = useState('Flemming');
   const [password, setPassword] = useState('fsq2027');
   const [voice, setVoice] = useState(true);
@@ -283,13 +286,14 @@ function Login({ onLogin }) {
 
   function submit(e) {
     e.preventDefault();
-    if (USERS[user]?.password !== password) {
+    const account = users.find(item => item.name === user);
+    if (!account || !account.active || account.password !== password) {
       setError('Forkert adgangskode');
       return;
     }
     const greeting = getGreeting(user);
     speak(greeting, voice);
-    onLogin({ name: user, role: USERS[user].role, voice });
+    onLogin({ name: account.name, role: account.role, permissions: account.permissions || [], voice });
   }
 
   return (
@@ -302,7 +306,7 @@ function Login({ onLogin }) {
         <h1>Your marine operations command center</h1>
         <p className="muted">Secure operations dashboard for FSQ.</p>
         <form onSubmit={submit} className="loginForm">
-          <label>User<select value={user} onChange={e => setUser(e.target.value)}>{Object.keys(USERS).map(u => <option key={u}>{u}</option>)}</select></label>
+          <label>User<select value={user} onChange={e => setUser(e.target.value)}>{users.filter(item=>item.active).map(item => <option key={item.id}>{item.name}</option>)}</select></label>
           <label>Password<input type="password" value={password} onChange={e => setPassword(e.target.value)} /></label>
           <label className="voiceToggle"><input type="checkbox" checked={voice} onChange={e => setVoice(e.target.checked)} /> Voice greeting</label>
           {error && <div className="error">{error}</div>}
@@ -314,7 +318,7 @@ function Login({ onLogin }) {
   );
 }
 
-function AppShell({ session, onLogout }) {
+function AppShell({ session, onLogout, users, setUsers }) {
   const [active, setActive] = useState(session.role === 'Technician' ? 'myjobs' : 'dashboard');
   const [activeProjectId, setActiveProjectId] = useState(null);
   const [projects, setProjects] = useStoredState('fsq-v40-projects', DEFAULT_PROJECTS);
@@ -391,7 +395,7 @@ function AppShell({ session, onLogout }) {
         {active === 'projects' && <Projects projects={projects} setProjects={setProjects} deletedProjects={deletedProjects} setDeletedProjects={setDeletedProjects} setActive={setActive} setActiveProjectId={setActiveProjectId} />}
         {active === 'projectHub' && <ProjectHub session={session} project={projects.find(p=>p.id===activeProjectId)} projects={projects} setProjects={setProjects} people={people} tasks={tasks} setTasks={setTasks} documents={documents} materials={materials} setMaterials={setMaterials} quotes={quotes} reports={reports} setActive={setActive} deletedProjects={deletedProjects} setDeletedProjects={setDeletedProjects} setActiveProjectId={setActiveProjectId} droneInspections={droneInspections} setDroneInspections={setDroneInspections} />}
         {active === 'documents' && <ProjectBinder documents={documents} setDocuments={setDocuments} projects={projects} session={session} />}
-        {active === 'admin' && <Admin people={people} setPeople={setPeople} machines={machines} setMachines={setMachines} materials={materials} setMaterials={setMaterials} />}
+        {active === 'admin' && <Admin session={session} users={users} setUsers={setUsers} people={people} setPeople={setPeople} machines={machines} setMachines={setMachines} materials={materials} setMaterials={setMaterials} />}
         {active === 'ai' && <AI chat={chat} setChat={setChat} voice={voice} stats={stats} />}
         {!['dashboard','myjobs','approvals','crew','projects','projectHub','documents','admin','ai'].includes(active) && <ModulePlaceholder title={NAV.find(n=>n[0]===active)?.[1]} />}
       </main>
@@ -1326,14 +1330,59 @@ function ProjectBinder({ documents, setDocuments, projects, session }) {
 }
 
 
-function Admin({people,setPeople,machines,setMachines,materials,setMaterials}) {
+function Admin({session,users,setUsers,people,setPeople,machines,setMachines,materials,setMaterials}) {
+  const [newUser,setNewUser]=useState({name:'',role:'Technician',password:'fsq2027'});
+  const [message,setMessage]=useState('');
+  const owner=canManagePermissions(session);
+  const roles=Object.keys(ROLE_DEFINITIONS);
+
   function cyclePerson(id){const states=['Office','Workshop','Offshore','Travel','Course','Free'];setPeople(people.map(p=>p.id===id?{...p,location:states[(states.indexOf(p.location)+1)%states.length]}:p))}
-  return <div className="content"><div className="sectionIntro"><h1>Administration</h1><p>Update personnel, machines and materials.</p></div>
-    <div className="dashboardGrid">
-      <div className="panel"><h3>Personnel location</h3>{people.map(p=><button className="listRow" key={p.id} onClick={()=>cyclePerson(p.id)}><div><b>{p.name}</b><small>{p.task}</small></div><em>{p.location}</em></button>)}</div>
-      <div className="panel"><h3>Machine reset</h3><button className="primaryBtn" onClick={()=>setMachines(DEFAULT_MACHINES)}>Restore default machines</button></div>
-      <div className="panel"><h3>Material reset</h3><button className="primaryBtn" onClick={()=>setMaterials(DEFAULT_MATERIALS)}>Restore default materials</button></div>
-    </div>
+  function changeRole(id,role){
+    if(!owner){setMessage('Only Flemming can assign roles and permissions.');return;}
+    setUsers(users.map(user=>user.id===id?{...user,role,permissions:[...(ROLE_DEFINITIONS[role]||[])]}:user));
+    setMessage('Role and default permissions updated.');
+  }
+  function togglePermission(id,permission){
+    if(!owner){setMessage('Only Flemming can assign roles and permissions.');return;}
+    setUsers(users.map(user=>user.id===id?{...user,permissions:(user.permissions||[]).includes(permission)?(user.permissions||[]).filter(item=>item!==permission):[...(user.permissions||[]),permission]}:user));
+  }
+  function toggleActive(id){
+    if(!owner){setMessage('Only Flemming can lock or unlock users.');return;}
+    const target=users.find(user=>user.id===id);
+    if(target?.name==='Flemming'){setMessage('The owner account cannot be locked.');return;}
+    setUsers(users.map(user=>user.id===id?{...user,active:!user.active}:user));
+  }
+  function addUser(){
+    if(!owner){setMessage('Only Flemming can create users.');return;}
+    const name=newUser.name.trim();
+    if(!name){setMessage('Enter a user name.');return;}
+    if(users.some(user=>user.name.toLowerCase()===name.toLowerCase())){setMessage('This user already exists.');return;}
+    const role=newUser.role;
+    setUsers([...users,{id:Date.now(),name,role,password:newUser.password||'fsq2027',active:true,permissions:[...(ROLE_DEFINITIONS[role]||[])]}]);
+    setNewUser({name:'',role:'Technician',password:'fsq2027'});
+    setMessage('User created.');
+  }
+  function deleteUser(id){
+    if(!owner){setMessage('Only Flemming can delete users.');return;}
+    const target=users.find(user=>user.id===id);
+    if(target?.name==='Flemming'){setMessage('The owner account cannot be deleted.');return;}
+    if(window.confirm(`Delete ${target?.name}?`)) setUsers(users.filter(user=>user.id!==id));
+  }
+
+  const allPermissions=[...new Set(Object.values(ROLE_DEFINITIONS).flat())];
+  return <div className="content"><div className="sectionIntro"><div><h1>Users & Permissions</h1><p>Phase 2 access control for FSQ Command.</p></div><div className={`ownerBadge ${owner?'ok':'locked'}`}>{owner?'OWNER CONTROL: ACTIVE':'READ ONLY'}</div></div>
+    {message&&<div className="documentMessage">{message}</div>}
+    {!owner&&<div className="permissionWarning">Only Flemming can create users, change roles, assign permissions, lock accounts or delete users.</div>}
+    <section className="panel userAdminPanel">
+      <div className="panelHead"><h3>User accounts</h3><span>{users.filter(user=>user.active).length} active</span></div>
+      {owner&&<div className="newUserForm"><input placeholder="Name" value={newUser.name} onChange={e=>setNewUser({...newUser,name:e.target.value})}/><select value={newUser.role} onChange={e=>setNewUser({...newUser,role:e.target.value})}>{roles.map(role=><option key={role}>{role}</option>)}</select><input type="password" value={newUser.password} onChange={e=>setNewUser({...newUser,password:e.target.value})}/><button onClick={addUser}>Create user</button></div>}
+      <div className="userPermissionList">{users.map(user=><article className={`userPermissionCard ${!user.active?'inactive':''}`} key={user.id}>
+        <div className="userPermissionTop"><div className="avatar">{user.name[0]}</div><div><h3>{user.name}</h3><small>{user.active?'Active':'Locked'} · {user.role}</small></div><select disabled={!owner||user.name==='Flemming'} value={user.role} onChange={e=>changeRole(user.id,e.target.value)}>{roles.map(role=><option key={role}>{role}</option>)}</select></div>
+        <div className="permissionGrid">{allPermissions.map(permission=><label key={permission}><input type="checkbox" disabled={!owner||user.name==='Flemming'} checked={(user.permissions||[]).includes(permission)} onChange={()=>togglePermission(user.id,permission)}/><span>{permission.replaceAll('_',' ')}</span></label>)}</div>
+        <div className="userActions"><button disabled={!owner||user.name==='Flemming'} onClick={()=>toggleActive(user.id)}>{user.active?'Lock user':'Unlock user'}</button><button className="dangerAction" disabled={!owner||user.name==='Flemming'} onClick={()=>deleteUser(user.id)}>Delete</button></div>
+      </article>)}</div>
+    </section>
+    <div className="dashboardGrid adminSupportGrid"><div className="panel"><h3>Personnel location</h3>{people.map(p=><button className="listRow" key={p.id} onClick={()=>cyclePerson(p.id)}><div><b>{p.name}</b><small>{p.task}</small></div><em>{p.location}</em></button>)}</div><div className="panel"><h3>System resets</h3><button className="primaryBtn" onClick={()=>setMachines(DEFAULT_MACHINES)}>Restore machines</button><button className="primaryBtn" onClick={()=>setMaterials(DEFAULT_MATERIALS)}>Restore materials</button></div></div>
   </div>
 }
 
@@ -1376,4 +1425,4 @@ function AI({chat,setChat,voice,stats}) {
 
 function ModulePlaceholder({title}) { return <div className="content"><div className="sectionIntro"><h1>{title}</h1><p>This module is included in the navigation and ready for connection to the shared database.</p></div><div className="panel placeholder"><div className="core small"><div className="coreRing r1"/><div className="coreDot"/></div><h3>{title} module</h3><p>UI foundation ready. Database, files and approval workflows are the next deployment layer.</p></div></div> }
 
-export default function Page(){ const [session,setSession]=useState(null); return session?<AppShell session={session} onLogout={()=>setSession(null)}/>:<Login onLogin={setSession}/> }
+export default function Page(){ const [session,setSession]=useState(null); const [users,setUsers]=useStoredState('fsq-v60-users',DEFAULT_USERS); return session?<AppShell session={session} onLogout={()=>setSession(null)} users={users} setUsers={setUsers}/>:<Login onLogin={setSession} users={users}/> }

@@ -1,27 +1,21 @@
-# FSQ Command v5.3.2
+# FSQ Command 6.0 - Phase 2
 
-Permission management and workshop approval hotfix.
+User and permission management.
 
-## Fixed
-- Removed duplicate `canApproveTackAndComplete` definition that stopped the build.
-- Only Flemming and Jakob can approve tack welding, final weld and job completion.
+## Owner control
+Only Flemming can create/delete users, change roles, assign individual permissions, and lock/unlock accounts.
 
-## New permission rule
-Only Flemming can:
-- assign user roles
-- change user roles
-- grant or remove permissions
-- manage approval permissions
-- create or delete users where those controls exist
+## Approval control
+Only Flemming and Jakob can approve tack/fit-up, final welding and job completion.
 
-Recognized owner accounts:
-- Flemming
-- Flemming Bach
+## Technician access
+Technicians see only assigned jobs and can upload photos/update assigned work.
 
-Jakob can still approve workshop welding and complete jobs, but cannot assign permissions.
-
-## Test
-1. Log in as Flemming and change a user's role.
-2. Log in as Jakob and verify role controls are blocked.
-3. Log in as another administrator and verify role controls are blocked.
-4. Verify Flemming and Jakob can still approve workshop QA.
+## Included
+- Persistent user directory in browser storage
+- Active/locked accounts
+- Role templates
+- Individual permission checkboxes
+- Read-only settings for all non-owner accounts
+- Dynamic login list
+- Duplicate helper definitions removed
