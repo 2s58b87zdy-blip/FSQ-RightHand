@@ -82,3 +82,30 @@
 .droneMetrics small{color:#7395aa}
 .droneMetrics>div{margin-left:auto;display:flex;gap:6px}
 .droneMetrics button{width:30px;height:30px;background:#0f2b40;color:#8de5ff;border:1px solid #286080;border-radius:5px}
+
+.projectToolbar{display:grid;gap:12px;margin-bottom:16px}
+.projectSearch{width:100%;background:#071421;border:1px solid #235274;color:#fff;padding:13px;border-radius:7px}
+.newProjectButton{font-size:15px;padding:15px 22px}
+.projectBadges{display:flex;gap:7px;align-items:center}
+.healthLight{width:12px;height:12px;border-radius:50%;display:inline-block;box-shadow:0 0 10px currentColor}
+.healthLight.green{background:#2ce6a6;color:#2ce6a6}
+.healthLight.yellow{background:#ffbc49;color:#ffbc49}
+.healthLight.red{background:#ff5d6c;color:#ff5d6c}
+.deadlineLine{display:flex;justify-content:space-between;gap:10px;color:#7599af;font-size:11px;margin-top:10px}
+.deadlineLine b{color:#d6edf8}
+.projectHeroRight{display:grid;gap:12px}
+.lifecycleActions{display:flex;justify-content:flex-end;gap:7px;flex-wrap:wrap}
+.lifecycleActions button{background:#0d2d45;color:#8de5ff;border:1px solid #236184;padding:8px 10px;border-radius:5px;cursor:pointer}
+.lifecycleActions .dangerAction{background:#3a1520;color:#ff9aa4;border-color:#7a2b3d}
+.materialsHub{display:grid;grid-template-columns:1fr 1.4fr;gap:16px}
+.materialForm{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.materialForm label{display:grid;gap:6px;color:#91b5ca;font-size:12px}
+.materialForm input,.materialForm select{background:#071421;border:1px solid #235274;color:#fff;padding:12px;border-radius:6px}
+.materialNotes{grid-column:1/-1}
+.materialForm .primaryBtn{grid-column:1/-1}
+.projectMaterialRow{display:grid;grid-template-columns:1fr auto auto 32px;gap:12px;align-items:center;padding:12px 0;border-top:1px solid #17364d}
+.projectMaterialRow>div{display:grid}
+.projectMaterialRow small{color:#7397ad;margin-top:4px}
+.projectMaterialRow>span{color:#9ebdce;font-size:12px}
+.projectMaterialRow button{width:28px;height:28px;border-radius:50%;background:#351521;color:#ff8c98;border:1px solid #6b2638;cursor:pointer}
+@media(max-width:1000px){.materialsHub{grid-template-columns:1fr}.materialForm{grid-template-columns:1fr}.materialNotes,.materialForm .primaryBtn{grid-column:auto}}

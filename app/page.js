@@ -213,7 +213,7 @@ function AppShell({ session, onLogout }) {
         {active === 'dashboard' && <Dashboard session={session} stats={stats} projects={projects} tasks={tasks} people={people} machines={machines} materials={materials} setActive={setActive} deletedProjects={deletedProjects} setDeletedProjects={setDeletedProjects} setActiveProjectId={setActiveProjectId} droneInspections={droneInspections} setDroneInspections={setDroneInspections} />}
         {active === 'crew' && <CrewManagement people={people} setPeople={setPeople} projects={projects} />}
         {active === 'projects' && <Projects projects={projects} setProjects={setProjects} deletedProjects={deletedProjects} setDeletedProjects={setDeletedProjects} setActive={setActive} setActiveProjectId={setActiveProjectId} />}
-        {active === 'projectHub' && <ProjectHub project={projects.find(p=>p.id===activeProjectId)} projects={projects} setProjects={setProjects} people={people} tasks={tasks} setTasks={setTasks} documents={documents} materials={materials} quotes={quotes} reports={reports} setActive={setActive} deletedProjects={deletedProjects} setDeletedProjects={setDeletedProjects} setActiveProjectId={setActiveProjectId} droneInspections={droneInspections} setDroneInspections={setDroneInspections} />}
+        {active === 'projectHub' && <ProjectHub project={projects.find(p=>p.id===activeProjectId)} projects={projects} setProjects={setProjects} people={people} tasks={tasks} setTasks={setTasks} documents={documents} materials={materials} setMaterials={setMaterials} quotes={quotes} reports={reports} setActive={setActive} deletedProjects={deletedProjects} setDeletedProjects={setDeletedProjects} setActiveProjectId={setActiveProjectId} droneInspections={droneInspections} setDroneInspections={setDroneInspections} />}
         {active === 'documents' && <DocumentCenter documents={documents} setDocuments={setDocuments} projects={projects} session={session} />}
         {active === 'admin' && <Admin people={people} setPeople={setPeople} machines={machines} setMachines={setMachines} materials={materials} setMaterials={setMaterials} />}
         {active === 'ai' && <AI chat={chat} setChat={setChat} voice={voice} stats={stats} />}
@@ -493,39 +493,285 @@ function CrewManagement({ people, setPeople, projects }) {
 }
 
 function Projects({projects,setProjects,deletedProjects,setDeletedProjects,setActive,setActiveProjectId}) {
+  const today = new Date().toISOString().slice(0,10);
   const [showWizard,setShowWizard]=useState(false);
   const [filter,setFilter]=useState('Active');
-  const [form,setForm]=useState({customer:'',name:'',imo:'',projectNo:'',lead:'Flemming',location:'',startDate:'',mobilisation:'',status:'Planning',notes:''});
-  function update(field,value){setForm({...form,[field]:value})}
-  function normalizeProject(project){return {lifecycle:project.lifecycle||(project.status==='Completed'?'Completed':'Active'),archivedAt:project.archivedAt||'',completedAt:project.completedAt||'',...project}}
-  const normalizedProjects=projects.map(normalizeProject);
-  function add(){if(!form.name.trim()||!form.customer.trim())return;const project={id:Date.now(),...form,lifecycle:'Active',archivedAt:'',completedAt:'',progress:5,next:'Planning',projectNo:form.projectNo||`FSQ-${String(Date.now()).slice(-5)}`};setProjects([...normalizedProjects,project]);setShowWizard(false);setForm({type:'Marine',customer:'',name:'',imo:'',projectNo:'',lead:'Flemming',location:'',startDate:'',mobilisation:'',status:'Planning',notes:''});setActiveProjectId(project.id);setActive('projectHub')}
-  function openProject(id){setActiveProjectId(id);setActive('projectHub')}
-  function restoreProject(id){const project=deletedProjects.find(p=>p.id===id);if(!project)return;setDeletedProjects(deletedProjects.filter(p=>p.id!==id));setProjects([...normalizedProjects,{...project,lifecycle:'Archived'}])}
-  const visible=normalizedProjects.filter(p=>filter==='Active'?p.lifecycle==='Active':filter==='Completed'?p.lifecycle==='Completed':filter==='Archived'?p.lifecycle==='Archived':true);
-  return <div className="content"><div className="sectionIntro projectIntro"><div><h1>Projects</h1><p>Open a project hub, archive completed work or restore deleted projects.</p></div><button className="primaryBtn" onClick={()=>setShowWizard(!showWizard)}>{showWizard?'Close':'New Project'}</button></div>
-  <div className="projectFilters">{['Active','Marine','Workshop','Inspection','Internal','Service Job','Completed','Archived','All'].map(x=><button key={x} className={filter===x?'active':''} onClick={()=>setFilter(x)}>{x}<span>{x==='All'?normalizedProjects.length:['Marine','Workshop','Inspection','Internal','Service Job'].includes(x)?normalizedProjects.filter(p=>(p.type||'Marine')===x).length:normalizedProjects.filter(p=>p.lifecycle===x).length}</span></button>)}<button className={filter==='Trash'?'active trashFilter':''} onClick={()=>setFilter('Trash')}>Trash<span>{deletedProjects.length}</span></button></div>
-  {showWizard&&<section className="panel projectWizard"><div className="wizardHeader"><h3>Create project</h3><span>Automatic Project Hub structure</span></div><div className="wizardGrid"><label>Customer<input value={form.customer} onChange={e=>update('customer',e.target.value)} placeholder="Cadeler" /></label><label>Vessel / project<input value={form.name} onChange={e=>update('name',e.target.value)} placeholder="Wind Orca" /></label><label>IMO number<input value={form.imo} onChange={e=>update('imo',e.target.value)} placeholder="1234567" /></label><label>Project number<input value={form.projectNo} onChange={e=>update('projectNo',e.target.value)} placeholder="FSQ-26074" /></label><label>Project manager<select value={form.lead} onChange={e=>update('lead',e.target.value)}><option>Flemming</option><option>Jakob</option><option>Stefan</option></select></label><label>Location<input value={form.location} onChange={e=>update('location',e.target.value)} placeholder="Esbjerg" /></label><label>Start date<input type="date" value={form.startDate} onChange={e=>update('startDate',e.target.value)} /></label><label>Mobilisation<input type="date" value={form.mobilisation} onChange={e=>update('mobilisation',e.target.value)} /></label><label>Status<select value={form.status} onChange={e=>update('status',e.target.value)}><option>Planning</option><option>Fabrication</option><option>Inspection</option><option>Mobilisation</option><option>Completed</option></select></label><label className="wizardNotes">Notes<textarea value={form.notes} onChange={e=>update('notes',e.target.value)} placeholder="Scope, priorities and important notes" /></label></div><div className="wizardFolders">{['Quotations','Purchase Orders','Drawings','Method Statements','Risk Assessments','Service Reports','WPQR','WPS','NDT Reports','Certificates','Packing Lists','Photos','Videos','Archive'].map(x=><span key={x}>{x}</span>)}</div><button className="primaryBtn" onClick={add}>Create Project Hub</button></section>}
-  {filter!=='Trash'?<div className="projectCards projectHubCards">{visible.map(p=><article key={p.id} onClick={()=>openProject(p.id)}><div className="projectTop"><div><div className={`projectBadge lifecycle-${p.lifecycle.toLowerCase()}`}>{p.lifecycle}</div><div className="typeBadge">{p.projectType || 'Vessel'}</div></div><span>{p.type||'Marine'} · {p.projectNo}</span></div><h3>{p.name}</h3><p>{p.customer} · {p.location||'Location TBD'}</p><div className="projectFacts"><span>IMO {p.imo||'N/A'}</span><span>Lead {p.lead}</span></div><div className="progress big"><span style={{width:`${p.progress}%`}}/></div><div className="meta"><span>{p.progress}% complete</span><span>{p.status}</span></div><p className="nextLine">Next: {p.next}</p><button className="openHub">Open Project Hub</button></article>)}{!visible.length&&<div className="empty">No projects in this view.</div>}</div>:<div className="panel trashList"><div className="panelHead"><h3>Project trash</h3><span>Projects stay here until permanently deleted</span></div>{deletedProjects.map(p=><div className="trashRow" key={p.id}><div><b>{p.name}</b><small>{p.customer} · Deleted {p.deletedAt||'recently'}</small></div><button onClick={()=>restoreProject(p.id)}>Restore</button><button className="permanentDelete" onClick={()=>{if(window.confirm(`Permanently delete ${p.name}? This cannot be undone.`)){setDeletedProjects(deletedProjects.filter(x=>x.id!==p.id))}}}>Delete permanently</button></div>)}{!deletedProjects.length&&<div className="empty">Trash is empty.</div>}</div>}</div>
+  const [search,setSearch]=useState('');
+  const [form,setForm]=useState({
+    type:'Vessel',
+    customer:'',
+    name:'',
+    imo:'',
+    lead:'Flemming',
+    location:'',
+    startDate:today,
+    deadline:'',
+    status:'Planning',
+    priority:'Medium',
+    health:'Green',
+    notes:''
+  });
+
+  function update(field,value){ setForm(current=>({...current,[field]:value})); }
+  function normalizeProject(project){
+    return {
+      type: project.type === 'Marine' ? 'Vessel' : (project.type || 'Vessel'),
+      lifecycle: project.lifecycle || (project.status === 'Completed' ? 'Completed' : 'Active'),
+      priority: project.priority || 'Medium',
+      health: project.health || 'Green',
+      deadline: project.deadline || project.mobilisation || '',
+      archivedAt: project.archivedAt || '',
+      completedAt: project.completedAt || '',
+      ...project
+    };
+  }
+
+  const normalizedProjects = projects.map(normalizeProject);
+  const nextProjectNumber = `FSQ-${new Date().getFullYear().toString().slice(-2)}${String(normalizedProjects.length + deletedProjects.length + 1).padStart(4,'0')}`;
+
+  function add(){
+    if(!form.name.trim() || !form.customer.trim()) return;
+    const project={
+      id:Date.now(),
+      ...form,
+      projectNo:nextProjectNumber,
+      lifecycle:'Active',
+      archivedAt:'',
+      completedAt:'',
+      progress:5,
+      next:'Planning',
+      mobilisation:form.deadline
+    };
+    setProjects([...normalizedProjects,project]);
+    setShowWizard(false);
+    setForm({
+      type:'Vessel',customer:'',name:'',imo:'',lead:'Flemming',location:'',
+      startDate:today,deadline:'',status:'Planning',priority:'Medium',health:'Green',notes:''
+    });
+    setActiveProjectId(project.id);
+    setActive('projectHub');
+  }
+
+  function openProject(id){ setActiveProjectId(id); setActive('projectHub'); }
+  function restoreProject(id){
+    const project=deletedProjects.find(p=>p.id===id);
+    if(!project) return;
+    setDeletedProjects(deletedProjects.filter(p=>p.id!==id));
+    setProjects([...normalizedProjects,{...project,lifecycle:'Archived'}]);
+  }
+
+  const typeFilters=['Vessel','Workshop','Inspection','Drone Inspection','Internal','Service'];
+  const visible=normalizedProjects.filter(p=>{
+    const searchText=`${p.name} ${p.customer} ${p.projectNo} ${p.location} ${p.type}`.toLowerCase();
+    if(!searchText.includes(search.toLowerCase())) return false;
+    if(filter==='Active') return p.lifecycle==='Active';
+    if(filter==='Completed') return p.lifecycle==='Completed';
+    if(filter==='Archived') return p.lifecycle==='Archived';
+    if(typeFilters.includes(filter)) return p.type===filter;
+    return true;
+  });
+
+  function deadlineText(deadline){
+    if(!deadline) return 'No deadline';
+    const days=Math.ceil((new Date(deadline)-new Date(today))/(1000*60*60*24));
+    if(days<0) return `${Math.abs(days)} days overdue`;
+    if(days===0) return 'Due today';
+    return `${days} days remaining`;
+  }
+
+  return <div className="content">
+    <div className="sectionIntro projectIntro">
+      <div><h1>Projects</h1><p>All vessel, workshop, inspection and internal jobs in one place.</p></div>
+      <button className="primaryBtn newProjectButton" onClick={()=>setShowWizard(!showWizard)}>{showWizard?'Close':'＋ New Project'}</button>
+    </div>
+
+    <div className="projectToolbar">
+      <input className="projectSearch" placeholder="Search project, customer, number or location..." value={search} onChange={e=>setSearch(e.target.value)} />
+      <div className="projectFilters">
+        {['Active',...typeFilters,'Completed','Archived','All'].map(x=><button key={x} className={filter===x?'active':''} onClick={()=>setFilter(x)}>{x}<span>{x==='All'?normalizedProjects.length:typeFilters.includes(x)?normalizedProjects.filter(p=>p.type===x).length:normalizedProjects.filter(p=>p.lifecycle===x).length}</span></button>)}
+        <button className={filter==='Trash'?'active trashFilter':'trashFilter'} onClick={()=>setFilter('Trash')}>Trash<span>{deletedProjects.length}</span></button>
+      </div>
+    </div>
+
+    {showWizard&&<section className="panel projectWizard">
+      <div className="wizardHeader"><h3>Create project</h3><span>Project number: {nextProjectNumber}</span></div>
+      <div className="wizardGrid">
+        <label>Project type<select value={form.type} onChange={e=>update('type',e.target.value)}><option>Vessel</option><option>Workshop</option><option>Inspection</option><option>Drone Inspection</option><option>Internal</option><option>Service</option></select></label>
+        <label>Customer<input value={form.customer} onChange={e=>update('customer',e.target.value)} placeholder="Cadeler" /></label>
+        <label>Project / vessel name<input value={form.name} onChange={e=>update('name',e.target.value)} placeholder="Wind Orca" /></label>
+        <label>IMO number<input value={form.imo} onChange={e=>update('imo',e.target.value)} placeholder="Optional" /></label>
+        <label>Project manager<select value={form.lead} onChange={e=>update('lead',e.target.value)}><option>Flemming</option><option>Jakob</option><option>Stefan</option></select></label>
+        <label>Location<input value={form.location} onChange={e=>update('location',e.target.value)} placeholder="Esbjerg" /></label>
+        <label>Start date<input type="date" value={form.startDate} onClick={e=>e.currentTarget.showPicker?.()} onFocus={e=>e.currentTarget.showPicker?.()} onChange={e=>update('startDate',e.target.value)} /></label>
+        <label>Deadline<input type="date" min={form.startDate} value={form.deadline} onClick={e=>e.currentTarget.showPicker?.()} onFocus={e=>e.currentTarget.showPicker?.()} onChange={e=>update('deadline',e.target.value)} /></label>
+        <label>Priority<select value={form.priority} onChange={e=>update('priority',e.target.value)}><option>Low</option><option>Medium</option><option>High</option><option>Critical</option></select></label>
+        <label>Project health<select value={form.health} onChange={e=>update('health',e.target.value)}><option>Green</option><option>Yellow</option><option>Red</option></select></label>
+        <label>Status<select value={form.status} onChange={e=>update('status',e.target.value)}><option>Planning</option><option>Fabrication</option><option>Inspection</option><option>Mobilisation</option><option>Completed</option></select></label>
+        <label className="wizardNotes">Notes<textarea value={form.notes} onChange={e=>update('notes',e.target.value)} placeholder="Scope, priorities and important notes" /></label>
+      </div>
+      <div className="wizardFolders">{['Quotations','Purchase Orders','Drawings','Method Statements','Risk Assessments','Service Reports','WPQR','WPS','NDT Reports','Certificates','Packing Lists','Photos','Drone','Videos','Archive'].map(x=><span key={x}>{x}</span>)}</div>
+      <button className="primaryBtn" onClick={add}>Create Project Hub</button>
+    </section>}
+
+    {filter!=='Trash'
+      ? <div className="projectCards projectHubCards">
+          {visible.map(p=><article key={p.id} onClick={()=>openProject(p.id)}>
+            <div className="projectTop">
+              <div className="projectBadges">
+                <div className={`healthLight ${String(p.health||'Green').toLowerCase()}`} title={`Project health: ${p.health||'Green'}`} />
+                <div className={`projectBadge lifecycle-${p.lifecycle.toLowerCase()}`}>{p.lifecycle}</div>
+                <div className="typeBadge">{p.type}</div>
+              </div>
+              <span>{p.projectNo}</span>
+            </div>
+            <h3>{p.name}</h3>
+            <p>{p.customer} · {p.location||'Location TBD'}</p>
+            <div className="projectFacts"><span>Manager: {p.lead}</span><span>Priority: {p.priority}</span></div>
+            <div className="progress big"><span style={{width:`${p.progress}%`}}/></div>
+            <div className="meta"><span>{p.progress}% complete</span><span>{p.status}</span></div>
+            <div className="deadlineLine"><span>{p.deadline||'No deadline'}</span><b>{deadlineText(p.deadline)}</b></div>
+            <p className="nextLine">Next: {p.next}</p>
+            <button className="openHub">Open Project Hub</button>
+          </article>)}
+          {!visible.length&&<div className="empty">No projects in this view.</div>}
+        </div>
+      : <div className="panel trashList">
+          <div className="panelHead"><h3>Project trash</h3><span>Restore or permanently delete</span></div>
+          {deletedProjects.map(p=><div className="trashRow" key={p.id}>
+            <div><b>{p.name}</b><small>{p.customer} · Deleted {p.deletedAt||'recently'}</small></div>
+            <button onClick={()=>restoreProject(p.id)}>Restore</button>
+            <button className="permanentDelete" onClick={()=>{if(window.confirm(`Permanently delete ${p.name}? This cannot be undone.`)){setDeletedProjects(deletedProjects.filter(x=>x.id!==p.id))}}}>Delete permanently</button>
+          </div>)}
+          {!deletedProjects.length&&<div className="empty">Trash is empty.</div>}
+        </div>}
+  </div>
 }
 
-function ProjectHub({project,projects,setProjects,people,tasks,setTasks,documents,materials,quotes,reports,setActive,deletedProjects,setDeletedProjects,setActiveProjectId,droneInspections,setDroneInspections}) {
-  const [tab,setTab]=useState('overview'); const [newTask,setNewTask]=useState('');
+function ProjectHub({project,projects,setProjects,people,tasks,setTasks,documents,materials,setMaterials,quotes,reports,setActive,deletedProjects,setDeletedProjects,setActiveProjectId,droneInspections,setDroneInspections}) {
+  const [tab,setTab]=useState('overview');
+  const [newTask,setNewTask]=useState('');
+  const [materialForm,setMaterialForm]=useState({name:'',quantity:1,unit:'pcs',supplier:'',price:'',notes:''});
+
   if(!project)return <div className="content"><button onClick={()=>setActive('projects')}>Back to projects</button></div>;
+
   const crew=people.filter(p=>p.project===project.name||p.task?.includes(project.name)||p.detail?.includes(project.name));
-  const projectTasks=tasks.filter(t=>t.project===project.name); const projectDocs=documents.filter(d=>d.project===project.name); const projectQuotes=quotes.filter(q=>q.title?.includes(project.name)||q.customer===project.customer); const projectReports=reports.filter(r=>r.vessel===project.name);
-  const projectDrone=(droneInspections || []).filter(d=>d.project===project.name);
+  const projectTasks=tasks.filter(t=>t.project===project.name);
+  const projectDocs=documents.filter(d=>d.project===project.name);
+  const projectQuotes=quotes.filter(q=>q.title?.includes(project.name)||q.customer===project.customer);
+  const projectReports=reports.filter(r=>r.vessel===project.name);
+  const projectDrone=(droneInspections||[]).filter(d=>d.project===project.name);
+  const projectMaterials=materials.filter(m=>m.project===project.name);
+
   function update(field,value){setProjects(projects.map(p=>p.id===project.id?{...p,[field]:value}:p))}
-  function addTask(){if(!newTask.trim())return;setTasks([...tasks,{id:Date.now(),title:newTask.trim(),person:project.lead,priority:'Normal',status:'Planned',due:'This week',project:project.name}]);setNewTask('')}
+  function addTask(){
+    if(!newTask.trim())return;
+    setTasks([...tasks,{id:Date.now(),title:newTask.trim(),person:project.lead,priority:'Normal',status:'Planned',due:'This week',project:project.name}]);
+    setNewTask('');
+  }
+  function moveTask(id){
+    const order=['Planned','In progress','Waiting','Completed'];
+    setTasks(tasks.map(t=>t.id===id?{...t,status:order[(order.indexOf(t.status)+1)%order.length]}:t));
+  }
+  function updateMaterial(field,value){setMaterialForm(current=>({...current,[field]:value}))}
+  function addMaterial(){
+    if(!materialForm.name.trim())return;
+    setMaterials([...materials,{
+      id:Date.now(),
+      project:project.name,
+      name:materialForm.name.trim(),
+      quantity:Number(materialForm.quantity)||0,
+      unit:materialForm.unit,
+      supplier:materialForm.supplier,
+      price:Number(materialForm.price)||0,
+      notes:materialForm.notes,
+      minimum:0
+    }]);
+    setMaterialForm({name:'',quantity:1,unit:'pcs',supplier:'',price:'',notes:''});
+  }
+  function removeMaterial(id){setMaterials(materials.filter(m=>m.id!==id))}
+  function completeProject(){setProjects(projects.map(p=>p.id===project.id?{...p,lifecycle:'Completed',status:'Completed',progress:100,completedAt:new Date().toISOString().slice(0,10)}:p))}
+  function archiveProject(){setProjects(projects.map(p=>p.id===project.id?{...p,lifecycle:'Archived',archivedAt:new Date().toISOString().slice(0,10)}:p))}
+  function reopenProject(){setProjects(projects.map(p=>p.id===project.id?{...p,lifecycle:'Active',status:p.status==='Completed'?'Planning':p.status,archivedAt:'',completedAt:''}:p))}
+  function duplicateProject(){
+    const copy={...project,id:Date.now(),name:`${project.name} Copy`,projectNo:`${project.projectNo}-COPY`,lifecycle:'Active',status:'Planning',progress:0,completedAt:'',archivedAt:'',startDate:new Date().toISOString().slice(0,10)};
+    setProjects([...projects,copy]);setActiveProjectId(copy.id);
+  }
+  function moveToTrash(){
+    if(!window.confirm(`Move ${project.name} to trash?`))return;
+    setDeletedProjects([...deletedProjects,{...project,deletedAt:new Date().toISOString().slice(0,10)}]);
+    setProjects(projects.filter(p=>p.id!==project.id));
+    setActiveProjectId(null);setActive('projects');
+  }
+
   const tabs=[['overview','Overview'],['crew','Crew'],['documents','Documents'],['drone','Drone Inspection'],['tasks','Tasks'],['materials','Materials'],['commercial','Commercial'],['timeline','Timeline']];
-  return <div className="content projectHub"><button className="backButton" onClick={()=>setActive('projects')}>← Back to projects</button><section className="projectHero"><div><div className="projectHeroTop"><span className="projectBadge">{project.status}</span><span>{project.type||'Marine'} · {project.projectNo}</span></div><h1>{project.name}</h1><p>{project.customer} · IMO {project.imo||'N/A'} · {project.location||'TBD'}</p></div><div className="projectHeroStats"><div><strong>{project.progress}%</strong><small>Progress</small></div><div><strong>{projectTasks.filter(t=>t.status!=='Completed').length}</strong><small>Open tasks</small></div><div><strong>{projectDocs.length}</strong><small>Documents</small></div><div><strong>{crew.length}</strong><small>Crew</small></div></div></section><nav className="projectTabs">{tabs.map(([id,label])=><button key={id} className={tab===id?'active':''} onClick={()=>setTab(id)}>{label}</button>)}</nav>
-  {tab==='overview'&&<section className="hubGrid"><div className="panel"><h3>Project details</h3><div className="detailGrid"><label>Status<select value={project.status} onChange={e=>update('status',e.target.value)}><option>Planning</option><option>Fabrication</option><option>Inspection</option><option>Mobilisation</option><option>Completed</option></select></label><label>Project manager<select value={project.lead} onChange={e=>update('lead',e.target.value)}><option>Flemming</option><option>Jakob</option><option>Stefan</option></select></label><label>Location<input value={project.location||''} onChange={e=>update('location',e.target.value)}/></label><label>Mobilisation<input value={project.mobilisation||''} onChange={e=>update('mobilisation',e.target.value)}/></label><label>Progress {project.progress}%<input type="range" min="0" max="100" value={project.progress} onChange={e=>update('progress',Number(e.target.value))}/></label><label>Next milestone<input value={project.next||''} onChange={e=>update('next',e.target.value)}/></label></div></div><div className="panel"><h3>Readiness</h3>{[['Project plan',true],['Drawings',projectDocs.some(d=>d.category==='Drawings')],['Method Statement',projectDocs.some(d=>d.category==='Method Statements')],['Risk Assessment',projectDocs.some(d=>d.category==='Risk Assessments')],['Certificates',projectDocs.some(d=>d.category==='Certificates')],['Packing List',projectDocs.some(d=>d.category==='Packing Lists')]].map(([n,ok])=><div className="checkRow" key={n}><span className={ok?'ok':'missing'}>{ok?'✓':'!'}</span><b>{n}</b><em>{ok?'Ready':'Missing'}</em></div>)}</div><div className="panel"><h3>Project notes</h3><textarea className="hubTextarea" value={project.notes||''} onChange={e=>update('notes',e.target.value)}/></div><div className="panel"><h3>Next actions</h3>{projectTasks.filter(t=>t.status!=='Completed').slice(0,5).map(t=><div className="taskMini" key={t.id}><span className={t.priority==='High'?'dot danger':'dot'}/><div><b>{t.title}</b><small>{t.person} · {t.status}</small></div></div>)}</div></section>}
-  {tab==='crew'&&<section className="panel"><div className="peopleCards">{crew.length?crew.map(p=><article key={p.id}><div className="personHead"><div className="avatar">{p.name[0]}</div><div><h3>{p.name}</h3><small>{p.location} · {p.status}</small></div></div><p>{p.task}</p></article>):<div className="empty">Assign crew in Crew Management.</div>}</div></section>}
-  {tab==='documents'&&<section className="panel"><div className="panelHead"><h3>Project documents</h3><button onClick={()=>setActive('documents')}>Open Document Center</button></div>{projectDocs.length?projectDocs.map(d=><div className="documentRow hubDoc" key={d.id}><div><b>{d.name}</b><small>{d.category} · V{d.version}</small></div><span>{d.date}</span></div>):<div className="empty">No documents uploaded.</div>}</section>}
-  {tab==='tasks'&&<section className="panel"><div className="hubTaskAdd"><input placeholder="New project task" value={newTask} onChange={e=>setNewTask(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addTask()}/><button onClick={addTask}>Add task</button></div><div className="kanban four">{['Planned','In progress','Waiting','Completed'].map(s=><TaskColumn key={s} title={s} tasks={projectTasks.filter(t=>t.status===s)} cycle={()=>{}}/>)}</div></section>}
-  {tab==='materials'&&<section className="panel">{materials.slice(0,6).map(m=><div className={`materialRow ${m.quantity<m.minimum?'low':''}`} key={m.id}><div><b>{m.name}</b><small>Minimum {m.minimum} {m.unit}</small></div><div><strong>{m.quantity}</strong> {m.unit}</div></div>)}</section>}
-  {tab==='commercial'&&<section className="hubGrid"><div className="panel"><h3>Quotations</h3>{projectQuotes.length?projectQuotes.map(q=><div className="listRow" key={q.id}><div><b>{q.reference}</b><small>{q.title}</small></div><span>DKK {q.value.toLocaleString('da-DK')}</span><em>{q.status}</em></div>):<div className="empty">No linked quotations.</div>}</div><div className="panel"><h3>Service reports</h3>{projectReports.length?projectReports.map(r=><div className="listRow" key={r.id}><div><b>{r.title}</b><small>{r.vessel}</small></div><em>{r.status}</em></div>):<div className="empty">No linked reports.</div>}</div></section>}
-  {tab==='timeline'&&<section className="panel timeline">{[[project.startDate||'TBD','Project created',project.customer],['2026-07-16','Planning updated',project.lead],['2026-07-17','Workshop task created','FSQ Right Hand'],[project.mobilisation||'TBD','Mobilisation',project.location||'TBD']].map(([d,t,x],i)=><div className="timelineItem" key={i}><span/><div><small>{d}</small><b>{t}</b><p>{x}</p></div></div>)}</section>}</div>
+
+  return <div className="content projectHub">
+    <button className="backButton" onClick={()=>setActive('projects')}>← Back to projects</button>
+    <section className="projectHero">
+      <div>
+        <div className="projectHeroTop"><span className={`healthLight ${String(project.health||'Green').toLowerCase()}`}/><span className="projectBadge">{project.status}</span><span>{project.type||'Vessel'} · {project.projectNo}</span></div>
+        <h1>{project.name}</h1>
+        <p>{project.customer} · IMO {project.imo||'N/A'} · {project.location||'TBD'}</p>
+      </div>
+      <div className="projectHeroRight">
+        <div className="projectHeroStats">
+          <div><strong>{project.progress}%</strong><small>Progress</small></div>
+          <div><strong>{projectTasks.filter(t=>t.status!=='Completed').length}</strong><small>Open tasks</small></div>
+          <div><strong>{projectDocs.length}</strong><small>Documents</small></div>
+          <div><strong>{crew.length}</strong><small>Crew</small></div>
+        </div>
+        <div className="lifecycleActions">
+          {(project.lifecycle||'Active')==='Active'&&<button onClick={completeProject}>Complete</button>}
+          {(project.lifecycle||'Active')!=='Archived'&&<button onClick={archiveProject}>Archive</button>}
+          {(project.lifecycle||'Active')!=='Active'&&<button onClick={reopenProject}>Reopen</button>}
+          <button onClick={duplicateProject}>Duplicate</button>
+          <button className="dangerAction" onClick={moveToTrash}>Move to trash</button>
+        </div>
+      </div>
+    </section>
+
+    <nav className="projectTabs">{tabs.map(([id,label])=><button key={id} className={tab===id?'active':''} onClick={()=>setTab(id)}>{label}</button>)}</nav>
+
+    {tab==='overview'&&<section className="hubGrid">
+      <div className="panel"><h3>Project details</h3><div className="detailGrid">
+        <label>Status<select value={project.status} onChange={e=>update('status',e.target.value)}><option>Planning</option><option>Fabrication</option><option>Inspection</option><option>Mobilisation</option><option>Completed</option></select></label>
+        <label>Project manager<select value={project.lead} onChange={e=>update('lead',e.target.value)}><option>Flemming</option><option>Jakob</option><option>Stefan</option></select></label>
+        <label>Location<input value={project.location||''} onChange={e=>update('location',e.target.value)}/></label>
+        <label>Deadline<input type="date" value={project.deadline||''} min={project.startDate||''} onClick={e=>e.currentTarget.showPicker?.()} onChange={e=>update('deadline',e.target.value)}/></label>
+        <label>Priority<select value={project.priority||'Medium'} onChange={e=>update('priority',e.target.value)}><option>Low</option><option>Medium</option><option>High</option><option>Critical</option></select></label>
+        <label>Health<select value={project.health||'Green'} onChange={e=>update('health',e.target.value)}><option>Green</option><option>Yellow</option><option>Red</option></select></label>
+        <label>Progress {project.progress}%<input type="range" min="0" max="100" value={project.progress} onChange={e=>update('progress',Number(e.target.value))}/></label>
+        <label>Next milestone<input value={project.next||''} onChange={e=>update('next',e.target.value)}/></label>
+      </div></div>
+      <div className="panel"><h3>Readiness</h3>{[['Project plan',true],['Drawings',projectDocs.some(d=>d.category==='Drawings')],['Method Statement',projectDocs.some(d=>d.category==='Method Statements')],['Risk Assessment',projectDocs.some(d=>d.category==='Risk Assessments')],['Certificates',projectDocs.some(d=>d.category==='Certificates')],['Packing List',projectDocs.some(d=>d.category==='Packing Lists')]].map(([n,ok])=><div className="checkRow" key={n}><span className={ok?'ok':'missing'}>{ok?'✓':'!'}</span><b>{n}</b><em>{ok?'Ready':'Missing'}</em></div>)}</div>
+      <div className="panel"><h3>Project notes</h3><textarea className="hubTextarea" value={project.notes||''} onChange={e=>update('notes',e.target.value)}/></div>
+      <div className="panel"><h3>Next actions</h3>{projectTasks.filter(t=>t.status!=='Completed').slice(0,5).map(t=><div className="taskMini" key={t.id}><span className={t.priority==='High'?'dot danger':'dot'}/><div><b>{t.title}</b><small>{t.person} · {t.status}</small></div></div>)}</div>
+    </section>}
+
+    {tab==='crew'&&<section className="panel"><div className="peopleCards">{crew.length?crew.map(p=><article key={p.id}><div className="personHead"><div className="avatar">{p.name[0]}</div><div><h3>{p.name}</h3><small>{p.location} · {p.status}</small></div></div><p>{p.task}</p></article>):<div className="empty">Assign crew in People.</div>}</div></section>}
+    {tab==='documents'&&<section className="panel"><div className="panelHead"><h3>Project documents</h3><button onClick={()=>setActive('documents')}>Open Document Center</button></div>{projectDocs.length?projectDocs.map(d=><div className="documentRow hubDoc" key={d.id}><div><b>{d.name}</b><small>{d.category} · V{d.version}</small></div><span>{d.date}</span></div>):<div className="empty">No documents uploaded.</div>}</section>}
+    {tab==='drone'&&<DroneInspectionPanel project={project} inspections={projectDrone} allInspections={droneInspections||[]} setInspections={setDroneInspections}/>}
+    {tab==='tasks'&&<section className="panel"><div className="hubTaskAdd"><input placeholder="New project task" value={newTask} onChange={e=>setNewTask(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addTask()}/><button onClick={addTask}>Add task</button></div><div className="kanban four">{['Planned','In progress','Waiting','Completed'].map(s=><TaskColumn key={s} title={s} tasks={projectTasks.filter(t=>t.status===s)} cycle={moveTask}/>)}</div></section>}
+    {tab==='materials'&&<section className="materialsHub">
+      <div className="panel addMaterialPanel">
+        <div className="panelHead"><h3>Add Material</h3><span>{project.name}</span></div>
+        <div className="materialForm">
+          <label>Material<input value={materialForm.name} onChange={e=>updateMaterial('name',e.target.value)} placeholder="SMO254 plate 6 mm"/></label>
+          <label>Quantity<input type="number" min="0" value={materialForm.quantity} onChange={e=>updateMaterial('quantity',e.target.value)}/></label>
+          <label>Unit<select value={materialForm.unit} onChange={e=>updateMaterial('unit',e.target.value)}><option>pcs</option><option>kg</option><option>m</option><option>plates</option><option>pipes</option><option>boxes</option><option>bottles</option></select></label>
+          <label>Supplier<input value={materialForm.supplier} onChange={e=>updateMaterial('supplier',e.target.value)} placeholder="Supplier"/></label>
+          <label>Purchase price<input type="number" min="0" value={materialForm.price} onChange={e=>updateMaterial('price',e.target.value)} placeholder="DKK"/></label>
+          <label className="materialNotes">Remarks<input value={materialForm.notes} onChange={e=>updateMaterial('notes',e.target.value)}/></label>
+          <button className="primaryBtn" onClick={addMaterial}>Save Material</button>
+        </div>
+      </div>
+      <div className="panel"><div className="panelHead"><h3>Project Materials</h3><span>{projectMaterials.length}</span></div>
+        {projectMaterials.length?projectMaterials.map(m=><div className="projectMaterialRow" key={m.id}><div><b>{m.name}</b><small>{m.supplier||'No supplier'} · {m.notes||'No remarks'}</small></div><span>{m.quantity} {m.unit}</span><span>{m.price?`DKK ${m.price.toLocaleString('da-DK')}`:'No price'}</span><button onClick={()=>removeMaterial(m.id)}>×</button></div>):<div className="empty">No materials added to this project.</div>}
+      </div>
+    </section>}
+    {tab==='commercial'&&<section className="hubGrid"><div className="panel"><h3>Quotations</h3>{projectQuotes.length?projectQuotes.map(q=><div className="listRow" key={q.id}><div><b>{q.reference}</b><small>{q.title}</small></div><span>DKK {q.value.toLocaleString('da-DK')}</span><em>{q.status}</em></div>):<div className="empty">No linked quotations.</div>}</div><div className="panel"><h3>Service reports</h3>{projectReports.length?projectReports.map(r=><div className="listRow" key={r.id}><div><b>{r.title}</b><small>{r.vessel}</small></div><em>{r.status}</em></div>):<div className="empty">No linked reports.</div>}</div></section>}
+    {tab==='timeline'&&<section className="panel timeline">{[[project.startDate||'TBD','Project created',project.customer],[project.deadline||'TBD','Deadline',project.location||'TBD']].map(([d,t,x],i)=><div className="timelineItem" key={i}><span/><div><small>{d}</small><b>{t}</b><p>{x}</p></div></div>)}</section>}
+  </div>
 }
 
 
