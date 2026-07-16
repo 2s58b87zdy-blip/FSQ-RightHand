@@ -1,42 +1,9 @@
-# FSQ Right Hand v4.0
+# FSQ Right Hand v4.0.1
 
-Simplified project-centred release.
+Hotfix for project creation.
 
-## Main navigation
-- Dashboard
-- Projects
-- People
-- Documents
-- Right Hand AI
-- Settings
-
-## Project types
-- Vessel
-- Workshop
-- Inspection
-- Drone Inspection
-- Internal
-- Service
-
-## Drone inspections
-Drone inspection is part of each Project Hub. Each inspection can contain:
-- Project
-- Title and date
-- Operator
-- Status
-- Image count
-- Findings count
-- Notes
-
-Actual photo and video storage will use Azure Blob Storage in a later infrastructure release.
-
-## Existing functions retained
-- Project Hub
-- Workshop tasks inside projects
-- Crew Management
-- Document Center
-- Project archive, duplicate, trash and restore
-- Quotations and reports linked within projects
-
-## Important
-Data remains stored locally in each browser until Azure database and Blob Storage are connected.
+## Fixed
+- New projects now open Project Hub without a client-side crash
+- Drone inspection data is passed correctly to Project Hub
+- Drone Inspection tab is visible in Project Hub
+- Defensive handling if drone inspection data is missing
