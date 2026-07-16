@@ -130,18 +130,30 @@ const DEFAULT_BINDER_FOLDERS = [
 
 function getGreeting(name) {
   const hour = new Date().getHours();
-  if (hour < 12) return `Godmorgen ${name}. Velkommen til FSQ Command. Freja er online og klar til at hjælpe.`;
-  if (hour < 18) return `God eftermiddag ${name}. Velkommen tilbage til FSQ Command. Freja er online og klar til at hjælpe.`;
-  return `God aften ${name}. Velkommen til FSQ Command. Freja er online og klar til at hjælpe.`;
+  if (hour < 12) return `Good morning ${name}. Welcome to FSQ Command. Freja is online and ready to assist.`;
+  if (hour < 18) return `Good afternoon ${name}. Welcome back to FSQ Command. Freja is online and ready to assist.`;
+  return `Good evening ${name}. Welcome to FSQ Command. Freja is online and ready to assist.`;
 }
 
-function chooseDanishFemaleVoice() {
+function chooseEnglishFemaleVoice() {
   if (typeof window === 'undefined' || !('speechSynthesis' in window)) return null;
   const voices = window.speechSynthesis.getVoices();
-  const preferredNames = ['Helle', 'Sara', 'Sofie', 'Emma', 'Female', 'Christel'];
-  return voices.find(v => v.lang?.toLowerCase().startsWith('da') && preferredNames.some(n => v.name.toLowerCase().includes(n.toLowerCase())))
-    || voices.find(v => /helle|sara|sofie|sofia|emma|jenny|female/i.test(v.name))
-    || voices.find(v => v.lang?.toLowerCase().startsWith('da'))
+  const preferredNames = [
+    'Sonia',
+    'Libby',
+    'Jenny',
+    'Aria',
+    'Samantha',
+    'Victoria',
+    'Female'
+  ];
+  return voices.find(v =>
+      (v.lang?.toLowerCase().startsWith('en-gb') || v.lang?.toLowerCase().startsWith('en-us')) &&
+      preferredNames.some(n => v.name.toLowerCase().includes(n.toLowerCase()))
+    )
+    || voices.find(v => v.lang?.toLowerCase().startsWith('en-gb'))
+    || voices.find(v => v.lang?.toLowerCase().startsWith('en-us'))
+    || voices.find(v => /sonia|libby|jenny|aria|samantha|victoria|female/i.test(v.name))
     || voices[0]
     || null;
 }
@@ -150,10 +162,10 @@ function speak(text, enabled) {
   if (!enabled || typeof window === 'undefined' || !('speechSynthesis' in window)) return;
   window.speechSynthesis.cancel();
   const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = 'da-DK';
+  utterance.lang = 'en-GB';
   utterance.rate = 0.96;
   utterance.pitch = 1.02;
-  const voice = chooseDanishFemaleVoice();
+  const voice = chooseEnglishFemaleVoice();
   if (voice) utterance.voice = voice;
   window.speechSynthesis.speak(utterance);
 }
@@ -280,7 +292,7 @@ function AppShell({ session, onLogout }) {
       setActive('ai');
       setChat(current => [...current,{from:'user',text:transcript}]);
     }
-    speak(`Jeg hørte: ${transcript}`, voice);
+    speak(`I heard: ${transcript}`, voice);
   }
 
   const globalSpeech = useSpeechRecognition({
@@ -1135,13 +1147,13 @@ function AI({chat,setChat,voice,stats}) {
 
   function answerQuestion(q){
     const lower=q.toLowerCase();
-    let answer='Jeg har registreret din forespørgsel. Når den fælles database er tilkoblet, kan jeg arbejde på tværs af alle projekter og dokumenter.';
-    if(lower.includes('værksted')) answer=`Status for værkstedet: ${stats.openTasks} åbne opgaver, ${stats.lowStock} materialer under minimum og ${stats.machinesDown} maskiner kræver opmærksomhed.`;
-    else if(lower.includes('material')) answer=`Der er ${stats.lowStock} materialer under minimumslager.`;
-    else if(lower.includes('maskine')) answer=`Der er ${stats.machinesDown} maskiner til service eller ude af drift.`;
-    else if(lower.includes('hast')||lower.includes('kritisk')) answer=`Der er ${stats.urgent} hasteopgaver.`;
-    else if(lower.includes('projekt')) answer=`Der er ${stats.projects} aktive projekter i FSQ Command.`;
-    else if(lower.includes('hej')||lower.includes('godmorgen')||lower.includes('god aften')) answer='Hej. Jeg er Freja, og jeg er klar til at hjælpe dig.';
+    let answer='I have registered your request. When the shared database is connected, I will be able to work across all projects and documents.';
+    if(lower.includes('værksted')) answer=`Workshop status: ${stats.openTasks} open tasks, ${stats.lowStock} materials below minimum stock and ${stats.machinesDown} machines require attention.`;
+    else if(lower.includes('material')) answer=`There are ${stats.lowStock} materials below minimum stock.`;
+    else if(lower.includes('maskine')) answer=`There are ${stats.machinesDown} machines requiring service or currently unavailable.`;
+    else if(lower.includes('hast')||lower.includes('kritisk')) answer=`There are ${stats.urgent} urgent tasks.`;
+    else if(lower.includes('projekt')) answer=`There are ${stats.projects} active projects in FSQ Command.`;
+    else if(lower.includes('hej')||lower.includes('godmorgen')||lower.includes('god aften')) answer='Hello. I am Freja, and I am ready to assist you.';
     setChat(c=>[...c,{from:'ai',text:answer}]);
     speak(answer,voice);
   }
