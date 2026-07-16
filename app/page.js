@@ -11,7 +11,7 @@ const NAV = [
   ['dashboard', 'Dashboard', '◈'],
   ['projects', 'Projects', '◫'],
   ['crew', 'People', '◉'],
-  ['documents', 'Documents', '▱'],
+  ['documents', 'Project Binder', '▱'],
   ['ai', 'Right Hand AI', '◎'],
   ['admin', 'Settings', '⚙']
 ];
@@ -106,6 +106,26 @@ const DOCUMENT_CATEGORIES = [
   'Certificates',
   'Photos',
   'Other'
+];
+
+
+const DEFAULT_BINDER_FOLDERS = [
+  'Quotations',
+  'Purchase Orders',
+  'Drawings',
+  'Method Statements',
+  'Risk Assessments',
+  'WPQR',
+  'WPS',
+  'Certificates',
+  'NDT Reports',
+  'Service Reports',
+  'Packing Lists',
+  'Photos',
+  'Videos',
+  'Drone Inspection',
+  'QA / Punch List',
+  'Archive'
 ];
 
 function speak(text, enabled) {
@@ -214,7 +234,7 @@ function AppShell({ session, onLogout }) {
         {active === 'crew' && <CrewManagement people={people} setPeople={setPeople} projects={projects} />}
         {active === 'projects' && <Projects projects={projects} setProjects={setProjects} deletedProjects={deletedProjects} setDeletedProjects={setDeletedProjects} setActive={setActive} setActiveProjectId={setActiveProjectId} />}
         {active === 'projectHub' && <ProjectHub project={projects.find(p=>p.id===activeProjectId)} projects={projects} setProjects={setProjects} people={people} tasks={tasks} setTasks={setTasks} documents={documents} materials={materials} setMaterials={setMaterials} quotes={quotes} reports={reports} setActive={setActive} deletedProjects={deletedProjects} setDeletedProjects={setDeletedProjects} setActiveProjectId={setActiveProjectId} droneInspections={droneInspections} setDroneInspections={setDroneInspections} />}
-        {active === 'documents' && <DocumentCenter documents={documents} setDocuments={setDocuments} projects={projects} session={session} />}
+        {active === 'documents' && <ProjectBinder documents={documents} setDocuments={setDocuments} projects={projects} session={session} />}
         {active === 'admin' && <Admin people={people} setPeople={setPeople} machines={machines} setMachines={setMachines} materials={materials} setMaterials={setMaterials} />}
         {active === 'ai' && <AI chat={chat} setChat={setChat} voice={voice} stats={stats} />}
         {!['dashboard','crew','projects','projectHub','documents','admin','ai'].includes(active) && <ModulePlaceholder title={NAV.find(n=>n[0]===active)?.[1]} />}
@@ -851,144 +871,170 @@ function Reports({reports,setReports}) {
 }
 
 
-function DocumentCenter({ documents, setDocuments, projects, session }) {
-  const [search,setSearch]=useState('');
-  const [project,setProject]=useState('All');
-  const [category,setCategory]=useState('All');
-  const [uploadProject,setUploadProject]=useState(projects[0]?.name || 'General');
-  const [uploadCategory,setUploadCategory]=useState('Service Reports');
-  const [message,setMessage]=useState('');
 
-  const filtered = documents.filter(doc => {
-    const matchesSearch = `${doc.name} ${doc.project} ${doc.category}`.toLowerCase().includes(search.toLowerCase());
-    const matchesProject = project === 'All' || doc.project === project;
-    const matchesCategory = category === 'All' || doc.category === category;
-    return matchesSearch && matchesProject && matchesCategory;
+function ProjectBinder({ documents, setDocuments, projects, session }) {
+  const [selectedProject,setSelectedProject]=useState(projects[0]?.name || 'General');
+  const [selectedFolder,setSelectedFolder]=useState('Drawings');
+  const [search,setSearch]=useState('');
+  const [message,setMessage]=useState('');
+  const [newFolder,setNewFolder]=useState('');
+  const [customFolders,setCustomFolders]=useStoredState('fsq-v50-custom-folders',{});
+
+  const projectFolders=[...DEFAULT_BINDER_FOLDERS,...(customFolders[selectedProject]||[])];
+  const projectDocs=documents.filter(d=>d.project===selectedProject);
+  const filtered=projectDocs.filter(d=>{
+    const matchesFolder=d.category===selectedFolder;
+    const matchesSearch=`${d.name} ${d.category} ${d.project}`.toLowerCase().includes(search.toLowerCase());
+    return matchesFolder&&matchesSearch;
   });
 
-  function formatSize(bytes) {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
-    return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  function formatSize(bytes){
+    if(bytes<1024)return `${bytes} B`;
+    if(bytes<1024*1024)return `${Math.round(bytes/1024)} KB`;
+    return `${(bytes/1024/1024).toFixed(1)} MB`;
   }
 
-  function uploadFiles(event) {
-    const files = Array.from(event.target.files || []);
-    if (!files.length) return;
-
-    files.forEach(file => {
-      if (file.size > 2 * 1024 * 1024) {
-        setMessage(`${file.name} er større end 2 MB. Azure Storage bliver nødvendig til store filer.`);
+  function uploadFiles(event){
+    const files=Array.from(event.target.files||[]);
+    if(!files.length)return;
+    files.forEach(file=>{
+      if(file.size>2*1024*1024){
+        setMessage(`${file.name} is larger than 2 MB. Azure Blob Storage is required for larger files.`);
         return;
       }
-
-      const reader = new FileReader();
-      reader.onload = () => {
-        const existingVersions = documents
-          .filter(d => d.name.toLowerCase() === file.name.toLowerCase() && d.project === uploadProject)
-          .map(d => d.version || 1);
-        const version = existingVersions.length ? Math.max(...existingVersions) + 1 : 1;
-
-        const newDoc = {
-          id: Date.now() + Math.random(),
-          name: file.name,
-          project: uploadProject || 'General',
-          category: uploadCategory,
+      const reader=new FileReader();
+      reader.onload=()=>{
+        const versions=documents
+          .filter(d=>d.name.toLowerCase()===file.name.toLowerCase()&&d.project===selectedProject&&d.category===selectedFolder)
+          .map(d=>d.version||1);
+        const version=versions.length?Math.max(...versions)+1:1;
+        const doc={
+          id:Date.now()+Math.random(),
+          name:file.name,
+          project:selectedProject,
+          category:selectedFolder,
           version,
-          size: formatSize(file.size),
-          uploadedBy: session.name,
-          date: new Date().toISOString().slice(0,10),
-          dataUrl: reader.result
+          size:formatSize(file.size),
+          uploadedBy:session.name,
+          date:new Date().toISOString().slice(0,10),
+          dataUrl:reader.result,
+          status:'Active',
+          tags:[]
         };
-        setDocuments(current => [newDoc, ...current]);
-        setMessage(`${file.name} uploaded as version ${version}.`);
+        setDocuments(current=>[doc,...current]);
+        setMessage(`${file.name} uploaded to ${selectedFolder} as version ${version}.`);
       };
-      reader.onerror = () => setMessage(`Could not read ${file.name}.`);
+      reader.onerror=()=>setMessage(`Could not read ${file.name}.`);
       reader.readAsDataURL(file);
     });
-    event.target.value = '';
+    event.target.value='';
   }
 
-  function removeDocument(id) {
-    setDocuments(documents.filter(d => d.id !== id));
-  }
-
-  function openDocument(doc) {
-    if (!doc.dataUrl) {
-      setMessage('This demo document has metadata only. Upload the real file to open it.');
+  function openDocument(doc){
+    if(!doc.dataUrl){
+      setMessage('This demo item contains metadata only. Upload the real file to open it.');
       return;
     }
-    const link = document.createElement('a');
-    link.href = doc.dataUrl;
-    link.download = doc.name;
+    const link=document.createElement('a');
+    link.href=doc.dataUrl;
+    link.download=doc.name;
     link.click();
   }
 
-  return <div className="content">
-    <div className="sectionIntro documentIntro">
-      <div><h1>Document Center</h1><p>Project documents, reports, drawings, certificates and photos.</p></div>
-      <div className="documentCount"><strong>{documents.length}</strong><small>documents</small></div>
+  function removeDocument(id){
+    if(!window.confirm('Delete this document from the local Project Binder?'))return;
+    setDocuments(documents.filter(d=>d.id!==id));
+  }
+
+  function addFolder(){
+    const folder=newFolder.trim();
+    if(!folder)return;
+    if(projectFolders.includes(folder)){
+      setMessage('Folder already exists.');
+      return;
+    }
+    setCustomFolders({
+      ...customFolders,
+      [selectedProject]:[...(customFolders[selectedProject]||[]),folder]
+    });
+    setSelectedFolder(folder);
+    setNewFolder('');
+  }
+
+  const counts=DEFAULT_BINDER_FOLDERS.reduce((acc,folder)=>{
+    acc[folder]=projectDocs.filter(d=>d.category===folder).length;
+    return acc;
+  },{});
+
+  return <div className="content projectBinder">
+    <div className="sectionIntro binderIntro">
+      <div><h1>Project Binder</h1><p>Structured project documentation for every FSQ job.</p></div>
+      <div className="binderTotal"><strong>{projectDocs.length}</strong><small>documents in project</small></div>
     </div>
 
-    <section className="documentStats">
-      {DOCUMENT_CATEGORIES.slice(0,6).map(cat => <div className="summaryCard" key={cat}><small>{cat}</small><strong>{documents.filter(d=>d.category===cat).length}</strong></div>)}
+    <section className="binderProjectBar">
+      <label>Project<select value={selectedProject} onChange={e=>{setSelectedProject(e.target.value);setSelectedFolder('Drawings')}}>
+        <option>General</option>
+        {projects.map(p=><option key={p.id}>{p.name}</option>)}
+      </select></label>
+      <input placeholder="Search in selected folder..." value={search} onChange={e=>setSearch(e.target.value)} />
+      <label className="binderUpload">Upload files<input type="file" multiple onChange={uploadFiles}/></label>
+      <button onClick={()=>setMessage('Archive workflow will be connected to Azure in the next infrastructure step.')}>Archive</button>
     </section>
 
-    <section className="panel uploadPanel">
-      <div>
-        <small>Project</small>
-        <select value={uploadProject} onChange={e=>setUploadProject(e.target.value)}>
-          <option>General</option>
-          {projects.map(p=><option key={p.id}>{p.name}</option>)}
-        </select>
-      </div>
-      <div>
-        <small>Category</small>
-        <select value={uploadCategory} onChange={e=>setUploadCategory(e.target.value)}>
-          {DOCUMENT_CATEGORIES.map(cat=><option key={cat}>{cat}</option>)}
-        </select>
-      </div>
-      <label className="uploadButton">
-        Upload files
-        <input type="file" multiple onChange={uploadFiles} />
-      </label>
-      <span className="uploadNote">Local demo limit: 2 MB per file</span>
-    </section>
+    {message&&<div className="documentMessage">{message}</div>}
 
-    {message && <div className="documentMessage">{message}</div>}
+    <section className="binderLayout">
+      <aside className="panel binderFolders">
+        <div className="panelHead"><h3>{selectedProject}</h3><span>{projectFolders.length} folders</span></div>
+        {projectFolders.map(folder=><button key={folder} className={selectedFolder===folder?'active':''} onClick={()=>setSelectedFolder(folder)}>
+          <span>{folder}</span><em>{projectDocs.filter(d=>d.category===folder).length}</em>
+        </button>)}
+        <div className="newFolderBox">
+          <input placeholder="New folder" value={newFolder} onChange={e=>setNewFolder(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addFolder()}/>
+          <button onClick={addFolder}>Add</button>
+        </div>
+      </aside>
 
-    <section className="panel documentFilters">
-      <input placeholder="Search document, vessel, project or category" value={search} onChange={e=>setSearch(e.target.value)} />
-      <select value={project} onChange={e=>setProject(e.target.value)}>
-        <option>All</option><option>General</option>{projects.map(p=><option key={p.id}>{p.name}</option>)}
-      </select>
-      <select value={category} onChange={e=>setCategory(e.target.value)}>
-        <option>All</option>{DOCUMENT_CATEGORIES.map(cat=><option key={cat}>{cat}</option>)}
-      </select>
-    </section>
+      <main className="panel binderMain">
+        <div className="binderHeader">
+          <div><small>PROJECT BINDER / {selectedProject.toUpperCase()}</small><h2>{selectedFolder}</h2></div>
+          <div className="binderActions">
+            <label className="binderUpload compact">Upload<input type="file" multiple onChange={uploadFiles}/></label>
+            <button onClick={()=>setSearch('')}>Clear search</button>
+          </div>
+        </div>
 
-    <section className="documentLayout">
-      <div className="panel folderTree">
-        <div className="panelHead"><h3>Projects</h3></div>
-        <button className={project==='All'?'activeFolder':''} onClick={()=>setProject('All')}>All documents <span>{documents.length}</span></button>
-        <button className={project==='General'?'activeFolder':''} onClick={()=>setProject('General')}>General <span>{documents.filter(d=>d.project==='General').length}</span></button>
-        {projects.map(p=><button key={p.id} className={project===p.name?'activeFolder':''} onClick={()=>setProject(p.name)}>{p.name}<span>{documents.filter(d=>d.project===p.name).length}</span></button>)}
-      </div>
+        <div className="binderTableHeader">
+          <span>Name</span><span>Version</span><span>Size</span><span>Uploaded</span><span>Status</span><span/>
+        </div>
 
-      <div className="panel documentTable">
-        <div className="documentHeader"><span>Name</span><span>Project</span><span>Category</span><span>Version</span><span>Date</span><span /></div>
-        {filtered.length ? filtered.map(doc=><div className="documentRow" key={doc.id}>
-          <button className="documentName" onClick={()=>openDocument(doc)}><b>{doc.name}</b><small>{doc.size} · Uploaded by {doc.uploadedBy}</small></button>
-          <span>{doc.project}</span>
-          <span>{doc.category}</span>
+        {filtered.length?filtered.map(doc=><div className="binderRow" key={doc.id}>
+          <button className="binderDocName" onClick={()=>openDocument(doc)}>
+            <span className="fileIcon">{doc.name.toLowerCase().endsWith('.pdf')?'PDF':doc.name.toLowerCase().match(/\.(jpg|jpeg|png|webp)$/)?'IMG':'FILE'}</span>
+            <div><b>{doc.name}</b><small>{doc.uploadedBy} · {doc.project}</small></div>
+          </button>
           <span className="versionBadge">V{doc.version}</span>
+          <span>{doc.size}</span>
           <span>{doc.date}</span>
+          <span className="statusBadge">{doc.status||'Active'}</span>
           <button className="deleteDocument" onClick={()=>removeDocument(doc.id)}>×</button>
-        </div>) : <div className="empty">No documents match the selected filters.</div>}
-      </div>
+        </div>):<div className="binderEmpty">
+          <div className="binderEmptyIcon">▱</div>
+          <h3>No documents in {selectedFolder}</h3>
+          <p>Upload files or drag them here in the Azure-backed version.</p>
+        </div>}
+      </main>
+    </section>
+
+    <section className="binderOverview">
+      {DEFAULT_BINDER_FOLDERS.map(folder=><button key={folder} onClick={()=>setSelectedFolder(folder)}>
+        <small>{folder}</small><strong>{counts[folder]||0}</strong>
+      </button>)}
     </section>
   </div>
 }
+
 
 function Admin({people,setPeople,machines,setMachines,materials,setMaterials}) {
   function cyclePerson(id){const states=['Office','Workshop','Offshore','Travel','Course','Free'];setPeople(people.map(p=>p.id===id?{...p,location:states[(states.indexOf(p.location)+1)%states.length]}:p))}

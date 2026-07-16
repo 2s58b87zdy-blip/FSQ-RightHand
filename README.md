@@ -1,22 +1,38 @@
-# FSQ Right Hand v4.0.2
+# FSQ Right Hand v5.0
 
-Corrections collected during testing.
+Project Binder foundation.
 
-## Included corrections
-- Calendar opens when Start Date or Deadline is selected
-- Start Date defaults to today
-- Deadline cannot be before Start Date
-- Project Priority: Low, Medium, High, Critical
-- Project health traffic light: Green, Yellow, Red
-- Automatic project numbers
-- Project search
-- Project filters renamed to Vessel, Workshop, Inspection, Drone Inspection, Internal and Service
-- More information on project cards
-- Complete, Archive, Reopen, Duplicate and Trash actions retained
-- Add Material form inside each Project Hub
-- Project-specific materials with quantity, unit, supplier, purchase price and remarks
-- Materials can be removed
-- Project tasks now move through statuses when clicked
+## Included in Step 1
+- Documents renamed to Project Binder
+- Standard folder structure for every project
+- Project selector
+- Folder navigation
+- Search within selected folder
+- Local upload up to 2 MB per file
+- Automatic version number for repeated filenames
+- Download and delete uploaded files
+- New custom folder creation
+- Folder document counts
+- Overview of all standard binder folders
+
+## Standard folders
+- Quotations
+- Purchase Orders
+- Drawings
+- Method Statements
+- Risk Assessments
+- WPQR
+- WPS
+- Certificates
+- NDT Reports
+- Service Reports
+- Packing Lists
+- Photos
+- Videos
+- Drone Inspection
+- QA / Punch List
+- Archive
 
 ## Important
-Data is still stored locally in the browser. Shared Azure database and Blob Storage are later steps.
+This remains a browser-local prototype.
+Azure Blob Storage is required for shared files, larger uploads, backup, drag-and-drop and multi-user access.
