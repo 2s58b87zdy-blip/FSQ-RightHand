@@ -3,19 +3,24 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 const ROLE_DEFINITIONS = {
-  Owner: ['manage_users','manage_permissions','view_all_projects','approve_tack','approve_final','complete_jobs'],
+  Owner: ['manage_users','manage_permissions','manage_folder_access','view_all_projects','approve_tack','approve_final','complete_jobs','view_finance','system_health'],
+  'Co-Owner': ['manage_users','manage_permissions','manage_folder_access','view_all_projects','approve_tack','approve_final','complete_jobs','view_finance','system_health'],
   'Project Manager': ['view_all_projects','approve_tack','approve_final','complete_jobs'],
   Supervisor: ['view_all_projects'],
-  Engineer: ['view_all_projects'],
-  'QA Inspector': ['view_all_projects'],
+  Engineer: ['view_all_projects','edit_engineering','create_reports'],
+  'QA Inspector': ['view_all_projects','approve_tack','approve_final'],
   Technician: ['view_assigned_jobs','upload_photos','update_assigned_jobs']
 };
 
-const APP_VERSION = '7.0.0';
+const FOLDER_ACCESS_LEVELS = ['No Access','Read','Edit','Full Control'];
+const MANAGED_FOLDERS = ['Projects','Workshop','Marine','Drawings','Procedures','QA / QC','Reports','Drone','Certificates','Templates','Finance','HR','Management','Contracts','Customers'];
+const DEFAULT_FOLDER_ACCESS = Object.fromEntries(MANAGED_FOLDERS.map(folder=>[folder,'No Access']));
+
+const APP_VERSION = '7.1.0';
 
 const USER_REGISTRY_DEFAULTS = [
-  { id: 1, name: 'Flemming', role: 'Owner', password: 'fsq2027', active: true, permissions: ROLE_DEFINITIONS.Owner },
-  { id: 2, name: 'Jakob', role: 'Project Manager', password: 'fsq2027', active: true, permissions: ROLE_DEFINITIONS['Project Manager'] },
+  { id: 1, name: 'Flemming', role: 'Owner', password: 'fsq2027', active: true, permissions: ROLE_DEFINITIONS.Owner, folderAccess: Object.fromEntries(MANAGED_FOLDERS.map(folder=>[folder,'Full Control'])) },
+  { id: 2, name: 'Jakob', role: 'Co-Owner', password: 'fsq2027', active: true, permissions: ROLE_DEFINITIONS['Co-Owner'], folderAccess: Object.fromEntries(MANAGED_FOLDERS.map(folder=>[folder,'Full Control'])) },
   { id: 3, name: 'Tommy', role: 'Technician', password: 'fsq2027', active: true, permissions: ROLE_DEFINITIONS.Technician },
   { id: 4, name: 'Anders', role: 'Technician', password: 'fsq2027', active: true, permissions: ROLE_DEFINITIONS.Technician },
   { id: 5, name: 'Mathias', role: 'Technician', password: 'fsq2027', active: true, permissions: ROLE_DEFINITIONS.Technician },
@@ -37,7 +42,9 @@ function normalizeUserRegistry(value) {
     role: user.role || 'Technician',
     password: user.password || 'fsq2027',
     active: user.active !== false,
-    permissions: Array.isArray(user.permissions) ? user.permissions : [...(ROLE_DEFINITIONS[user.role] || [])]
+    permissions: ['Flemming','Jakob'].includes(String(user.name||'').trim()) ? [...ROLE_DEFINITIONS[String(user.name||'').trim()==='Flemming'?'Owner':'Co-Owner']] : (Array.isArray(user.permissions) ? user.permissions : [...(ROLE_DEFINITIONS[user.role] || [])]),
+    role: String(user.name||'').trim()==='Flemming' ? 'Owner' : (String(user.name||'').trim()==='Jakob' ? 'Co-Owner' : (user.role || 'Technician')),
+    folderAccess: ['Flemming','Jakob'].includes(String(user.name||'').trim()) ? Object.fromEntries(MANAGED_FOLDERS.map(folder=>[folder,'Full Control'])) : {...DEFAULT_FOLDER_ACCESS,...(user.folderAccess||{})}
   })).filter(user => user.name);
   return cleaned.length ? cleaned : USER_REGISTRY_DEFAULTS;
 }
@@ -53,7 +60,9 @@ const NAV = [
   ['projects', 'Projects', '◫'],
   ['crew', 'People', '◉'],
   ['documents', 'Project Binder', '▱'],
+  ['planner', 'Operations Planner', '▦'],
   ['ai', 'ATLAS AI', '◎'],
+  ['health', 'System Health', '◌'],
   ['admin', 'Settings', '⚙']
 ];
 
@@ -213,12 +222,12 @@ function canManagePermissions(session) {
     .trim()
     .toLowerCase();
 
-  return ['flemming', 'flemming bach'].includes(name);
+  return ['flemming', 'flemming bach', 'jakob', 'jakob kjær danielsen', 'jakob kjaer danielsen'].includes(name);
 }
 
 function requirePermissionManager(session) {
   if (canManagePermissions(session)) return true;
-  alert('Only Flemming can assign or change user permissions.');
+  alert('Only Flemming or Jakob can assign or change user permissions.');
   return false;
 }
 
@@ -376,6 +385,8 @@ function AppShell({ session, onLogout, users, setUsers }) {
     if (command.includes('projektmappe') || command.includes('dokument')) setActive('documents');
     else if (command.includes('projekt')) setActive('projects');
     else if (command.includes('medarbejder') || command.includes('personale') || command.includes('folk')) setActive('crew');
+    else if (command.includes('plan') || command.includes('uge')) setActive('planner');
+    else if (command.includes('system') || command.includes('health') || command.includes('status')) setActive('health');
     else if (command.includes('indstilling')) setActive('admin');
     else if (command.includes('atlas') || command.includes('assistent') || command.includes('ai')) setActive('ai');
     else if (command.includes('dashboard') || command.includes('forside')) setActive('dashboard');
@@ -430,9 +441,11 @@ function AppShell({ session, onLogout, users, setUsers }) {
         {active === 'projects' && <Projects projects={projects} setProjects={setProjects} deletedProjects={deletedProjects} setDeletedProjects={setDeletedProjects} setActive={setActive} setActiveProjectId={setActiveProjectId} tasks={tasks} setTasks={setTasks} people={people} users={users} />}
         {active === 'projectHub' && <ProjectHub session={session} users={users} project={projects.find(p=>p.id===activeProjectId)} projects={projects} setProjects={setProjects} people={people} tasks={tasks} setTasks={setTasks} documents={documents} materials={materials} setMaterials={setMaterials} quotes={quotes} reports={reports} setActive={setActive} deletedProjects={deletedProjects} setDeletedProjects={setDeletedProjects} setActiveProjectId={setActiveProjectId} droneInspections={droneInspections} setDroneInspections={setDroneInspections} />}
         {active === 'documents' && <ProjectBinder documents={documents} setDocuments={setDocuments} projects={projects} session={session} />}
+        {active === 'planner' && <OperationsPlanner people={people} projects={projects} />}
+        {active === 'health' && <SystemHealth session={session} users={users} projects={projects} documents={documents} />}
         {active === 'admin' && <Admin session={session} users={users} setUsers={setUsers} people={people} setPeople={setPeople} machines={machines} setMachines={setMachines} materials={materials} setMaterials={setMaterials} />}
         {active === 'ai' && <AI chat={chat} setChat={setChat} voice={voice} stats={stats} />}
-        {!['dashboard','myjobs','approvals','crew','projects','projectHub','documents','admin','ai'].includes(active) && <ModulePlaceholder title={NAV.find(n=>n[0]===active)?.[1]} />}
+        {!['dashboard','myjobs','approvals','crew','projects','projectHub','documents','planner','health','admin','ai'].includes(active) && <ModulePlaceholder title={NAV.find(n=>n[0]===active)?.[1]} />}
       </main>
     </div>
   );
@@ -1717,6 +1730,42 @@ function ProjectBinder({ documents, setDocuments, projects, session }) {
 }
 
 
+
+function getIsoWeek(date){
+  const d=new Date(Date.UTC(date.getFullYear(),date.getMonth(),date.getDate()));
+  d.setUTCDate(d.getUTCDate()+4-(d.getUTCDay()||7));
+  const yearStart=new Date(Date.UTC(d.getUTCFullYear(),0,1));
+  return Math.ceil((((d-yearStart)/86400000)+1)/7);
+}
+function addDays(date,days){const d=new Date(date);d.setDate(d.getDate()+days);return d;}
+function mondayOf(date){const d=new Date(date);const day=d.getDay()||7;d.setDate(d.getDate()-day+1);d.setHours(0,0,0,0);return d;}
+
+function OperationsPlanner({people,projects}){
+  const [weeks,setWeeks]=useState(4);
+  const [offset,setOffset]=useState(0);
+  const [entries,setEntries]=useStoredState('fsq-v71-planner',[]);
+  const start=addDays(mondayOf(new Date()),offset*7);
+  const days=Array.from({length:weeks*7},(_,i)=>addDays(start,i));
+  const dayNames=['Man','Tir','Ons','Tor','Fre','Lør','Søn'];
+  function edit(person,date){
+    const key=`${person}|${date.toISOString().slice(0,10)}`;
+    const current=entries.find(e=>e.key===key)?.text||'';
+    const text=window.prompt(`Plan for ${person} - ${date.toLocaleDateString('da-DK')}`,current);
+    if(text===null)return;
+    setEntries([...entries.filter(e=>e.key!==key),...(text.trim()?[{key,person,date:date.toISOString().slice(0,10),text:text.trim()}]:[])]);
+  }
+  return <div className="content plannerPage"><div className="sectionIntro plannerIntro"><div><h1>Operations Planner</h1><p>Planlæg alle medarbejdere med 7 dage i hver uge.</p></div><div className="plannerControls"><button onClick={()=>setOffset(offset-weeks)}>←</button><select value={weeks} onChange={e=>setWeeks(Number(e.target.value))}>{[1,2,4,8,12].map(n=><option key={n} value={n}>{n} uger</option>)}</select><button onClick={()=>setOffset(0)}>I dag</button><button onClick={()=>setOffset(offset+weeks)}>→</button></div></div>
+  <div className="plannerScroll"><div className="plannerGrid" style={{gridTemplateColumns:`170px repeat(${days.length},minmax(92px,1fr))`}}><div className="plannerCorner">Medarbejder</div>{days.map((d,i)=><div className={`plannerDayHead ${i%7>=5?'weekend':''}`} key={d.toISOString()}><b>{dayNames[i%7]}</b><span>{d.getDate()}/{d.getMonth()+1}</span><small>Uge {getIsoWeek(d)}</small></div>)}{people.map(person=><div className="plannerRow" key={person.id} style={{display:'contents'}}><div className="plannerPerson"><b>{person.name}</b><small>{person.location}</small></div>{days.map((d,i)=>{const key=`${person.name}|${d.toISOString().slice(0,10)}`;const entry=entries.find(e=>e.key===key);return <button className={`plannerCell ${i%7>=5?'weekend':''} ${entry?'booked':''}`} key={key} onClick={()=>edit(person.name,d)} title="Klik for at planlægge">{entry?.text||'+'}</button>})}</div>)}</div></div>
+  <div className="plannerLegend"><span>Blå = planlagt</span><span>Alle uger viser mandag-søndag</span><span>{projects.length} projekter tilgængelige</span></div></div>
+}
+
+function SystemHealth({session,users,projects,documents}){
+  const allowed=canManagePermissions(session);
+  if(!allowed)return <div className="content"><div className="sectionIntro"><h1>System Health</h1><p>Kun Flemming og Jakob har adgang til systemstatus.</p></div></div>;
+  const items=[['FSQ Command','Operational'],['Azure App Service','Operational'],['Azure Blob Storage','Configured'],['Shared Database','Planned for v8.0'],['User Registry',`${users.filter(u=>u.active).length} active users`],['Project Data',`${projects.length} projects`],['Document Index',`${documents.length} documents`],['Application Version',`v${APP_VERSION}`]];
+  return <div className="content healthPage"><div className="sectionIntro"><div><h1>System Health</h1><p>Administratorstatus for FSQ Command.</p></div><div className="healthOverall"><i/> ALL SYSTEMS OPERATIONAL</div></div><div className="healthGrid">{items.map(([name,status])=><article key={name}><div className="healthIcon">◉</div><small>{name}</small><strong>{status}</strong><span>{new Date().toLocaleString('da-DK')}</span></article>)}</div><section className="panel healthNote"><h3>Database status</h3><p>Version 7.1 bruger fortsat browserens lokale datalager til driftsdata. Den fælles Azure-database er planlagt til version 8.0. Azure Blob Storage bruges fortsat til filer og billeder, når miljøvariablerne er konfigureret.</p></section></div>
+}
+
 function Admin({session,users,setUsers,people,setPeople,machines,setMachines,materials,setMaterials}) {
   const [newUser,setNewUser]=useState({name:'',role:'Technician',password:'fsq2027'});
   const [message,setMessage]=useState('');
@@ -1725,22 +1774,22 @@ function Admin({session,users,setUsers,people,setPeople,machines,setMachines,mat
 
   function cyclePerson(id){const states=['Office','Workshop','Offshore','Travel','Course','Free'];setPeople(people.map(p=>p.id===id?{...p,location:states[(states.indexOf(p.location)+1)%states.length]}:p))}
   function changeRole(id,role){
-    if(!owner){setMessage('Only Flemming can assign roles and permissions.');return;}
+    if(!owner){setMessage('Only Flemming or Jakob can assign roles and permissions.');return;}
     setUsers(users.map(user=>user.id===id?{...user,role,permissions:[...(ROLE_DEFINITIONS[role]||[])]}:user));
     setMessage('Role and default permissions updated.');
   }
   function togglePermission(id,permission){
-    if(!owner){setMessage('Only Flemming can assign roles and permissions.');return;}
+    if(!owner){setMessage('Only Flemming or Jakob can assign roles and permissions.');return;}
     setUsers(users.map(user=>user.id===id?{...user,permissions:(user.permissions||[]).includes(permission)?(user.permissions||[]).filter(item=>item!==permission):[...(user.permissions||[]),permission]}:user));
   }
   function toggleActive(id){
-    if(!owner){setMessage('Only Flemming can lock or unlock users.');return;}
+    if(!owner){setMessage('Only Flemming or Jakob can lock or unlock users.');return;}
     const target=users.find(user=>user.id===id);
     if(target?.name==='Flemming'){setMessage('The owner account cannot be locked.');return;}
     setUsers(users.map(user=>user.id===id?{...user,active:!user.active}:user));
   }
   function addUser(){
-    if(!owner){setMessage('Only Flemming can create users.');return;}
+    if(!owner){setMessage('Only Flemming or Jakob can create users.');return;}
     const name=newUser.name.trim();
     if(!name){setMessage('Enter a user name.');return;}
     if(users.some(user=>user.name.toLowerCase()===name.toLowerCase())){setMessage('This user already exists.');return;}
@@ -1749,8 +1798,13 @@ function Admin({session,users,setUsers,people,setPeople,machines,setMachines,mat
     setNewUser({name:'',role:'Technician',password:'fsq2027'});
     setMessage('User created.');
   }
+  function changeFolderAccess(id,folder,level){
+    if(!owner){setMessage('Only Flemming or Jakob can manage folder access.');return;}
+    setUsers(users.map(user=>user.id===id?{...user,folderAccess:{...DEFAULT_FOLDER_ACCESS,...(user.folderAccess||{}),[folder]:level}}:user));
+    setMessage('Folder access updated.');
+  }
   function deleteUser(id){
-    if(!owner){setMessage('Only Flemming can delete users.');return;}
+    if(!owner){setMessage('Only Flemming or Jakob can delete users.');return;}
     const target=users.find(user=>user.id===id);
     if(target?.name==='Flemming'){setMessage('The owner account cannot be deleted.');return;}
     if(window.confirm(`Delete ${target?.name}?`)) setUsers(users.filter(user=>user.id!==id));
@@ -1759,14 +1813,14 @@ function Admin({session,users,setUsers,people,setPeople,machines,setMachines,mat
   const allPermissions=[...new Set(Object.values(ROLE_DEFINITIONS).flat())];
   return <div className="content"><div className="sectionIntro"><div><h1>Users & Permissions</h1><p>Phase 2 access control for FSQ Command.</p></div><div className={`ownerBadge ${owner?'ok':'locked'}`}>{owner?'OWNER CONTROL: ACTIVE':'READ ONLY'}</div></div>
     {message&&<div className="documentMessage">{message}</div>}
-    {!owner&&<div className="permissionWarning">Only Flemming can create users, change roles, assign permissions, lock accounts or delete users.</div>}
+    {!owner&&<div className="permissionWarning">Only Flemming or Jakob can create users, change roles, assign permissions, manage folder access, lock accounts or delete users.</div>}
     <section className="panel userAdminPanel">
       <div className="panelHead"><h3>User accounts</h3><span>{users.filter(user=>user.active).length} active</span></div>
       {owner&&<div className="newUserForm"><input placeholder="Name" value={newUser.name} onChange={e=>setNewUser({...newUser,name:e.target.value})}/><select value={newUser.role} onChange={e=>setNewUser({...newUser,role:e.target.value})}>{roles.map(role=><option key={role}>{role}</option>)}</select><input type="password" value={newUser.password} onChange={e=>setNewUser({...newUser,password:e.target.value})}/><button onClick={addUser}>Create user</button></div>}
       <div className="userPermissionList">{users.map(user=><article className={`userPermissionCard ${!user.active?'inactive':''}`} key={user.id}>
-        <div className="userPermissionTop"><div className="avatar">{user.name[0]}</div><div><h3>{user.name}</h3><small>{user.active?'Active':'Locked'} · {user.role}</small></div><select disabled={!owner||user.name==='Flemming'} value={user.role} onChange={e=>changeRole(user.id,e.target.value)}>{roles.map(role=><option key={role}>{role}</option>)}</select></div>
-        <div className="permissionGrid">{allPermissions.map(permission=><label key={permission}><input type="checkbox" disabled={!owner||user.name==='Flemming'} checked={(user.permissions||[]).includes(permission)} onChange={()=>togglePermission(user.id,permission)}/><span>{permission.replaceAll('_',' ')}</span></label>)}</div>
-        <div className="userActions"><button disabled={!owner||user.name==='Flemming'} onClick={()=>toggleActive(user.id)}>{user.active?'Lock user':'Unlock user'}</button><button className="dangerAction" disabled={!owner||user.name==='Flemming'} onClick={()=>deleteUser(user.id)}>Delete</button></div>
+        <div className="userPermissionTop"><div className="avatar">{user.name[0]}</div><div><h3>{user.name}</h3><small>{user.active?'Active':'Locked'} · {user.role}</small></div><select disabled={!owner||['Flemming','Jakob'].includes(user.name)} value={user.role} onChange={e=>changeRole(user.id,e.target.value)}>{roles.map(role=><option key={role}>{role}</option>)}</select></div>
+        <div className="permissionGrid">{allPermissions.map(permission=><label key={permission}><input type="checkbox" disabled={!owner||['Flemming','Jakob'].includes(user.name)} checked={(user.permissions||[]).includes(permission)} onChange={()=>togglePermission(user.id,permission)}/><span>{permission.replaceAll('_',' ')}</span></label>)}</div><div className="folderAccessGrid"><h4>Folder access</h4>{MANAGED_FOLDERS.map(folder=><label key={folder}><span>{folder}</span><select disabled={!owner||['Flemming','Jakob'].includes(user.name)} value={(user.folderAccess||DEFAULT_FOLDER_ACCESS)[folder]||'No Access'} onChange={e=>changeFolderAccess(user.id,folder,e.target.value)}>{FOLDER_ACCESS_LEVELS.map(level=><option key={level}>{level}</option>)}</select></label>)}</div>
+        <div className="userActions"><button disabled={!owner||['Flemming','Jakob'].includes(user.name)} onClick={()=>toggleActive(user.id)}>{user.active?'Lock user':'Unlock user'}</button><button className="dangerAction" disabled={!owner||['Flemming','Jakob'].includes(user.name)} onClick={()=>deleteUser(user.id)}>Delete</button></div>
       </article>)}</div>
     </section>
     <div className="dashboardGrid adminSupportGrid"><div className="panel"><h3>Personnel location</h3>{people.map(p=><button className="listRow" key={p.id} onClick={()=>cyclePerson(p.id)}><div><b>{p.name}</b><small>{p.task}</small></div><em>{p.location}</em></button>)}</div><div className="panel"><h3>System resets</h3><button className="primaryBtn" onClick={()=>setMachines(DEFAULT_MACHINES)}>Restore machines</button><button className="primaryBtn" onClick={()=>setMaterials(DEFAULT_MATERIALS)}>Restore materials</button></div></div>

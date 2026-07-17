@@ -1,15 +1,16 @@
-# FSQ Command v7.0 - ATLAS Operations Center
+# FSQ Command v7.1.0
 
-Azure-ready Next.js application.
+## Included
+- Flemming Owner and Jakob Co-Owner with equal administration rights
+- Stefan Engineer role with reduced rights
+- Users & Permissions with per-folder access levels
+- Operations Planner with 7 days per week and 1/2/4/8/12 week views
+- System Health administrator page
+- ATLAS branding
+- Existing workshop QC, project hub and Azure Blob upload functions
 
-## Main changes
-- Freja renamed to ATLAS throughout the interface and voice assistant
-- Glowing FSQ logo on login and sidebar
-- ATLAS operations panel on the dashboard
-- Existing project, user permission, Workshop QC and Azure Blob photo workflows retained
-- GitHub Actions deployment for Azure App Service retained
+## Important data note
+Version 7.1 still stores most operational data in browser localStorage. Azure Blob Storage is used for uploaded files/photos when configured. Shared Azure database is planned for version 8.0.
 
-## Azure
-Set these App Service environment variables when using photo upload:
-- AZURE_STORAGE_CONNECTION_STRING
-- AZURE_STORAGE_CONTAINER (optional, defaults to fsq-documents)
+## Deploy
+Upload the complete contents to the GitHub repository and allow the existing GitHub Actions workflow to deploy to Azure App Service.
