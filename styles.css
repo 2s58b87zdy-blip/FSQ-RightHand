@@ -1,0 +1,52 @@
+name: Build and deploy FSQ Right Hand
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Hent kode
+        uses: actions/checkout@v4
+
+      - name: Installer Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org/"
+
+      - name: Installer pakker
+        env:
+          NPM_CONFIG_REGISTRY: "https://registry.npmjs.org/"
+        run: |
+          rm -f package-lock.json
+          rm -f .npmrc
+          npm config delete proxy || true
+          npm config delete https-proxy || true
+          npm config set registry https://registry.npmjs.org/
+          npm install --registry=https://registry.npmjs.org/
+
+      - name: Byg appen
+        run: npm run build
+
+      - name: Kopier CSS, JavaScript og public-filer til standalone
+        run: |
+          test -f .next/standalone/server.js
+          mkdir -p .next/standalone/.next/static
+          cp -a .next/static/. .next/standalone/.next/static/
+          if [ -d "public" ]; then
+            mkdir -p .next/standalone/public
+            cp -a public/. .next/standalone/public/
+          fi
+
+      - name: Deploy hele projektet til Azure
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: "fsq-right-hand"
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          package: "."
