@@ -11,7 +11,9 @@ const ROLE_DEFINITIONS = {
   Technician: ['view_assigned_jobs','upload_photos','update_assigned_jobs']
 };
 
-const DEFAULT_USERS = [
+const APP_VERSION = '6.0.3.3';
+
+const USER_REGISTRY_DEFAULTS = [
   { id: 1, name: 'Flemming', role: 'Owner', password: 'fsq2027', active: true, permissions: ROLE_DEFINITIONS.Owner },
   { id: 2, name: 'Jakob', role: 'Project Manager', password: 'fsq2027', active: true, permissions: ROLE_DEFINITIONS['Project Manager'] },
   { id: 3, name: 'Tommy', role: 'Technician', password: 'fsq2027', active: true, permissions: ROLE_DEFINITIONS.Technician },
@@ -23,6 +25,26 @@ const DEFAULT_USERS = [
   { id: 9, name: 'QA', role: 'QA Inspector', password: 'fsq2027', active: true, permissions: ROLE_DEFINITIONS['QA Inspector'] },
   { id: 10, name: 'Supervisor', role: 'Supervisor', password: 'fsq2027', active: true, permissions: ROLE_DEFINITIONS.Supervisor }
 ];
+
+// Compatibility guard only. New code must use the user registry passed through props.
+const USERS = USER_REGISTRY_DEFAULTS;
+
+function normalizeUserRegistry(value) {
+  if (!Array.isArray(value)) return USER_REGISTRY_DEFAULTS;
+  const cleaned = value.filter(Boolean).map((user, index) => ({
+    id: user.id ?? `user-${index + 1}`,
+    name: String(user.name || '').trim(),
+    role: user.role || 'Technician',
+    password: user.password || 'fsq2027',
+    active: user.active !== false,
+    permissions: Array.isArray(user.permissions) ? user.permissions : [...(ROLE_DEFINITIONS[user.role] || [])]
+  })).filter(user => user.name);
+  return cleaned.length ? cleaned : USER_REGISTRY_DEFAULTS;
+}
+
+function getActiveTechnicians(users) {
+  return normalizeUserRegistry(users).filter(user => user.active !== false && user.role === 'Technician');
+}
 
 const NAV = [
   ['dashboard', 'Dashboard', '◈'],
@@ -388,7 +410,7 @@ function AppShell({ session, onLogout, users, setUsers }) {
   return (
     <div className="appShell">
       <aside className="sidebar">
-        <div className="logo"><b>FSQ</b><span>COMMAND</span></div>
+        <div className="logo"><b>FSQ</b><span>COMMAND</span><small>v{APP_VERSION}</small></div>
         <div className="online"><i/> ALL SYSTEMS OPERATIONAL</div>
         <nav>{visibleNav.map(([id, label, icon]) => <button key={id} onClick={() => setActive(id)} className={active === id ? 'active' : ''}><span>{icon}</span>{label}</button>)}</nav>
         <div className="userCard"><div className="avatar">{session.name[0]}</div><div><b>{session.name}</b><small>{session.role}</small></div><button onClick={onLogout}>↗</button></div>
@@ -1279,7 +1301,7 @@ function ProjectHub({session,users,project,projects,setProjects,people,tasks,set
     {tab==='crew'&&<section className="panel"><div className="peopleCards">{crew.length?crew.map(p=><article key={p.id}><div className="personHead"><div className="avatar">{p.name[0]}</div><div><h3>{p.name}</h3><small>{p.location} · {p.status}</small></div></div><p>{p.task}</p></article>):<div className="empty">Assign crew in People.</div>}</div></section>}
     {tab==='documents'&&<section className="panel"><div className="panelHead"><h3>Project documents</h3><button onClick={()=>setActive('documents')}>Open Document Center</button></div>{projectDocs.length?projectDocs.map(d=><div className="documentRow hubDoc" key={d.id}><div><b>{d.name}</b><small>{d.category} · V{d.version}</small></div><span>{d.date}</span></div>):<div className="empty">No documents uploaded.</div>}</section>}
     {tab==='drone'&&<DroneInspectionPanel project={project} inspections={projectDrone} allInspections={droneInspections||[]} setInspections={setDroneInspections}/>}
-    {tab==='tasks'&&<section className="panel"><div className="hubTaskAdd taskAssignBar"><input placeholder="New project task" value={newTask} onChange={e=>setNewTask(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addTask()}/><select value={newAssignee} onChange={e=>setNewAssignee(e.target.value)}>{people.filter(p=>users.some(user=>user.name===p.name && user.role==='Technician' && user.active!==false)).map(p=><option key={p.id}>{p.name}</option>)}</select><button onClick={addTask}>Assign task</button></div><div className="projectJobTable">{projectTasks.map(t=><div key={t.id}><div><b>{t.title}</b><small>{t.person} · {isWorkshopProject(project)?`${(t.photos||[]).length}/4 QC photos`:`${(t.photos||[]).length} photos`}</small></div><span className={`jobState ${(t.jobStatus||'Pending').toLowerCase().replaceAll(' ','-')}`}>{t.jobStatus||'Pending'}</span></div>)}</div></section>}
+    {tab==='tasks'&&<section className="panel"><div className="hubTaskAdd taskAssignBar"><input placeholder="New project task" value={newTask} onChange={e=>setNewTask(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addTask()}/><select value={newAssignee} onChange={e=>setNewAssignee(e.target.value)}>{people.filter(person=>getActiveTechnicians(users).some(user=>user.name===person.name)).map(p=><option key={p.id}>{p.name}</option>)}</select><button onClick={addTask}>Assign task</button></div><div className="projectJobTable">{projectTasks.map(t=><div key={t.id}><div><b>{t.title}</b><small>{t.person} · {isWorkshopProject(project)?`${(t.photos||[]).length}/4 QC photos`:`${(t.photos||[]).length} photos`}</small></div><span className={`jobState ${(t.jobStatus||'Pending').toLowerCase().replaceAll(' ','-')}`}>{t.jobStatus||'Pending'}</span></div>)}</div></section>}
     {tab==='materials'&&<section className="materialsHub">
       <div className="panel addMaterialPanel">
         <div className="panelHead"><h3>Add Material</h3><span>{project.name}</span></div>
@@ -1639,4 +1661,4 @@ function AI({chat,setChat,voice,stats}) {
 
 function ModulePlaceholder({title}) { return <div className="content"><div className="sectionIntro"><h1>{title}</h1><p>This module is included in the navigation and ready for connection to the shared database.</p></div><div className="panel placeholder"><div className="core small"><div className="coreRing r1"/><div className="coreDot"/></div><h3>{title} module</h3><p>UI foundation ready. Database, files and approval workflows are the next deployment layer.</p></div></div> }
 
-export default function Page(){ const [session,setSession]=useState(null); const [users,setUsers]=useStoredState('fsq-v60-users',DEFAULT_USERS); return session?<AppShell session={session} onLogout={()=>setSession(null)} users={users} setUsers={setUsers}/>:<Login onLogin={setSession} users={users}/> }
+export default function Page(){ const [session,setSession]=useState(null); const [storedUsers,setUsers]=useStoredState('fsq-v60-users',USER_REGISTRY_DEFAULTS); const users=normalizeUserRegistry(storedUsers); return session?<AppShell session={session} onLogout={()=>setSession(null)} users={users} setUsers={setUsers}/>:<Login onLogin={setSession} users={users}/> }

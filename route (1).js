@@ -187,3 +187,5 @@ button:disabled,
 .qcApprovalGrid{grid-template-columns:1fr 1fr}.workshopApprovalCard{margin-bottom:12px}.qcWarning{padding:9px 11px;background:#3c2112;border:1px solid #8b562a;color:#ffbd75;border-radius:6px;margin:8px 0}.qcRecent{margin-top:16px}
 @media(max-width:1000px){.workshopQcFlow{grid-template-columns:repeat(3,1fr)}.qcApprovalGrid{grid-template-columns:1fr}}
 @media(max-width:650px){.workshopQcFlow{grid-template-columns:repeat(2,1fr)}}
+
+.logo small{display:block;margin-top:3px;color:#5b8ca5;font-size:9px;letter-spacing:.08em}
