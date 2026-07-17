@@ -11,7 +11,7 @@ const ROLE_DEFINITIONS = {
   Technician: ['view_assigned_jobs','upload_photos','update_assigned_jobs']
 };
 
-const APP_VERSION = '6.0.3.3';
+const APP_VERSION = '7.0.0';
 
 const USER_REGISTRY_DEFAULTS = [
   { id: 1, name: 'Flemming', role: 'Owner', password: 'fsq2027', active: true, permissions: ROLE_DEFINITIONS.Owner },
@@ -53,7 +53,7 @@ const NAV = [
   ['projects', 'Projects', '◫'],
   ['crew', 'People', '◉'],
   ['documents', 'Project Binder', '▱'],
-  ['ai', 'Freja AI', '◎'],
+  ['ai', 'ATLAS AI', '◎'],
   ['admin', 'Settings', '⚙']
 ];
 
@@ -171,9 +171,9 @@ const DEFAULT_BINDER_FOLDERS = [
 
 function getGreeting(name) {
   const hour = new Date().getHours();
-  if (hour < 12) return `Good morning ${name}. Welcome to FSQ Command. Freja is online and ready to assist.`;
-  if (hour < 18) return `Good afternoon ${name}. Welcome back to FSQ Command. Freja is online and ready to assist.`;
-  return `Good evening ${name}. Welcome to FSQ Command. Freja is online and ready to assist.`;
+  if (hour < 12) return `Good morning ${name}. Welcome to FSQ Command. ATLAS is online and ready to assist.`;
+  if (hour < 18) return `Good afternoon ${name}. Welcome back to FSQ Command. ATLAS is online and ready to assist.`;
+  return `Good evening ${name}. Welcome to FSQ Command. ATLAS is online and ready to assist.`;
 }
 
 function chooseEnglishFemaleVoice() {
@@ -268,7 +268,7 @@ function useSpeechRecognition({ onResult, onError }) {
     const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!Recognition) return;
     const recognition = new Recognition();
-    recognition.lang = 'da-DK';
+    recognition.lang = 'en-GB';
     recognition.continuous = false;
     recognition.interimResults = false;
     recognition.onstart = () => setListening(true);
@@ -334,8 +334,9 @@ function Login({ onLogin, users }) {
     <main className="loginShell">
       <div className="gridGlow" />
       <section className="loginPanel">
+        <div className="loginLogoGlow"><img src="/fsq-logo.jpg" alt="FSQ logo" /></div>
         <div className="brandRow"><span className="brandMark">FSQ</span><span>COMMAND</span></div>
-        <div className="core"><div className="coreRing r1"/><div className="coreRing r2"/><div className="coreDot"/></div>
+        <p className="poweredBy">POWERED BY ATLAS</p>
         <p className="eyebrow">MARITIME · INDUSTRIAL · WORKSHOP</p>
         <h1>Your marine operations command center</h1>
         <p className="muted">Secure operations dashboard for FSQ.</p>
@@ -376,7 +377,7 @@ function AppShell({ session, onLogout, users, setUsers }) {
     else if (command.includes('projekt')) setActive('projects');
     else if (command.includes('medarbejder') || command.includes('personale') || command.includes('folk')) setActive('crew');
     else if (command.includes('indstilling')) setActive('admin');
-    else if (command.includes('freja') || command.includes('assistent') || command.includes('ai')) setActive('ai');
+    else if (command.includes('atlas') || command.includes('assistent') || command.includes('ai')) setActive('ai');
     else if (command.includes('dashboard') || command.includes('forside')) setActive('dashboard');
     else {
       setActive('ai');
@@ -410,7 +411,7 @@ function AppShell({ session, onLogout, users, setUsers }) {
   return (
     <div className="appShell">
       <aside className="sidebar">
-        <div className="logo"><b>FSQ</b><span>COMMAND</span><small>v{APP_VERSION}</small></div>
+        <div className="logo atlasBrand"><div className="sidebarLogoGlow"><img src="/fsq-logo.jpg" alt="FSQ" /></div><b>FSQ COMMAND</b><span>POWERED BY ATLAS</span><small>v{APP_VERSION}</small></div>
         <div className="online"><i/> ALL SYSTEMS OPERATIONAL</div>
         <nav>{visibleNav.map(([id, label, icon]) => <button key={id} onClick={() => setActive(id)} className={active === id ? 'active' : ''}><span>{icon}</span>{label}</button>)}</nav>
         <div className="userCard"><div className="avatar">{session.name[0]}</div><div><b>{session.name}</b><small>{session.role}</small></div><button onClick={onLogout}>↗</button></div>
@@ -418,7 +419,7 @@ function AppShell({ session, onLogout, users, setUsers }) {
       <main className="workspace">
         <header className="topbar">
           <div><p className="eyebrow">FSQ OPERATIONS CONTROL</p><h2>{visibleNav.find(n => n[0] === active)?.[1] || 'FSQ Command'}</h2></div>
-          <div className="topActions"><button className={`voiceCommand ${globalSpeech.listening?'listening':''}`} onClick={globalSpeech.toggleListening} title="Talk to Freja">{globalSpeech.listening?'● Listening...':'🎙 Talk to Freja'}</button><label><input type="checkbox" checked={voice} onChange={e => setVoice(e.target.checked)} /> Voice</label><span className="clock">{new Date().toLocaleDateString('da-DK')}</span></div>
+          <div className="topActions"><button className={`voiceCommand ${globalSpeech.listening?'listening':''}`} onClick={globalSpeech.toggleListening} title="Talk to ATLAS">{globalSpeech.listening?'● Listening...':'🎙 Talk to ATLAS'}</button><label><input type="checkbox" checked={voice} onChange={e => setVoice(e.target.checked)} /> Voice</label><span className="clock">{new Date().toLocaleDateString('da-DK')}</span></div>
         </header>
         {voiceMessage&&<div className="voiceStatus">{voiceMessage}</div>}
 
@@ -753,6 +754,22 @@ function Dashboard({ session, stats, projects, tasks, people, machines, material
         <div className="heroActions"><button onClick={()=>setActive('projects')}>Open Projects</button><button onClick={()=>setActive('approvals')}>Approval Queue</button></div>
       </div>
       <div className="commandPulse"><div className="pulseRing"/><strong>{criticalJobs.length}</strong><span>CRITICAL JOBS</span></div>
+    </section>
+
+    <section className="atlasOperationsPanel">
+      <div className="atlasOrb" aria-hidden="true"><span>ATLAS</span></div>
+      <div className="atlasStatusText">
+        <p className="panelEyebrow">AI OPERATIONS ASSISTANT</p>
+        <h2>ATLAS online</h2>
+        <p>Good {new Date().getHours()<12?'morning':new Date().getHours()<18?'afternoon':'evening'}, {session.name}. All systems operational.</p>
+      </div>
+      <div className="atlasQuickStats">
+        <span><b>{activeProjects.length}</b> active projects</span>
+        <span><b>{pendingApprovals.length}</b> approvals waiting</span>
+        <span><b>{materialAlerts.length}</b> material alerts</span>
+        <span><b>{criticalJobs.length}</b> critical jobs</span>
+      </div>
+      <button onClick={()=>setActive('ai')}>ASK ATLAS</button>
     </section>
 
     <section className="phase3Kpis">
@@ -1768,7 +1785,7 @@ function AI({chat,setChat,voice,stats}) {
     else if(lower.includes('maskine')) answer=`Der er ${stats.machinesDown} maskiner til service eller ude af drift.`;
     else if(lower.includes('hast')||lower.includes('kritisk')) answer=`Der er ${stats.urgent} hasteopgaver.`;
     else if(lower.includes('projekt')) answer=`Der er ${stats.projects} aktive projekter i FSQ Command.`;
-    else if(lower.includes('hej')||lower.includes('godmorgen')||lower.includes('god aften')) answer='Hej. Jeg er Freja, og jeg er klar til at hjælpe dig.';
+    else if(lower.includes('hej')||lower.includes('godmorgen')||lower.includes('god aften')) answer='Hej. Jeg er ATLAS, og jeg er klar til at hjælpe dig.';
     setChat(c=>[...c,{from:'ai',text:answer}]);
     speak(answer,voice);
   }
@@ -1787,9 +1804,9 @@ function AI({chat,setChat,voice,stats}) {
   });
 
   return <div className="content aiLayout">
-    <div className="sectionIntro"><div><h1>Freja AI</h1><p>Tal eller skriv om projekter, værksted, materialer og prioriteter.</p></div><button className={`frejaMic ${speech.listening?'listening':''}`} onClick={speech.toggleListening}>{speech.listening?'● Freja lytter...':'🎙 Tal til Freja'}</button></div>
+    <div className="sectionIntro"><div><h1>ATLAS AI</h1><p>Tal eller skriv om projekter, værksted, materialer og prioriteter.</p></div><button className={`atlasMic ${speech.listening?'listening':''}`} onClick={speech.toggleListening}>{speech.listening?'● ATLAS lytter...':'🎙 Tal til ATLAS'}</button></div>
     {speechError&&<div className="error">{speechError}</div>}
-    <div className="chatPanel">{chat.map((m,i)=><div key={i} className={`bubble ${m.from}`}>{m.text}</div>)}<div className="chatInput"><input value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>e.key==='Enter'&&send()} placeholder="Tal eller skriv til Freja..."/><button className="micMini" onClick={speech.toggleListening}>{speech.listening?'●':'🎙'}</button><button onClick={()=>send()}>Send</button></div></div>
+    <div className="chatPanel">{chat.map((m,i)=><div key={i} className={`bubble ${m.from}`}>{m.text}</div>)}<div className="chatInput"><input value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>e.key==='Enter'&&send()} placeholder="Tal eller skriv til ATLAS..."/><button className="micMini" onClick={speech.toggleListening}>{speech.listening?'●':'🎙'}</button><button onClick={()=>send()}>Send</button></div></div>
   </div>
 }
 

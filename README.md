@@ -1,40 +1,15 @@
-# FSQ Command 6.0 – Phase 3.4 Project Opening Wizard
+# FSQ Command v7.0 - ATLAS Operations Center
 
-## New
-- Three-step Open Project wizard
-- Project type selection
-- Customer and contact
-- Project name, location, dates and priority
-- Project manager and initial crew
-- Automatic workflow preview
-- Automatic project folder preview
-- Final review before opening the project
+Azure-ready Next.js application.
 
-## Workshop projects
-Automatically creates:
-- Material preparation
-- Cutting / machining
-- Fit-up
-- Tack approval
-- Welding
-- Final QC
-- Release
+## Main changes
+- Freja renamed to ATLAS throughout the interface and voice assistant
+- Glowing FSQ logo on login and sidebar
+- ATLAS operations panel on the dashboard
+- Existing project, user permission, Workshop QC and Azure Blob photo workflows retained
+- GitHub Actions deployment for Azure App Service retained
 
-Workshop project rule:
-- Flemming/Jakob approve fit-up and final QC
-- Four QC photos are required before final release
-
-## Marine projects
-Automatically creates:
-- Mobilisation preparation
-- Execute assigned work
-- Upload Work Done
-- Upload Timesheet
-- Demobilisation / handover
-
-Marine rule:
-- No fixed four-photo requirement
-- Timesheet and Work Done folders are prepared for the document phase
-
-## Result
-After pressing Open Project, FSQ Command creates the Project Hub, standard tasks and folder requirements, then opens the new project immediately.
+## Azure
+Set these App Service environment variables when using photo upload:
+- AZURE_STORAGE_CONNECTION_STRING
+- AZURE_STORAGE_CONTAINER (optional, defaults to fsq-documents)
