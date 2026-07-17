@@ -188,4 +188,4 @@ button:disabled,
 @media(max-width:1000px){.workshopQcFlow{grid-template-columns:repeat(3,1fr)}.qcApprovalGrid{grid-template-columns:1fr}}
 @media(max-width:650px){.workshopQcFlow{grid-template-columns:repeat(2,1fr)}}
 
-.recoveryShell{min-height:100vh;display:grid;place-items:center;padding:30px;background:#030b13;color:#eaf8ff}.recoveryPanel{width:min(680px,100%);padding:32px;border:1px solid #17425c;border-radius:14px;background:#071725;box-shadow:0 24px 80px #0008}.recoveryPanel h1{margin:8px 0 14px}.recoveryPanel p{color:#9db8c8;line-height:1.55}.recoveryPanel details{margin:18px 0;padding:12px;border:1px solid #18384c;border-radius:8px;background:#04101a}.recoveryPanel pre{white-space:pre-wrap;word-break:break-word;color:#ffb2a4}
+.logo small{display:block;margin-top:3px;color:#5b8ca5;font-size:9px;letter-spacing:.08em}

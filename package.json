@@ -1,6 +1,6 @@
 {
-  "name": "fsq-command-v6031-stability",
-  "version": "6.0.3.1",
+  "name": "fsq-command-v60331",
+  "version": "6.0.3.3.1",
   "private": true,
   "scripts": {
     "dev": "next dev",
