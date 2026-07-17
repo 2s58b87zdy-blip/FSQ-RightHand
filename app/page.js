@@ -16,7 +16,7 @@ const FOLDER_ACCESS_LEVELS = ['No Access','Read','Edit','Full Control'];
 const MANAGED_FOLDERS = ['Projects','Workshop','Marine','Drawings','Procedures','QA / QC','Reports','Drone','Certificates','Templates','Finance','HR','Management','Contracts','Customers'];
 const DEFAULT_FOLDER_ACCESS = Object.fromEntries(MANAGED_FOLDERS.map(folder=>[folder,'No Access']));
 
-const APP_VERSION = '7.1.0';
+const APP_VERSION = '7.2.0';
 
 const USER_REGISTRY_DEFAULTS = [
   { id: 1, name: 'Flemming', role: 'Owner', password: 'fsq2027', active: true, permissions: ROLE_DEFINITIONS.Owner, folderAccess: Object.fromEntries(MANAGED_FOLDERS.map(folder=>[folder,'Full Control'])) },
@@ -61,6 +61,7 @@ const NAV = [
   ['crew', 'People', '◉'],
   ['documents', 'Project Binder', '▱'],
   ['planner', 'Operations Planner', '▦'],
+  ['knowledge', 'ATLAS Knowledge', '▤'],
   ['ai', 'ATLAS AI', '◎'],
   ['health', 'System Health', '◌'],
   ['admin', 'Settings', '⚙']
@@ -177,6 +178,23 @@ const DEFAULT_BINDER_FOLDERS = [
   'QA / Punch List',
   'Archive'
 ];
+
+
+const DEFAULT_KNOWLEDGE_FOLDERS = [
+  { id: 1, name: 'Machine Manuals', description: 'Manufacturer manuals, alarm lists and maintenance instructions', accessFolder: 'Workshop' },
+  { id: 2, name: 'Scrubber Repairs', description: 'Repair methods, lessons learned and technical references', accessFolder: 'Marine' },
+  { id: 3, name: 'WPS & WPQR', description: 'Approved welding procedures and qualification records', accessFolder: 'QA / QC' },
+  { id: 4, name: 'Safety Procedures', description: 'Risk assessments, LOTO and safe work instructions', accessFolder: 'Procedures' }
+];
+
+const DEFAULT_KNOWLEDGE_MACHINES = [
+  { id: 1, name: 'Welding Robot', manufacturer: 'FSQ Workshop', model: 'Robot Cell 1', serial: '', location: 'Workshop', folderId: 1, notes: 'SMO254 and Super Duplex welding cell', status: 'Active' },
+  { id: 2, name: 'Plasma Cutter', manufacturer: 'Hypertherm', model: '', serial: '', location: 'Workshop', folderId: 1, notes: 'Plasma cutting table and power source', status: 'Active' },
+  { id: 3, name: 'Press Brake', manufacturer: 'SafanDarley', model: '', serial: '', location: 'Workshop', folderId: 1, notes: 'Hydraulic press brake', status: 'Active' }
+];
+
+const DEFAULT_KNOWLEDGE_DOCUMENTS = [];
+const DEFAULT_KNOWLEDGE_SOLUTIONS = [];
 
 function getGreeting(name) {
   const hour = new Date().getHours();
@@ -375,6 +393,10 @@ function AppShell({ session, onLogout, users, setUsers }) {
   const [droneInspections, setDroneInspections] = useStoredState('fsq-v40-drone-inspections', DEFAULT_DRONE_INSPECTIONS);
   const [documents, setDocuments] = useStoredState('fsq-v40-documents', DEFAULT_DOCUMENTS);
   const [deletedProjects, setDeletedProjects] = useStoredState('fsq-v40-deleted-projects', []);
+  const [knowledgeFolders, setKnowledgeFolders] = useStoredState('fsq-v72-knowledge-folders', DEFAULT_KNOWLEDGE_FOLDERS);
+  const [knowledgeMachines, setKnowledgeMachines] = useStoredState('fsq-v72-knowledge-machines', DEFAULT_KNOWLEDGE_MACHINES);
+  const [knowledgeDocuments, setKnowledgeDocuments] = useStoredState('fsq-v72-knowledge-documents', DEFAULT_KNOWLEDGE_DOCUMENTS);
+  const [knowledgeSolutions, setKnowledgeSolutions] = useStoredState('fsq-v72-knowledge-solutions', DEFAULT_KNOWLEDGE_SOLUTIONS);
   const [chat, setChat] = useState([{ from: 'ai', text: `${getGreeting(session.name)} How can I assist you today?` }]);
   const [voice, setVoice] = useState(session.voice);
   const [voiceMessage,setVoiceMessage] = useState('');
@@ -388,6 +410,7 @@ function AppShell({ session, onLogout, users, setUsers }) {
     else if (command.includes('plan') || command.includes('uge')) setActive('planner');
     else if (command.includes('system') || command.includes('health') || command.includes('status')) setActive('health');
     else if (command.includes('indstilling')) setActive('admin');
+    else if (command.includes('manual') || command.includes('viden') || command.includes('knowledge') || command.includes('maskine')) setActive('knowledge');
     else if (command.includes('atlas') || command.includes('assistent') || command.includes('ai')) setActive('ai');
     else if (command.includes('dashboard') || command.includes('forside')) setActive('dashboard');
     else {
@@ -407,7 +430,7 @@ function AppShell({ session, onLogout, users, setUsers }) {
   const assignedProjectNames = new Set(visibleTasks.map(task => task.project));
   const visibleProjects = isTechnician ? projects.filter(project => assignedProjectNames.has(project.name)) : projects;
   const visibleNav = isTechnician
-    ? NAV.filter(item => ['myjobs','ai'].includes(item[0]))
+    ? NAV.filter(item => ['myjobs','knowledge','ai'].includes(item[0]))
     : NAV;
 
   const stats = useMemo(() => ({
@@ -442,7 +465,8 @@ function AppShell({ session, onLogout, users, setUsers }) {
         {active === 'projectHub' && <ProjectHub session={session} users={users} project={projects.find(p=>p.id===activeProjectId)} projects={projects} setProjects={setProjects} people={people} tasks={tasks} setTasks={setTasks} documents={documents} materials={materials} setMaterials={setMaterials} quotes={quotes} reports={reports} setActive={setActive} deletedProjects={deletedProjects} setDeletedProjects={setDeletedProjects} setActiveProjectId={setActiveProjectId} droneInspections={droneInspections} setDroneInspections={setDroneInspections} />}
         {active === 'documents' && <ProjectBinder documents={documents} setDocuments={setDocuments} projects={projects} session={session} />}
         {active === 'planner' && <OperationsPlanner people={people} projects={projects} />}
-        {active === 'health' && <SystemHealth session={session} users={users} projects={projects} documents={documents} />}
+        {active === 'knowledge' && <KnowledgeBase session={session} users={users} folders={knowledgeFolders} setFolders={setKnowledgeFolders} machines={knowledgeMachines} setMachines={setKnowledgeMachines} documents={knowledgeDocuments} setDocuments={setKnowledgeDocuments} solutions={knowledgeSolutions} setSolutions={setKnowledgeSolutions} />}
+        {active === 'health' && <SystemHealth session={session} users={users} projects={projects} documents={documents} knowledgeDocuments={knowledgeDocuments} knowledgeMachines={knowledgeMachines} />}
         {active === 'admin' && <Admin session={session} users={users} setUsers={setUsers} people={people} setPeople={setPeople} machines={machines} setMachines={setMachines} materials={materials} setMaterials={setMaterials} />}
         {active === 'ai' && <AI chat={chat} setChat={setChat} voice={voice} stats={stats} />}
         {!['dashboard','myjobs','approvals','crew','projects','projectHub','documents','planner','health','admin','ai'].includes(active) && <ModulePlaceholder title={NAV.find(n=>n[0]===active)?.[1]} />}
@@ -1740,29 +1764,80 @@ function getIsoWeek(date){
 function addDays(date,days){const d=new Date(date);d.setDate(d.getDate()+days);return d;}
 function mondayOf(date){const d=new Date(date);const day=d.getDay()||7;d.setDate(d.getDate()-day+1);d.setHours(0,0,0,0);return d;}
 
+function monthStart(date){return new Date(date.getFullYear(),date.getMonth(),1);}
+function monthEnd(date){return new Date(date.getFullYear(),date.getMonth()+1,0);}
+function dateKey(date){return date.toISOString().slice(0,10);}
+
 function OperationsPlanner({people,projects}){
+  const [view,setView]=useState('planner');
   const [weeks,setWeeks]=useState(4);
   const [offset,setOffset]=useState(0);
+  const [monthOffset,setMonthOffset]=useState(0);
   const [entries,setEntries]=useStoredState('fsq-v71-planner',[]);
+  const [selectedPerson,setSelectedPerson]=useState('All');
+  const [filterType,setFilterType]=useState('All');
   const start=addDays(mondayOf(new Date()),offset*7);
   const days=Array.from({length:weeks*7},(_,i)=>addDays(start,i));
   const dayNames=['Man','Tir','Ons','Tor','Fre','Lør','Søn'];
-  function edit(person,date){
-    const key=`${person}|${date.toISOString().slice(0,10)}`;
-    const current=entries.find(e=>e.key===key)?.text||'';
-    const text=window.prompt(`Plan for ${person} - ${date.toLocaleDateString('da-DK')}`,current);
+  const typeColors={Marine:'marine',Workshop:'workshop',Inspection:'inspection',Travel:'travel',Course:'course',Holiday:'holiday',Office:'office',Free:'free'};
+
+  function saveEntry(person,date,currentEntry){
+    const defaultText=currentEntry?.text||'';
+    const text=window.prompt(`Plan for ${person} - ${date.toLocaleDateString('da-DK')}`,defaultText);
     if(text===null)return;
-    setEntries([...entries.filter(e=>e.key!==key),...(text.trim()?[{key,person,date:date.toISOString().slice(0,10),text:text.trim()}]:[])]);
+    const trimmed=text.trim();
+    if(!trimmed){
+      setEntries(entries.filter(e=>!(e.person===person&&e.date===dateKey(date))));
+      return;
+    }
+    const suggested=currentEntry?.type||projects.find(p=>trimmed.toLowerCase().includes(p.name.toLowerCase()))?.type||'Workshop';
+    const type=window.prompt('Type: Marine, Workshop, Inspection, Travel, Course, Holiday, Office, Free',suggested)||suggested;
+    const project=currentEntry?.project||projects.find(p=>trimmed.toLowerCase().includes(p.name.toLowerCase()))?.name||'';
+    const note=window.prompt('Projekt / ekstra note (valgfrit)',project)||project;
+    const key=`${person}|${dateKey(date)}`;
+    const next={key,person,date:dateKey(date),text:trimmed,type,project:note};
+    setEntries([...entries.filter(e=>e.key!==key),next]);
   }
-  return <div className="content plannerPage"><div className="sectionIntro plannerIntro"><div><h1>Operations Planner</h1><p>Planlæg alle medarbejdere med 7 dage i hver uge.</p></div><div className="plannerControls"><button onClick={()=>setOffset(offset-weeks)}>←</button><select value={weeks} onChange={e=>setWeeks(Number(e.target.value))}>{[1,2,4,8,12].map(n=><option key={n} value={n}>{n} uger</option>)}</select><button onClick={()=>setOffset(0)}>I dag</button><button onClick={()=>setOffset(offset+weeks)}>→</button></div></div>
-  <div className="plannerScroll"><div className="plannerGrid" style={{gridTemplateColumns:`170px repeat(${days.length},minmax(92px,1fr))`}}><div className="plannerCorner">Medarbejder</div>{days.map((d,i)=><div className={`plannerDayHead ${i%7>=5?'weekend':''}`} key={d.toISOString()}><b>{dayNames[i%7]}</b><span>{d.getDate()}/{d.getMonth()+1}</span><small>Uge {getIsoWeek(d)}</small></div>)}{people.map(person=><div className="plannerRow" key={person.id} style={{display:'contents'}}><div className="plannerPerson"><b>{person.name}</b><small>{person.location}</small></div>{days.map((d,i)=>{const key=`${person.name}|${d.toISOString().slice(0,10)}`;const entry=entries.find(e=>e.key===key);return <button className={`plannerCell ${i%7>=5?'weekend':''} ${entry?'booked':''}`} key={key} onClick={()=>edit(person.name,d)} title="Klik for at planlægge">{entry?.text||'+'}</button>})}</div>)}</div></div>
-  <div className="plannerLegend"><span>Blå = planlagt</span><span>Alle uger viser mandag-søndag</span><span>{projects.length} projekter tilgængelige</span></div></div>
+
+  const visiblePeople=selectedPerson==='All'?people:people.filter(p=>p.name===selectedPerson);
+  const visibleEntries=entries.filter(e=>filterType==='All'||e.type===filterType);
+
+  const currentMonth=new Date(new Date().getFullYear(),new Date().getMonth()+monthOffset,1);
+  const monthGridStart=mondayOf(monthStart(currentMonth));
+  const monthGridEnd=addDays(mondayOf(addDays(monthEnd(currentMonth),7)),6);
+  const monthDays=[];
+  for(let d=new Date(monthGridStart);d<=monthGridEnd;d=addDays(d,1))monthDays.push(new Date(d));
+  while(monthDays.length>42)monthDays.pop();
+  const monthLabel=currentMonth.toLocaleDateString('da-DK',{month:'long',year:'numeric'});
+
+  return <div className="content plannerPage">
+    <div className="sectionIntro plannerIntro">
+      <div><h1>Operations Planner & Kalender</h1><p>Planlæg ressourcer uge for uge og se alle aktiviteter i en almindelig kalender.</p></div>
+      <div className="plannerViewTabs"><button className={view==='planner'?'active':''} onClick={()=>setView('planner')}>Ressourceplan</button><button className={view==='calendar'?'active':''} onClick={()=>setView('calendar')}>Månedskalender</button></div>
+    </div>
+
+    <div className="plannerFilterBar">
+      <label>Medarbejder<select value={selectedPerson} onChange={e=>setSelectedPerson(e.target.value)}><option>All</option>{people.map(p=><option key={p.id}>{p.name}</option>)}</select></label>
+      <label>Type<select value={filterType} onChange={e=>setFilterType(e.target.value)}><option>All</option>{Object.keys(typeColors).map(t=><option key={t}>{t}</option>)}</select></label>
+      <div className="plannerLegend compact"><span className="legendMarine">Marine</span><span className="legendWorkshop">Workshop</span><span className="legendTravel">Rejse</span><span className="legendHoliday">Ferie</span><span className="legendCourse">Kursus</span></div>
+    </div>
+
+    {view==='planner'?<>
+      <div className="plannerControls plannerTopControls"><button onClick={()=>setOffset(offset-weeks)}>← Forrige</button><select value={weeks} onChange={e=>setWeeks(Number(e.target.value))}>{[1,2,4,8,12].map(n=><option key={n} value={n}>{n} uger</option>)}</select><button onClick={()=>setOffset(0)}>I dag</button><button onClick={()=>setOffset(offset+weeks)}>Næste →</button></div>
+      <div className="plannerScroll"><div className="plannerGrid" style={{gridTemplateColumns:`170px repeat(${days.length},minmax(96px,1fr))`}}><div className="plannerCorner">Medarbejder</div>{days.map((d,i)=><div className={`plannerDayHead ${i%7>=5?'weekend':''}`} key={d.toISOString()}><b>{dayNames[i%7]}</b><span>{d.getDate()}/{d.getMonth()+1}</span><small>Uge {getIsoWeek(d)}</small></div>)}{visiblePeople.map(person=><div className="plannerRow" key={person.id} style={{display:'contents'}}><div className="plannerPerson"><b>{person.name}</b><small>{person.location}</small></div>{days.map((d,i)=>{const key=`${person.name}|${dateKey(d)}`;const entry=visibleEntries.find(e=>e.key===key);return <button className={`plannerCell ${i%7>=5?'weekend':''} ${entry?'booked':''} ${entry?typeColors[entry.type]||'workshop':''}`} key={key} onClick={()=>saveEntry(person.name,d,entries.find(e=>e.key===key))} title="Klik for at oprette eller redigere plan">{entry?<><b>{entry.text}</b>{entry.project&&<small>{entry.project}</small>}</>:'+'}</button>})}</div>)}</div></div>
+      <div className="plannerLegend"><span>Alle uger viser mandag-søndag</span><span>{projects.length} projekter tilgængelige</span><span>Klik på en celle for at planlægge</span></div>
+    </>:<>
+      <div className="calendarToolbar"><button onClick={()=>setMonthOffset(monthOffset-1)}>←</button><button onClick={()=>setMonthOffset(0)}>Denne måned</button><h2>{monthLabel}</h2><button onClick={()=>setMonthOffset(monthOffset+1)}>→</button></div>
+      <div className="monthCalendar"><div className="monthWeekdays">{dayNames.map(n=><div key={n}>{n}</div>)}</div><div className="monthGrid">{monthDays.map(d=>{const inMonth=d.getMonth()===currentMonth.getMonth();const dayEntries=visibleEntries.filter(e=>e.date===dateKey(d)&&(selectedPerson==='All'||e.person===selectedPerson));return <div className={`monthDay ${!inMonth?'outside':''} ${[0,6].includes(d.getDay())?'weekend':''}`} key={dateKey(d)}><header><b>{d.getDate()}</b><span>Uge {getIsoWeek(d)}</span></header><div className="monthEvents">{dayEntries.slice(0,6).map(e=><button key={e.key} className={`monthEvent ${typeColors[e.type]||'workshop'}`} onClick={()=>saveEntry(e.person,d,e)} title={`${e.person}: ${e.text}`}><strong>{e.person}</strong><span>{e.text}</span></button>)}{dayEntries.length>6&&<small>+{dayEntries.length-6} flere</small>}</div><button className="monthAdd" onClick={()=>{const person=selectedPerson==='All'?(window.prompt('Medarbejder',people[0]?.name||'')||''):selectedPerson;if(person)saveEntry(person,d,null)}}>+</button></div>})}</div></div>
+      <div className="plannerLegend"><span>Klik på + for at tilføje</span><span>Klik på en aktivitet for at redigere eller slette</span><span>Kalenderen bruger samme data som ressourceplanen</span></div>
+    </>}
+  </div>
 }
 
-function SystemHealth({session,users,projects,documents}){
+function SystemHealth({session,users,projects,documents,knowledgeDocuments=[],knowledgeMachines=[]}){
   const allowed=canManagePermissions(session);
   if(!allowed)return <div className="content"><div className="sectionIntro"><h1>System Health</h1><p>Kun Flemming og Jakob har adgang til systemstatus.</p></div></div>;
-  const items=[['FSQ Command','Operational'],['Azure App Service','Operational'],['Azure Blob Storage','Configured'],['Shared Database','Planned for v8.0'],['User Registry',`${users.filter(u=>u.active).length} active users`],['Project Data',`${projects.length} projects`],['Document Index',`${documents.length} documents`],['Application Version',`v${APP_VERSION}`]];
+  const items=[['FSQ Command','Operational'],['Azure App Service','Operational'],['Azure Blob Storage','Configured'],['Shared Database','Planned for v8.0'],['User Registry',`${users.filter(u=>u.active).length} active users`],['Project Data',`${projects.length} projects`],['Document Index',`${documents.length} documents`],['ATLAS Knowledge',`${knowledgeDocuments.length} files · ${knowledgeMachines.length} machines`],['Application Version',`v${APP_VERSION}`]];
   return <div className="content healthPage"><div className="sectionIntro"><div><h1>System Health</h1><p>Administratorstatus for FSQ Command.</p></div><div className="healthOverall"><i/> ALL SYSTEMS OPERATIONAL</div></div><div className="healthGrid">{items.map(([name,status])=><article key={name}><div className="healthIcon">◉</div><small>{name}</small><strong>{status}</strong><span>{new Date().toLocaleString('da-DK')}</span></article>)}</div><section className="panel healthNote"><h3>Database status</h3><p>Version 7.1 bruger fortsat browserens lokale datalager til driftsdata. Den fælles Azure-database er planlagt til version 8.0. Azure Blob Storage bruges fortsat til filer og billeder, når miljøvariablerne er konfigureret.</p></section></div>
 }
 
@@ -1824,6 +1899,119 @@ function Admin({session,users,setUsers,people,setPeople,machines,setMachines,mat
       </article>)}</div>
     </section>
     <div className="dashboardGrid adminSupportGrid"><div className="panel"><h3>Personnel location</h3>{people.map(p=><button className="listRow" key={p.id} onClick={()=>cyclePerson(p.id)}><div><b>{p.name}</b><small>{p.task}</small></div><em>{p.location}</em></button>)}</div><div className="panel"><h3>System resets</h3><button className="primaryBtn" onClick={()=>setMachines(DEFAULT_MACHINES)}>Restore machines</button><button className="primaryBtn" onClick={()=>setMaterials(DEFAULT_MATERIALS)}>Restore materials</button></div></div>
+  </div>
+}
+
+
+function KnowledgeBase({session,users,folders,setFolders,machines,setMachines,documents,setDocuments,solutions,setSolutions}) {
+  const [tab,setTab]=useState('library');
+  const [selectedFolder,setSelectedFolder]=useState(folders[0]?.id||null);
+  const [selectedMachine,setSelectedMachine]=useState('All');
+  const [folderForm,setFolderForm]=useState({name:'',description:'',accessFolder:'Workshop'});
+  const [machineForm,setMachineForm]=useState({name:'',manufacturer:'',model:'',serial:'',location:'Workshop',folderId:folders[0]?.id||'',notes:''});
+  const [question,setQuestion]=useState('');
+  const [answer,setAnswer]=useState('');
+  const [solutionText,setSolutionText]=useState('');
+  const [message,setMessage]=useState('');
+  const [uploading,setUploading]=useState(false);
+  const canManage=canManagePermissions(session);
+
+  useEffect(()=>{if(!folders.some(f=>f.id===selectedFolder))setSelectedFolder(folders[0]?.id||null)},[folders,selectedFolder]);
+
+  function folderAllowed(folder){
+    if(canManage)return true;
+    const level=(session.folderAccess||{})[folder.accessFolder]||'No Access';
+    return level!=='No Access';
+  }
+  const visibleFolders=folders.filter(folderAllowed);
+  const visibleFolderIds=new Set(visibleFolders.map(f=>f.id));
+  const visibleDocs=documents.filter(d=>visibleFolderIds.has(d.folderId));
+  const filteredDocs=visibleDocs.filter(d=>(!selectedFolder||d.folderId===selectedFolder)&&(selectedMachine==='All'||String(d.machineId)===String(selectedMachine)));
+
+  function addFolder(){
+    if(!canManage)return setMessage('Kun Flemming og Jakob kan oprette mapper.');
+    if(!folderForm.name.trim())return setMessage('Skriv et mappenavn.');
+    const folder={id:Date.now(),name:folderForm.name.trim(),description:folderForm.description.trim(),accessFolder:folderForm.accessFolder};
+    setFolders([...folders,folder]);setSelectedFolder(folder.id);setFolderForm({name:'',description:'',accessFolder:'Workshop'});setMessage('Ny ATLAS-mappe oprettet.');
+  }
+  function deleteFolder(id){
+    if(!canManage)return;
+    if(documents.some(d=>d.folderId===id))return setMessage('Mappen indeholder dokumenter. Flyt eller slet dem først.');
+    if(window.confirm('Slet denne mappe?'))setFolders(folders.filter(f=>f.id!==id));
+  }
+  function addMachine(){
+    if(!canManage)return setMessage('Kun Flemming og Jakob kan oprette maskiner.');
+    if(!machineForm.name.trim())return setMessage('Skriv maskinens navn.');
+    setMachines([...machines,{...machineForm,id:Date.now(),name:machineForm.name.trim(),folderId:Number(machineForm.folderId)||folders[0]?.id,status:'Active'}]);
+    setMachineForm({name:'',manufacturer:'',model:'',serial:'',location:'Workshop',folderId:folders[0]?.id||'',notes:''});setMessage('Maskine oprettet. Du kan nu uploade manualer til den.');
+  }
+  function deleteMachine(id){if(canManage&&window.confirm('Slet maskinen fra ATLAS Knowledge?'))setMachines(machines.filter(m=>m.id!==id))}
+
+  async function uploadFiles(event){
+    const files=[...event.target.files];event.target.value='';
+    if(!files.length||!selectedFolder)return;
+    setUploading(true);setMessage('');
+    for(const file of files){
+      try{
+        const form=new FormData();form.append('file',file);form.append('folder',folders.find(f=>f.id===selectedFolder)?.name||'Knowledge');form.append('machine',selectedMachine==='All'?'General':machines.find(m=>String(m.id)===String(selectedMachine))?.name||'General');form.append('uploadedBy',session.name);
+        const response=await fetch('/api/knowledge',{method:'POST',body:form});
+        const data=await response.json();
+        if(!response.ok)throw new Error(data.error||'Upload failed');
+        setDocuments(current=>[...current,{...data.document,id:`${Date.now()}-${Math.random()}`,folderId:selectedFolder,machineId:selectedMachine==='All'?null:Number(selectedMachine),description:'',tags:[],status:'Indexed metadata'}]);
+      }catch(error){setMessage(`${file.name}: ${error.message}`)}
+    }
+    setUploading(false);setMessage(current=>current||'Filer uploadet til ATLAS Knowledge.');
+  }
+  async function deleteDocument(doc){
+    if(!canManage)return;
+    if(!window.confirm(`Slet ${doc.name}?`))return;
+    if(doc.blobName){try{await fetch(`/api/knowledge?blob=${encodeURIComponent(doc.blobName)}`,{method:'DELETE'})}catch{}}
+    setDocuments(documents.filter(d=>d.id!==doc.id));
+  }
+  function updateDocument(id,field,value){setDocuments(documents.map(d=>d.id===id?{...d,[field]:value}:d))}
+
+  function askAtlas(){
+    const q=question.trim();if(!q)return;
+    const words=q.toLowerCase().split(/\s+/).filter(w=>w.length>2);
+    const docs=visibleDocs.map(d=>({...d,score:words.filter(w=>`${d.name} ${d.description||''} ${(d.tags||[]).join(' ')}`.toLowerCase().includes(w)).length})).filter(d=>d.score>0).sort((a,b)=>b.score-a.score);
+    const experiences=solutions.map(x=>({...x,score:words.filter(w=>`${x.question} ${x.solution} ${x.machine||''}`.toLowerCase().includes(w)).length})).filter(x=>x.score>0).sort((a,b)=>b.score-a.score);
+    const machine=machines.find(m=>q.toLowerCase().includes(m.name.toLowerCase())||m.model&&q.toLowerCase().includes(m.model.toLowerCase()));
+    let text='Jeg fandt ikke en sikker løsning i den lokale viden endnu. Upload den relevante manual eller registrer en verificeret løsning.';
+    if(docs.length||experiences.length||machine){
+      const lines=[];
+      if(machine)lines.push(`Maskine: ${machine.name}${machine.manufacturer?` · ${machine.manufacturer}`:''}${machine.model?` ${machine.model}`:''}. ${machine.notes||''}`);
+      if(docs.length)lines.push(`Relevante filer: ${docs.slice(0,3).map(d=>d.name).join(', ')}.`);
+      if(experiences.length)lines.push(`Tidligere FSQ-erfaring: ${experiences[0].solution} (${experiences[0].status||'Ubekræftet'}).`);
+      lines.push('Kontrollér altid sikkerhedsprocedure, LOTO og den gældende manual før indgreb.');text=lines.join('\n');
+    }
+    setAnswer(text);
+    setSolutions([...solutions,{id:Date.now(),question:q,solution:'',machine:machine?.name||'',askedBy:session.name,date:new Date().toISOString(),status:'Question logged'}]);
+  }
+  function saveSolution(){
+    if(!question.trim()||!solutionText.trim())return setMessage('Skriv både spørgsmål og løsning.');
+    setSolutions([...solutions,{id:Date.now(),question:question.trim(),solution:solutionText.trim(),machine:machines.find(m=>String(m.id)===String(selectedMachine))?.name||'',askedBy:session.name,date:new Date().toISOString(),status:canManage?'Verified':'Unverified'}]);
+    setSolutionText('');setMessage(canManage?'Løsningen er gemt som verificeret FSQ-viden.':'Løsningen er gemt og afventer godkendelse.');
+  }
+  function verifySolution(id){if(canManage)setSolutions(solutions.map(x=>x.id===id?{...x,status:'Verified',verifiedBy:session.name}:x))}
+
+  return <div className="content knowledgePage">
+    <div className="sectionIntro"><div><h1>ATLAS Knowledge Base</h1><p>Opret mapper og maskiner, upload manualer og gem FSQ-løsninger.</p></div><div className="knowledgeStatus"><i/> {visibleDocs.length} filer · {machines.length} maskiner</div></div>
+    {message&&<div className="documentMessage">{message}</div>}
+    <div className="knowledgeTabs">{[['library','Bibliotek'],['machines','Maskiner'],['ask','Spørg ATLAS'],['experience','Erfaringer']].map(([id,label])=><button key={id} className={tab===id?'active':''} onClick={()=>setTab(id)}>{label}</button>)}</div>
+
+    {tab==='library'&&<div className="knowledgeLibrary">
+      <aside className="knowledgeFolders panel"><div className="panelHead"><h3>Mapper</h3><span>{visibleFolders.length}</span></div>{visibleFolders.map(folder=><button key={folder.id} className={selectedFolder===folder.id?'active':''} onClick={()=>setSelectedFolder(folder.id)}><div><b>{folder.name}</b><small>{folder.description}</small></div>{canManage&&<span onClick={e=>{e.stopPropagation();deleteFolder(folder.id)}}>×</span>}</button>)}
+      {canManage&&<div className="knowledgeCreate"><h4>Ny mappe</h4><input placeholder="Mappenavn" value={folderForm.name} onChange={e=>setFolderForm({...folderForm,name:e.target.value})}/><input placeholder="Beskrivelse" value={folderForm.description} onChange={e=>setFolderForm({...folderForm,description:e.target.value})}/><select value={folderForm.accessFolder} onChange={e=>setFolderForm({...folderForm,accessFolder:e.target.value})}>{MANAGED_FOLDERS.map(f=><option key={f}>{f}</option>)}</select><button onClick={addFolder}>Opret mappe</button></div>}</aside>
+      <section className="panel knowledgeFiles"><div className="panelHead"><div><h3>{folders.find(f=>f.id===selectedFolder)?.name||'Vælg mappe'}</h3><small>Filer gemmes i Azure Blob Storage</small></div><div className="knowledgeUploadRow"><select value={selectedMachine} onChange={e=>setSelectedMachine(e.target.value)}><option>All</option>{machines.map(m=><option value={m.id} key={m.id}>{m.name}</option>)}</select><label className="binderUpload">{uploading?'Uploader...':'Upload filer'}<input disabled={uploading||!selectedFolder} type="file" multiple onChange={uploadFiles}/></label></div></div>
+      <div className="knowledgeDocList">{filteredDocs.length?filteredDocs.map(doc=><article key={doc.id}><div className="knowledgeFileIcon">DOC</div><div><b>{doc.name}</b><small>{machines.find(m=>m.id===doc.machineId)?.name||'General'} · {doc.size||''} · {doc.uploadedBy}</small><input placeholder="Beskrivelse til ATLAS" value={doc.description||''} onChange={e=>updateDocument(doc.id,'description',e.target.value)}/></div><div className="knowledgeDocActions">{doc.url&&<a href={doc.url} target="_blank">Åbn</a>}{canManage&&<button onClick={()=>deleteDocument(doc)}>Slet</button>}</div></article>):<div className="empty">Ingen filer i denne mappe endnu.</div>}</div></section>
+    </div>}
+
+    {tab==='machines'&&<div className="knowledgeMachineLayout"><section className="panel"><div className="panelHead"><h3>Maskinregister</h3><span>{machines.length}</span></div><div className="machineKnowledgeGrid">{machines.map(machine=><article key={machine.id}><div className="machineKnowledgeTop"><span>⚙</span><div><h3>{machine.name}</h3><small>{machine.manufacturer} {machine.model}</small></div></div><p>{machine.notes||'Ingen noter'}</p><dl><div><dt>Serienr.</dt><dd>{machine.serial||'—'}</dd></div><div><dt>Placering</dt><dd>{machine.location}</dd></div><div><dt>Manualer</dt><dd>{documents.filter(d=>d.machineId===machine.id).length}</dd></div></dl>{canManage&&<button className="dangerAction" onClick={()=>deleteMachine(machine.id)}>Slet maskine</button>}</article>)}</div></section>
+    {canManage&&<section className="panel machineCreatePanel"><h3>Opret ny maskine</h3><label>Navn<input value={machineForm.name} onChange={e=>setMachineForm({...machineForm,name:e.target.value})}/></label><label>Producent<input value={machineForm.manufacturer} onChange={e=>setMachineForm({...machineForm,manufacturer:e.target.value})}/></label><label>Model<input value={machineForm.model} onChange={e=>setMachineForm({...machineForm,model:e.target.value})}/></label><label>Serienummer<input value={machineForm.serial} onChange={e=>setMachineForm({...machineForm,serial:e.target.value})}/></label><label>Placering<input value={machineForm.location} onChange={e=>setMachineForm({...machineForm,location:e.target.value})}/></label><label>Standardmappe<select value={machineForm.folderId} onChange={e=>setMachineForm({...machineForm,folderId:e.target.value})}>{folders.map(f=><option value={f.id} key={f.id}>{f.name}</option>)}</select></label><label>Noter<textarea value={machineForm.notes} onChange={e=>setMachineForm({...machineForm,notes:e.target.value})}/></label><button className="primaryBtn" onClick={addMachine}>Opret maskine</button></section>}</div>}
+
+    {tab==='ask'&&<div className="knowledgeAskGrid"><section className="panel atlasAskPanel"><div className="atlasOrb"><span>ATLAS</span></div><h2>Hvad skal du have hjælp til?</h2><textarea value={question} onChange={e=>setQuestion(e.target.value)} placeholder="Eksempel: Hvad betyder alarm 201 på plasmaskæreren?"/><button className="primaryBtn" onClick={askAtlas}>Søg i FSQ-viden</button>{answer&&<div className="atlasKnowledgeAnswer"><b>ATLAS</b><p>{answer}</p></div>}</section><section className="panel"><h3>Gem løsning fra arbejdet</h3><p className="muted">Medarbejdere kan registrere den løsning, der virkede. Flemming eller Jakob kan verificere den.</p><textarea value={solutionText} onChange={e=>setSolutionText(e.target.value)} placeholder="Hvad var årsagen, og hvad løste problemet?"/><button onClick={saveSolution}>Gem løsning</button></section></div>}
+
+    {tab==='experience'&&<section className="panel"><div className="panelHead"><h3>Spørgsmål og løsninger</h3><span>{solutions.length}</span></div><div className="experienceList">{solutions.length?solutions.slice().reverse().map(item=><article key={item.id}><div><span className={`experienceState ${item.status==='Verified'?'verified':'pending'}`}>{item.status}</span><h3>{item.question}</h3><p>{item.solution||'Der er endnu ikke registreret en løsning.'}</p><small>{item.askedBy} · {new Date(item.date).toLocaleString('da-DK')} {item.machine?`· ${item.machine}`:''}</small></div>{canManage&&item.solution&&item.status!=='Verified'&&<button onClick={()=>verifySolution(item.id)}>Verificer</button>}</article>):<div className="empty">Ingen erfaringer er registreret endnu.</div>}</div></section>}
   </div>
 }
 
