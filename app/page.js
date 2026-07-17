@@ -426,7 +426,7 @@ function AppShell({ session, onLogout, users, setUsers }) {
         {active === 'myjobs' && <MyJobs session={session} tasks={tasks} setTasks={setTasks} projects={projects} />}
         {active === 'approvals' && <JobApprovals session={session} tasks={tasks} setTasks={setTasks} projects={projects} />}
         {active === 'crew' && <CrewManagement people={people} setPeople={setPeople} projects={projects} />}
-        {active === 'projects' && <Projects projects={projects} setProjects={setProjects} deletedProjects={deletedProjects} setDeletedProjects={setDeletedProjects} setActive={setActive} setActiveProjectId={setActiveProjectId} />}
+        {active === 'projects' && <Projects projects={projects} setProjects={setProjects} deletedProjects={deletedProjects} setDeletedProjects={setDeletedProjects} setActive={setActive} setActiveProjectId={setActiveProjectId} tasks={tasks} setTasks={setTasks} people={people} users={users} />}
         {active === 'projectHub' && <ProjectHub session={session} users={users} project={projects.find(p=>p.id===activeProjectId)} projects={projects} setProjects={setProjects} people={people} tasks={tasks} setTasks={setTasks} documents={documents} materials={materials} setMaterials={setMaterials} quotes={quotes} reports={reports} setActive={setActive} deletedProjects={deletedProjects} setDeletedProjects={setDeletedProjects} setActiveProjectId={setActiveProjectId} droneInspections={droneInspections} setDroneInspections={setDroneInspections} />}
         {active === 'documents' && <ProjectBinder documents={documents} setDocuments={setDocuments} projects={projects} session={session} />}
         {active === 'admin' && <Admin session={session} users={users} setUsers={setUsers} people={people} setPeople={setPeople} machines={machines} setMachines={setMachines} materials={materials} setMaterials={setMaterials} />}
@@ -1041,24 +1041,27 @@ function CrewManagement({ people, setPeople, projects }) {
   </div>
 }
 
-function Projects({projects,setProjects,deletedProjects,setDeletedProjects,setActive,setActiveProjectId}) {
+function Projects({projects,setProjects,deletedProjects,setDeletedProjects,setActive,setActiveProjectId,tasks,setTasks,people,users}) {
   const today = new Date().toISOString().slice(0,10);
   const [showWizard,setShowWizard]=useState(false);
+  const [wizardStep,setWizardStep]=useState(1);
   const [filter,setFilter]=useState('Active');
   const [search,setSearch]=useState('');
   const [form,setForm]=useState({
-    type:'Vessel',
+    type:'Workshop',
     customer:'',
+    contact:'',
     name:'',
     imo:'',
     lead:'Flemming',
-    location:'',
+    location:'Workshop',
     startDate:today,
     deadline:'',
     status:'Planning',
     priority:'Medium',
     health:'Green',
-    notes:''
+    notes:'',
+    crew:[]
   });
 
   function update(field,value){ setForm(current=>({...current,[field]:value})); }
@@ -1071,15 +1074,75 @@ function Projects({projects,setProjects,deletedProjects,setDeletedProjects,setAc
       deadline: project.deadline || project.mobilisation || '',
       archivedAt: project.archivedAt || '',
       completedAt: project.completedAt || '',
+      contact: project.contact || '',
+      crew: project.crew || [],
       ...project
     };
   }
 
   const normalizedProjects = projects.map(normalizeProject);
   const nextProjectNumber = `FSQ-${new Date().getFullYear().toString().slice(-2)}${String(normalizedProjects.length + deletedProjects.length + 1).padStart(4,'0')}`;
+  const activeTechnicians=(users||[]).filter(user=>user.active!==false && ['Technician','Welder','Fitter'].includes(user.role));
+  const projectManagers=(users||[]).filter(user=>user.active!==false && ['Owner','Project Manager','Engineer'].includes(user.role));
+  const isWorkshop=form.type==='Workshop';
+  const isMarine=['Vessel','Inspection','Service'].includes(form.type);
+
+  const workshopTasks=[
+    'Material preparation',
+    'Cutting / machining',
+    'Fit-up',
+    'Tack approval',
+    'Welding',
+    'Final QC',
+    'Release'
+  ];
+  const marineTasks=[
+    'Mobilisation preparation',
+    'Execute assigned work',
+    'Upload Work Done',
+    'Upload Timesheet',
+    'Demobilisation / handover'
+  ];
+
+  const requiredFolders=isWorkshop
+    ? ['Drawings','WPS','WPQR','Material Certificates','QC Photos','QC Reports','Packing Lists','Archive']
+    : ['Method Statements','Risk Assessments','Timesheets','Work Done','Service Reports','Photos','Certificates','Packing Lists','Archive'];
+
+  function resetWizard(){
+    setWizardStep(1);
+    setForm({
+      type:'Workshop',customer:'',contact:'',name:'',imo:'',lead:'Flemming',location:'Workshop',
+      startDate:today,deadline:'',status:'Planning',priority:'Medium',health:'Green',notes:'',crew:[]
+    });
+  }
+
+  function toggleCrew(name){
+    setForm(current=>({
+      ...current,
+      crew:current.crew.includes(name)?current.crew.filter(item=>item!==name):[...current.crew,name]
+    }));
+  }
+
+  function validateStep(){
+    if(wizardStep===1 && (!form.name.trim() || !form.customer.trim())){
+      alert('Project name and customer are required.');
+      return false;
+    }
+    if(wizardStep===2 && !form.lead){
+      alert('Select a project manager.');
+      return false;
+    }
+    return true;
+  }
+
+  function nextStep(){
+    if(!validateStep())return;
+    setWizardStep(step=>Math.min(3,step+1));
+  }
 
   function add(){
     if(!form.name.trim() || !form.customer.trim()) return;
+
     const project={
       id:Date.now(),
       ...form,
@@ -1087,16 +1150,34 @@ function Projects({projects,setProjects,deletedProjects,setDeletedProjects,setAc
       lifecycle:'Active',
       archivedAt:'',
       completedAt:'',
-      progress:5,
-      next:'Planning',
-      mobilisation:form.deadline
+      progress:0,
+      next:isWorkshop?'Material preparation':'Mobilisation preparation',
+      mobilisation:form.deadline,
+      workflow:isWorkshop?'Workshop QC':'Marine documentation',
+      requiredFolders
     };
+
+    const standardTaskNames=isWorkshop?workshopTasks:marineTasks;
+    const assignee=form.crew[0] || form.lead;
+    const createdTasks=standardTaskNames.map((title,index)=>({
+      id:Date.now()+index+1,
+      title,
+      person:assignee,
+      priority:index===0?'High':'Normal',
+      status:'Planned',
+      jobStatus:'Pending',
+      qaStage:isWorkshop && title==='Fit-up'?'Pending':'',
+      photos:[],
+      due:form.deadline||'This week',
+      project:form.name,
+      projectType:form.type,
+      sequence:index+1
+    }));
+
     setProjects([...normalizedProjects,project]);
+    setTasks([...(tasks||[]),...createdTasks]);
     setShowWizard(false);
-    setForm({
-      type:'Vessel',customer:'',name:'',imo:'',lead:'Flemming',location:'',
-      startDate:today,deadline:'',status:'Planning',priority:'Medium',health:'Green',notes:''
-    });
+    resetWizard();
     setActiveProjectId(project.id);
     setActive('projectHub');
   }
@@ -1130,8 +1211,8 @@ function Projects({projects,setProjects,deletedProjects,setDeletedProjects,setAc
 
   return <div className="content">
     <div className="sectionIntro projectIntro">
-      <div><h1>Projects</h1><p>All vessel, workshop, inspection and internal jobs in one place.</p></div>
-      <button className="primaryBtn newProjectButton" onClick={()=>setShowWizard(!showWizard)}>{showWizard?'Close':'＋ New Project'}</button>
+      <div><h1>Projects</h1><p>Open a complete Workshop or Marine project in three guided steps.</p></div>
+      <button className="primaryBtn newProjectButton" onClick={()=>{setShowWizard(!showWizard);if(!showWizard)resetWizard()}}>{showWizard?'Close':'＋ Open New Project'}</button>
     </div>
 
     <div className="projectToolbar">
@@ -1142,24 +1223,76 @@ function Projects({projects,setProjects,deletedProjects,setDeletedProjects,setAc
       </div>
     </div>
 
-    {showWizard&&<section className="panel projectWizard">
-      <div className="wizardHeader"><h3>Create project</h3><span>Project number: {nextProjectNumber}</span></div>
-      <div className="wizardGrid">
-        <label>Project type<select value={form.type} onChange={e=>update('type',e.target.value)}><option>Vessel</option><option>Workshop</option><option>Inspection</option><option>Drone Inspection</option><option>Internal</option><option>Service</option></select></label>
-        <label>Customer<input value={form.customer} onChange={e=>update('customer',e.target.value)} placeholder="Cadeler" /></label>
-        <label>Project / vessel name<input value={form.name} onChange={e=>update('name',e.target.value)} placeholder="Wind Orca" /></label>
-        <label>IMO number<input value={form.imo} onChange={e=>update('imo',e.target.value)} placeholder="Optional" /></label>
-        <label>Project manager<select value={form.lead} onChange={e=>update('lead',e.target.value)}><option>Flemming</option><option>Jakob</option><option>Stefan</option></select></label>
-        <label>Location<input value={form.location} onChange={e=>update('location',e.target.value)} placeholder="Esbjerg" /></label>
-        <label>Start date<input type="date" value={form.startDate} onClick={e=>e.currentTarget.showPicker?.()} onFocus={e=>e.currentTarget.showPicker?.()} onChange={e=>update('startDate',e.target.value)} /></label>
-        <label>Deadline<input type="date" min={form.startDate} value={form.deadline} onClick={e=>e.currentTarget.showPicker?.()} onFocus={e=>e.currentTarget.showPicker?.()} onChange={e=>update('deadline',e.target.value)} /></label>
-        <label>Priority<select value={form.priority} onChange={e=>update('priority',e.target.value)}><option>Low</option><option>Medium</option><option>High</option><option>Critical</option></select></label>
-        <label>Project health<select value={form.health} onChange={e=>update('health',e.target.value)}><option>Green</option><option>Yellow</option><option>Red</option></select></label>
-        <label>Status<select value={form.status} onChange={e=>update('status',e.target.value)}><option>Planning</option><option>Fabrication</option><option>Inspection</option><option>Mobilisation</option><option>Completed</option></select></label>
-        <label className="wizardNotes">Notes<textarea value={form.notes} onChange={e=>update('notes',e.target.value)} placeholder="Scope, priorities and important notes" /></label>
+    {showWizard&&<section className="panel projectWizard projectOpeningWizard">
+      <div className="wizardHeader">
+        <div><h3>Open Project</h3><p>Project number: <b>{nextProjectNumber}</b></p></div>
+        <div className="wizardSteps">{[1,2,3].map(step=><button key={step} className={wizardStep===step?'active':wizardStep>step?'done':''} onClick={()=>wizardStep>step&&setWizardStep(step)}><span>{wizardStep>step?'✓':step}</span><small>{step===1?'Project':step===2?'Team & setup':'Review'}</small></button>)}</div>
       </div>
-      <div className="wizardFolders">{['Quotations','Purchase Orders','Drawings','Method Statements','Risk Assessments','Service Reports','WPQR','WPS','NDT Reports','Certificates','Packing Lists','Photos','Drone','Videos','Archive'].map(x=><span key={x}>{x}</span>)}</div>
-      <button className="primaryBtn" onClick={add}>Create Project Hub</button>
+
+      {wizardStep===1&&<div className="wizardStepBody">
+        <div className="projectTypeCards">
+          {[['Workshop','Workshop fabrication and QC'],['Vessel','Marine / vessel work'],['Inspection','Inspection job'],['Service','Service job'],['Internal','Internal FSQ project']].map(([type,desc])=><button key={type} className={form.type===type?'active':''} onClick={()=>{update('type',type);if(type==='Workshop')update('location','Workshop')}}><b>{type}</b><small>{desc}</small></button>)}
+        </div>
+        <div className="wizardGrid">
+          <label>Customer *<input value={form.customer} onChange={e=>update('customer',e.target.value)} placeholder="Cadeler" /></label>
+          <label>Customer contact<input value={form.contact} onChange={e=>update('contact',e.target.value)} placeholder="Name / email / phone" /></label>
+          <label>Project / vessel name *<input value={form.name} onChange={e=>update('name',e.target.value)} placeholder={isWorkshop?'Stainless Frames':'Wind Orca'} /></label>
+          <label>IMO number<input value={form.imo} onChange={e=>update('imo',e.target.value)} placeholder={isMarine?'IMO number':'Not required'} disabled={!isMarine} /></label>
+          <label>Location<input value={form.location} onChange={e=>update('location',e.target.value)} placeholder={isWorkshop?'Workshop':'Port / vessel location'} /></label>
+          <label>Priority<select value={form.priority} onChange={e=>update('priority',e.target.value)}><option>Low</option><option>Medium</option><option>High</option><option>Critical</option></select></label>
+          <label>Start date<input type="date" value={form.startDate} onClick={e=>e.currentTarget.showPicker?.()} onFocus={e=>e.currentTarget.showPicker?.()} onChange={e=>update('startDate',e.target.value)} /></label>
+          <label>Deadline<input type="date" min={form.startDate} value={form.deadline} onClick={e=>e.currentTarget.showPicker?.()} onFocus={e=>e.currentTarget.showPicker?.()} onChange={e=>update('deadline',e.target.value)} /></label>
+          <label className="wizardNotes">Scope / notes<textarea value={form.notes} onChange={e=>update('notes',e.target.value)} placeholder="Short description of the project scope" /></label>
+        </div>
+      </div>}
+
+      {wizardStep===2&&<div className="wizardStepBody">
+        <div className="wizardGrid compactGrid">
+          <label>Project manager<select value={form.lead} onChange={e=>update('lead',e.target.value)}>{projectManagers.length?projectManagers.map(user=><option key={user.id}>{user.name}</option>):<><option>Flemming</option><option>Jakob</option><option>Stefan</option></>}</select></label>
+          <label>Initial status<select value={form.status} onChange={e=>update('status',e.target.value)}><option>Planning</option><option>Fabrication</option><option>Inspection</option><option>Mobilisation</option></select></label>
+        </div>
+        <div className="wizardSetupGrid">
+          <div className="wizardSetupPanel">
+            <div className="panelHead"><h3>Assign initial crew</h3><span>{form.crew.length} selected</span></div>
+            <div className="crewSelector">
+              {activeTechnicians.length?activeTechnicians.map(user=><button key={user.id} className={form.crew.includes(user.name)?'active':''} onClick={()=>toggleCrew(user.name)}><span>{user.name[0]}</span><div><b>{user.name}</b><small>{user.role}</small></div><em>{form.crew.includes(user.name)?'Selected':'Add'}</em></button>):people.map(person=><button key={person.id} className={form.crew.includes(person.name)?'active':''} onClick={()=>toggleCrew(person.name)}><span>{person.name[0]}</span><div><b>{person.name}</b><small>Technician</small></div><em>{form.crew.includes(person.name)?'Selected':'Add'}</em></button>)}
+            </div>
+          </div>
+          <div className="wizardSetupPanel">
+            <div className="panelHead"><h3>Automatic workflow</h3><span>{isWorkshop?'Workshop QC':'Marine'}</span></div>
+            <ol className="workflowPreview">{(isWorkshop?workshopTasks:marineTasks).map(item=><li key={item}>{item}</li>)}</ol>
+          </div>
+          <div className="wizardSetupPanel">
+            <div className="panelHead"><h3>Project folders</h3><span>{requiredFolders.length}</span></div>
+            <div className="wizardFolders">{requiredFolders.map(folder=><span key={folder}>{folder}</span>)}</div>
+          </div>
+        </div>
+      </div>}
+
+      {wizardStep===3&&<div className="wizardStepBody reviewProject">
+        <div className="reviewHero">
+          <div><span className="typeBadge">{form.type}</span><h2>{form.name||'Project name'}</h2><p>{form.customer||'Customer'} · {form.location||'Location TBD'}</p></div>
+          <strong>{nextProjectNumber}</strong>
+        </div>
+        <div className="reviewGrid">
+          <div><small>Project manager</small><b>{form.lead}</b></div>
+          <div><small>Start date</small><b>{form.startDate}</b></div>
+          <div><small>Deadline</small><b>{form.deadline||'Not set'}</b></div>
+          <div><small>Priority</small><b>{form.priority}</b></div>
+          <div><small>Assigned crew</small><b>{form.crew.length?form.crew.join(', '):'Not assigned yet'}</b></div>
+          <div><small>Workflow</small><b>{isWorkshop?'Workshop QC':'Marine documentation'}</b></div>
+        </div>
+        <div className="creationSummary">
+          <h3>FSQ Command will create</h3>
+          <p>1 project hub · {(isWorkshop?workshopTasks:marineTasks).length} standard tasks · {requiredFolders.length} project folders</p>
+          {isWorkshop?<p className="reviewRule">Workshop rule: Fit-up approval and Final QC by Flemming/Jakob. Four QC photos required before final release.</p>:<p className="reviewRule">Marine rule: No four-photo requirement. Timesheet and Work Done folders are prepared for the later document phase.</p>}
+        </div>
+      </div>}
+
+      <div className="wizardFooter">
+        <button className="secondaryBtn" disabled={wizardStep===1} onClick={()=>setWizardStep(step=>Math.max(1,step-1))}>Back</button>
+        {wizardStep<3?<button className="primaryBtn" onClick={nextStep}>Continue</button>:<button className="primaryBtn createProjectBtn" onClick={add}>Open Project</button>}
+      </div>
     </section>}
 
     {filter!=='Trash'
@@ -1195,6 +1328,7 @@ function Projects({projects,setProjects,deletedProjects,setDeletedProjects,setAc
         </div>}
   </div>
 }
+
 
 function ProjectHub({session,users,project,projects,setProjects,people,tasks,setTasks,documents,materials,setMaterials,quotes,reports,setActive,deletedProjects,setDeletedProjects,setActiveProjectId,droneInspections,setDroneInspections}) {
   const [tab,setTab]=useState('overview');

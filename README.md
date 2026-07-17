@@ -1,12 +1,40 @@
-# FSQ Command v6.0.3.3.1
+# FSQ Command 6.0 – Phase 3.4 Project Opening Wizard
 
-Build hotfix.
+## New
+- Three-step Open Project wizard
+- Project type selection
+- Customer and contact
+- Project name, location, dates and priority
+- Project manager and initial crew
+- Automatic workflow preview
+- Automatic project folder preview
+- Final review before opening the project
 
-## Fixed
-- Replaced `next.config.mjs` with a plain CommonJS `next.config.js`.
-- GitHub Actions now uses Node.js 20 LTS instead of Node.js 24.
-- Production build tested successfully.
-- Central user registry and Workshop QC from Phase 3.3 are preserved.
+## Workshop projects
+Automatically creates:
+- Material preparation
+- Cutting / machining
+- Fit-up
+- Tack approval
+- Welding
+- Final QC
+- Release
 
-## Deployment check
-The GitHub build must show `Compiled successfully`.
+Workshop project rule:
+- Flemming/Jakob approve fit-up and final QC
+- Four QC photos are required before final release
+
+## Marine projects
+Automatically creates:
+- Mobilisation preparation
+- Execute assigned work
+- Upload Work Done
+- Upload Timesheet
+- Demobilisation / handover
+
+Marine rule:
+- No fixed four-photo requirement
+- Timesheet and Work Done folders are prepared for the document phase
+
+## Result
+After pressing Open Project, FSQ Command creates the Project Hub, standard tasks and folder requirements, then opens the new project immediately.
