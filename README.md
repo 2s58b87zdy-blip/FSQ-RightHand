@@ -23,3 +23,7 @@ Dokumenter gemmes i Azure Blob Storage, når `AZURE_STORAGE_CONNECTION_STRING` e
 ## Deployment
 
 Upload projektet til GitHub-repositoriet, commit ændringerne og lad den eksisterende GitHub Actions-workflow deploye til Azure.
+
+
+## v7.2.1 password administration
+Flemming and Jakob can assign or reset passwords for every user from Settings > Users & Permissions. Passwords require at least 6 characters. A 12-character password generator and show/hide control are included.

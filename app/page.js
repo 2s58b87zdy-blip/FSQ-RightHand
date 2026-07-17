@@ -16,7 +16,7 @@ const FOLDER_ACCESS_LEVELS = ['No Access','Read','Edit','Full Control'];
 const MANAGED_FOLDERS = ['Projects','Workshop','Marine','Drawings','Procedures','QA / QC','Reports','Drone','Certificates','Templates','Finance','HR','Management','Contracts','Customers'];
 const DEFAULT_FOLDER_ACCESS = Object.fromEntries(MANAGED_FOLDERS.map(folder=>[folder,'No Access']));
 
-const APP_VERSION = '7.2.0';
+const APP_VERSION = '7.2.1';
 
 const USER_REGISTRY_DEFAULTS = [
   { id: 1, name: 'Flemming', role: 'Owner', password: 'fsq2027', active: true, permissions: ROLE_DEFINITIONS.Owner, folderAccess: Object.fromEntries(MANAGED_FOLDERS.map(folder=>[folder,'Full Control'])) },
@@ -1844,6 +1844,8 @@ function SystemHealth({session,users,projects,documents,knowledgeDocuments=[],kn
 function Admin({session,users,setUsers,people,setPeople,machines,setMachines,materials,setMaterials}) {
   const [newUser,setNewUser]=useState({name:'',role:'Technician',password:'fsq2027'});
   const [message,setMessage]=useState('');
+  const [passwordDrafts,setPasswordDrafts]=useState({});
+  const [visiblePasswords,setVisiblePasswords]=useState({});
   const owner=canManagePermissions(session);
   const roles=Object.keys(ROLE_DEFINITIONS);
 
@@ -1878,6 +1880,22 @@ function Admin({session,users,setUsers,people,setPeople,machines,setMachines,mat
     setUsers(users.map(user=>user.id===id?{...user,folderAccess:{...DEFAULT_FOLDER_ACCESS,...(user.folderAccess||{}),[folder]:level}}:user));
     setMessage('Folder access updated.');
   }
+  function setUserPassword(id){
+    if(!owner){setMessage('Only Flemming or Jakob can assign passwords.');return;}
+    const password=String(passwordDrafts[id]||'');
+    if(password.length<6){setMessage('Password must contain at least 6 characters.');return;}
+    const target=users.find(user=>user.id===id);
+    setUsers(users.map(user=>user.id===id?{...user,password}:user));
+    setPasswordDrafts(current=>({...current,[id]:''}));
+    setMessage(`Password updated for ${target?.name||'user'}.`);
+  }
+  function generatePassword(id){
+    const chars='ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#';
+    let password='';
+    for(let i=0;i<12;i+=1) password+=chars[Math.floor(Math.random()*chars.length)];
+    setPasswordDrafts(current=>({...current,[id]:password}));
+    setVisiblePasswords(current=>({...current,[id]:true}));
+  }
   function deleteUser(id){
     if(!owner){setMessage('Only Flemming or Jakob can delete users.');return;}
     const target=users.find(user=>user.id===id);
@@ -1894,6 +1912,7 @@ function Admin({session,users,setUsers,people,setPeople,machines,setMachines,mat
       {owner&&<div className="newUserForm"><input placeholder="Name" value={newUser.name} onChange={e=>setNewUser({...newUser,name:e.target.value})}/><select value={newUser.role} onChange={e=>setNewUser({...newUser,role:e.target.value})}>{roles.map(role=><option key={role}>{role}</option>)}</select><input type="password" value={newUser.password} onChange={e=>setNewUser({...newUser,password:e.target.value})}/><button onClick={addUser}>Create user</button></div>}
       <div className="userPermissionList">{users.map(user=><article className={`userPermissionCard ${!user.active?'inactive':''}`} key={user.id}>
         <div className="userPermissionTop"><div className="avatar">{user.name[0]}</div><div><h3>{user.name}</h3><small>{user.active?'Active':'Locked'} · {user.role}</small></div><select disabled={!owner||['Flemming','Jakob'].includes(user.name)} value={user.role} onChange={e=>changeRole(user.id,e.target.value)}>{roles.map(role=><option key={role}>{role}</option>)}</select></div>
+        <div className="passwordAdminRow"><div><h4>Login password</h4><small>Flemming and Jakob can assign a new password. The existing password is never displayed.</small></div><div className="passwordControls"><input type={visiblePasswords[user.id]?'text':'password'} disabled={!owner} placeholder="New password (min. 6 characters)" value={passwordDrafts[user.id]||''} onChange={e=>setPasswordDrafts(current=>({...current,[user.id]:e.target.value}))}/><button type="button" disabled={!owner} onClick={()=>setVisiblePasswords(current=>({...current,[user.id]:!current[user.id]}))}>{visiblePasswords[user.id]?'Hide':'Show'}</button><button type="button" disabled={!owner} onClick={()=>generatePassword(user.id)}>Generate</button><button type="button" disabled={!owner} onClick={()=>setUserPassword(user.id)}>Set password</button></div></div>
         <div className="permissionGrid">{allPermissions.map(permission=><label key={permission}><input type="checkbox" disabled={!owner||['Flemming','Jakob'].includes(user.name)} checked={(user.permissions||[]).includes(permission)} onChange={()=>togglePermission(user.id,permission)}/><span>{permission.replaceAll('_',' ')}</span></label>)}</div><div className="folderAccessGrid"><h4>Folder access</h4>{MANAGED_FOLDERS.map(folder=><label key={folder}><span>{folder}</span><select disabled={!owner||['Flemming','Jakob'].includes(user.name)} value={(user.folderAccess||DEFAULT_FOLDER_ACCESS)[folder]||'No Access'} onChange={e=>changeFolderAccess(user.id,folder,e.target.value)}>{FOLDER_ACCESS_LEVELS.map(level=><option key={level}>{level}</option>)}</select></label>)}</div>
         <div className="userActions"><button disabled={!owner||['Flemming','Jakob'].includes(user.name)} onClick={()=>toggleActive(user.id)}>{user.active?'Lock user':'Unlock user'}</button><button className="dangerAction" disabled={!owner||['Flemming','Jakob'].includes(user.name)} onClick={()=>deleteUser(user.id)}>Delete</button></div>
       </article>)}</div>
