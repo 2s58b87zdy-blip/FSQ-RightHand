@@ -1,29 +1,51 @@
-# FSQ Command v7.2.0 – ATLAS Knowledge Base
+# FSQ Command v8.1.0 – Shared Operations Data
 
-Denne version tilføjer et nyt ATLAS Knowledge-modul oven på FSQ Command v7.1.1.
+## New in v8.1
 
-## Nyt i v7.2.0
+- Azure SQL authentication through the App Service system-assigned Managed Identity
+- SQL username/password remains an optional local-development fallback
+- Shared SQL storage for the existing Projects, Planner, Machines and ATLAS Knowledge state
+- Dedicated future-ready SQL tables for Projects, Planner Events, Machines and Knowledge Documents
+- User passwords stored only as bcrypt hashes
+- Secure HTTP-only login session
+- Last-login tracking for users
+- Expanded System Health database information
+- Owner-only audit-log API
+- Automatic schema upgrades during startup
 
-- Opret egne vidensmapper
-- Knyt mapper til eksisterende adgangsområder
-- Opret maskiner med producent, model, serienummer, placering og noter
-- Upload manualer og øvrige filer til Azure Blob Storage
-- Knyt dokumenter til mapper og maskiner
-- Åbn og slet uploadede filer
-- Stil spørgsmål til ATLAS på baggrund af filmetadata og tidligere FSQ-erfaringer
-- Registrer spørgsmål og løsninger fra medarbejdere
-- Flemming og Jakob kan verificere løsninger
-- Teknikere kan bruge Knowledge Base og registrere erfaringer
-- System Health viser antal Knowledge-filer og maskiner
+## Required Azure App Service settings
 
-## Vigtigt
+Set these under **App Service → Settings → Environment variables**:
 
-Dokumenter gemmes i Azure Blob Storage, når `AZURE_STORAGE_CONNECTION_STRING` er konfigureret i Azure App Service. Mapper, maskinregister, metadata og erfaringer gemmes fortsat i browserens lokale lager i denne version. Fælles database og fuld dokumentindeksering/RAG kræver den planlagte Azure SQL/Azure AI Search-opgradering.
+- `SQL_SERVER=atlas-command-sql.database.windows.net`
+- `SQL_DATABASE=fsq-command`
+- `AUTH_SECRET` – at least 32 random characters
+- `INITIAL_OWNER_PASSWORD` – used only if the Users table is empty
+- `AZURE_STORAGE_CONNECTION_STRING`
+- `AZURE_STORAGE_CONTAINER=fsq-documents`
 
-## Deployment
+Do not add `SQL_USER` or `SQL_PASSWORD` in Azure when Managed Identity is used.
 
-Upload projektet til GitHub-repositoriet, commit ændringerne og lad den eksisterende GitHub Actions-workflow deploye til Azure.
+## Azure SQL permission
 
+The database must contain the external user for the App Service identity:
 
-## v7.2.1 password administration
-Flemming and Jakob can assign or reset passwords for every user from Settings > Users & Permissions. Passwords require at least 6 characters. A 12-character password generator and show/hide control are included.
+```sql
+CREATE USER [fsq-right-hand] FROM EXTERNAL PROVIDER;
+ALTER ROLE db_datareader ADD MEMBER [fsq-right-hand];
+ALTER ROLE db_datawriter ADD MEMBER [fsq-right-hand];
+ALTER ROLE db_ddladmin ADD MEMBER [fsq-right-hand];
+```
+
+## First deployment
+
+1. Add the environment variables.
+2. Deploy this project through the existing GitHub Actions/App Service workflow.
+3. Restart the App Service.
+4. Open FSQ Command and log in with the `INITIAL_OWNER_PASSWORD`.
+5. In **Settings → Users & Permissions**, assign a unique password to every user.
+6. Open **System Health** and confirm that Azure SQL reports Connected and Managed Identity.
+
+## Data model
+
+`Users`, `AppState`, `AuditLog`, `Projects`, `PlannerEvents`, `Machines` and `KnowledgeDocuments` are created automatically. Existing screens continue to use the shared AppState synchronization layer, preserving the current UI while the dedicated module APIs are introduced in subsequent releases.

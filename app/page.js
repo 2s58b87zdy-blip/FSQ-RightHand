@@ -16,7 +16,7 @@ const FOLDER_ACCESS_LEVELS = ['No Access','Read','Edit','Full Control'];
 const MANAGED_FOLDERS = ['Projects','Workshop','Marine','Drawings','Procedures','QA / QC','Reports','Drone','Certificates','Templates','Finance','HR','Management','Contracts','Customers'];
 const DEFAULT_FOLDER_ACCESS = Object.fromEntries(MANAGED_FOLDERS.map(folder=>[folder,'No Access']));
 
-const APP_VERSION = '7.2.1';
+const APP_VERSION = '8.1.0';
 
 const USER_REGISTRY_DEFAULTS = [
   { id: 1, name: 'Flemming', role: 'Owner', password: 'fsq2027', active: true, permissions: ROLE_DEFINITIONS.Owner, folderAccess: Object.fromEntries(MANAGED_FOLDERS.map(folder=>[folder,'Full Control'])) },
@@ -327,34 +327,59 @@ function useSpeechRecognition({ onResult, onError }) {
 
 function useStoredState(key, initialValue) {
   const [value, setValue] = useState(initialValue);
+  const hydrated = useRef(false);
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem(key);
-      if (saved) setValue(JSON.parse(saved));
-    } catch {}
+    let cancelled = false;
+    async function load() {
+      try {
+        const response = await fetch(`/api/state?key=${encodeURIComponent(key)}`, { cache: 'no-store' });
+        if (response.ok) {
+          const data = await response.json();
+          if (!cancelled && data.value !== null) setValue(data.value);
+          hydrated.current = true;
+          return;
+        }
+      } catch {}
+      try {
+        const saved = localStorage.getItem(key);
+        if (!cancelled && saved) setValue(JSON.parse(saved));
+      } catch {}
+      hydrated.current = true;
+    }
+    load();
+    return () => { cancelled = true; };
   }, [key]);
   useEffect(() => {
+    if (!hydrated.current) return;
     try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
+    const timer = setTimeout(() => {
+      fetch('/api/state', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key, value }) }).catch(() => {});
+    }, 250);
+    return () => clearTimeout(timer);
   }, [key, value]);
   return [value, setValue];
 }
 
 function Login({ onLogin, users }) {
-  const [user, setUser] = useState('Flemming');
-  const [password, setPassword] = useState('fsq2027');
+  const [user, setUser] = useState(users[0]?.name || 'Flemming');
+  const [password, setPassword] = useState('');
   const [voice, setVoice] = useState(true);
   const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
 
-  function submit(e) {
-    e.preventDefault();
-    const account = users.find(item => item.name === user);
-    if (!account || !account.active || account.password !== password) {
-      setError('Forkert adgangskode');
-      return;
-    }
-    const greeting = getGreeting(user);
-    speak(greeting, voice);
-    onLogin({ name: account.name, role: account.role, permissions: account.permissions || [], voice });
+  useEffect(() => { if (!users.some(item => item.name === user) && users[0]) setUser(users[0].name); }, [users, user]);
+
+  async function submit(e) {
+    e.preventDefault(); setBusy(true); setError('');
+    try {
+      const response = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: user, password }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Login failed');
+      const greeting = getGreeting(data.user.name);
+      speak(greeting, voice);
+      onLogin({ ...data.user, voice });
+    } catch (err) { setError(err.message || 'Login failed'); }
+    finally { setBusy(false); }
   }
 
   return (
@@ -366,15 +391,15 @@ function Login({ onLogin, users }) {
         <p className="poweredBy">POWERED BY ATLAS</p>
         <p className="eyebrow">MARITIME · INDUSTRIAL · WORKSHOP</p>
         <h1>Your marine operations command center</h1>
-        <p className="muted">Secure operations dashboard for FSQ.</p>
+        <p className="muted">Secure Azure SQL login for FSQ.</p>
         <form onSubmit={submit} className="loginForm">
-          <label>User<select value={user} onChange={e => setUser(e.target.value)}>{users.filter(item=>item.active).map(item => <option key={item.id}>{item.name}</option>)}</select></label>
-          <label>Password<input type="password" value={password} onChange={e => setPassword(e.target.value)} /></label>
+          <label>User<select value={user} onChange={e => setUser(e.target.value)}>{users.filter(item=>item.active!==false).map(item => <option key={item.id}>{item.name}</option>)}</select></label>
+          <label>Password<input type="password" value={password} onChange={e => setPassword(e.target.value)} autoComplete="current-password" /></label>
           <label className="voiceToggle"><input type="checkbox" checked={voice} onChange={e => setVoice(e.target.checked)} /> Voice greeting</label>
           {error && <div className="error">{error}</div>}
-          <button className="primaryBtn">INITIALIZE SYSTEM</button>
+          <button className="primaryBtn" disabled={busy}>{busy ? 'CONNECTING…' : 'INITIALIZE SYSTEM'}</button>
         </form>
-        <div className="systemLine"><span/> Azure online <span/> Workshop control active <span/> No time registration</div>
+        <div className="systemLine"><span/> Azure SQL secured <span/> Workshop control active <span/> v8.0</div>
       </section>
     </main>
   );
@@ -1837,8 +1862,8 @@ function OperationsPlanner({people,projects}){
 function SystemHealth({session,users,projects,documents,knowledgeDocuments=[],knowledgeMachines=[]}){
   const allowed=canManagePermissions(session);
   if(!allowed)return <div className="content"><div className="sectionIntro"><h1>System Health</h1><p>Kun Flemming og Jakob har adgang til systemstatus.</p></div></div>;
-  const items=[['FSQ Command','Operational'],['Azure App Service','Operational'],['Azure Blob Storage','Configured'],['Shared Database','Planned for v8.0'],['User Registry',`${users.filter(u=>u.active).length} active users`],['Project Data',`${projects.length} projects`],['Document Index',`${documents.length} documents`],['ATLAS Knowledge',`${knowledgeDocuments.length} files · ${knowledgeMachines.length} machines`],['Application Version',`v${APP_VERSION}`]];
-  return <div className="content healthPage"><div className="sectionIntro"><div><h1>System Health</h1><p>Administratorstatus for FSQ Command.</p></div><div className="healthOverall"><i/> ALL SYSTEMS OPERATIONAL</div></div><div className="healthGrid">{items.map(([name,status])=><article key={name}><div className="healthIcon">◉</div><small>{name}</small><strong>{status}</strong><span>{new Date().toLocaleString('da-DK')}</span></article>)}</div><section className="panel healthNote"><h3>Database status</h3><p>Version 7.1 bruger fortsat browserens lokale datalager til driftsdata. Den fælles Azure-database er planlagt til version 8.0. Azure Blob Storage bruges fortsat til filer og billeder, når miljøvariablerne er konfigureret.</p></section></div>
+  const items=[['FSQ Command','Operational'],['Azure App Service','Operational'],['Azure Blob Storage','Configured'],['Shared Database','Azure SQL · Managed Identity'],['User Registry',`${users.filter(u=>u.active).length} active users`],['Project Data',`${projects.length} projects`],['Document Index',`${documents.length} documents`],['ATLAS Knowledge',`${knowledgeDocuments.length} files · ${knowledgeMachines.length} machines`],['Application Version',`v${APP_VERSION}`]];
+  return <div className="content healthPage"><div className="sectionIntro"><div><h1>System Health</h1><p>Administratorstatus for FSQ Command.</p></div><div className="healthOverall"><i/> ALL SYSTEMS OPERATIONAL</div></div><div className="healthGrid">{items.map(([name,status])=><article key={name}><div className="healthIcon">◉</div><small>{name}</small><strong>{status}</strong><span>{new Date().toLocaleString('da-DK')}</span></article>)}</div><section className="panel healthNote"><h3>Database status</h3><p>Version 8.0 synkroniserer brugere, rettigheder og driftsdata med Azure SQL. Browserens lokale lager bruges kun som midlertidig fallback. Filer og billeder gemmes fortsat i Azure Blob Storage.</p></section></div>
 }
 
 function Admin({session,users,setUsers,people,setPeople,machines,setMachines,materials,setMaterials}) {
@@ -2073,4 +2098,30 @@ function AI({chat,setChat,voice,stats}) {
 
 function ModulePlaceholder({title}) { return <div className="content"><div className="sectionIntro"><h1>{title}</h1><p>This module is included in the navigation and ready for connection to the shared database.</p></div><div className="panel placeholder"><div className="core small"><div className="coreRing r1"/><div className="coreDot"/></div><h3>{title} module</h3><p>UI foundation ready. Database, files and approval workflows are the next deployment layer.</p></div></div> }
 
-export default function Page(){ const [session,setSession]=useState(null); const [storedUsers,setUsers]=useStoredState('fsq-v60-users',USER_REGISTRY_DEFAULTS); const users=normalizeUserRegistry(storedUsers); return session?<AppShell session={session} onLogout={()=>setSession(null)} users={users} setUsers={setUsers}/>:<Login onLogin={setSession} users={users}/> }
+export default function Page(){
+  const [session,setSession]=useState(null);
+  const [users,setUsersLocal]=useState([]);
+  const [loadingUsers,setLoadingUsers]=useState(true);
+
+  async function loadUsers(authenticated=false){
+    try{
+      const response=await fetch(authenticated?'/api/users':'/api/auth/users',{cache:'no-store'});
+      if(response.ok){const data=await response.json();setUsersLocal(normalizeUserRegistry(data));}
+    }catch{}finally{setLoadingUsers(false);}
+  }
+  useEffect(()=>{loadUsers(false)},[]);
+  useEffect(()=>{if(session)loadUsers(true)},[session]);
+
+  async function setUsers(next){
+    const value=typeof next==='function'?next(users):next;
+    setUsersLocal(normalizeUserRegistry(value));
+    try{
+      const response=await fetch('/api/users',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(value)});
+      if(response.ok)setUsersLocal(normalizeUserRegistry(await response.json()));
+      else console.error('User update failed',await response.text());
+    }catch(error){console.error('User update failed',error);}
+  }
+  async function logout(){try{await fetch('/api/auth/logout',{method:'POST'})}catch{}setSession(null);loadUsers(false)}
+  if(loadingUsers)return <main className="loginShell"><section className="loginPanel"><h1>FSQ COMMAND</h1><p>Connecting to Azure SQL…</p></section></main>;
+  return session?<AppShell session={session} onLogout={logout} users={users} setUsers={setUsers}/>:<Login onLogin={setSession} users={users}/>;
+}
