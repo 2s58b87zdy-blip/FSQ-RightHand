@@ -56,3 +56,11 @@ ALTER ROLE db_ddladmin ADD MEMBER [fsq-right-hand];
 - Keeps Managed Identity as the default when no SQL username/password is supplied.
 - Adds server-side logging for `/api/auth/users` so Azure Log Stream shows the exact database error.
 - Adds defensive checks around schema initialization and user seeding.
+
+## v8.1.2 login diagnostics hotfix
+- Uses the known Azure SQL server/database as safe defaults when only Managed Identity is configured.
+- Adds `/api/diagnostics/database` with non-secret connection diagnostics.
+- Shows the actual Azure SQL error on the login screen instead of silently displaying an empty user list.
+- Uses Node.js 20 in GitHub Actions.
+- Deploys the tested Next.js standalone output rather than the entire repository.
+- Removes the invalid duplicate `next.config.mjs` file.

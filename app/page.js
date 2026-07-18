@@ -2102,12 +2102,15 @@ export default function Page(){
   const [session,setSession]=useState(null);
   const [users,setUsersLocal]=useState([]);
   const [loadingUsers,setLoadingUsers]=useState(true);
+  const [startupError,setStartupError]=useState('');
 
   async function loadUsers(authenticated=false){
     try{
       const response=await fetch(authenticated?'/api/users':'/api/auth/users',{cache:'no-store'});
-      if(response.ok){const data=await response.json();setUsersLocal(normalizeUserRegistry(data));}
-    }catch{}finally{setLoadingUsers(false);}
+      const data=await response.json().catch(()=>({}));
+      if(response.ok){setUsersLocal(normalizeUserRegistry(data));setStartupError('');}
+      else setStartupError(data.detail || data.error || `HTTP ${response.status}`);
+    }catch(error){setStartupError(error?.message || 'Could not contact login service');}finally{setLoadingUsers(false);}
   }
   useEffect(()=>{loadUsers(false)},[]);
   useEffect(()=>{if(session)loadUsers(true)},[session]);
@@ -2123,5 +2126,6 @@ export default function Page(){
   }
   async function logout(){try{await fetch('/api/auth/logout',{method:'POST'})}catch{}setSession(null);loadUsers(false)}
   if(loadingUsers)return <main className="loginShell"><section className="loginPanel"><h1>FSQ COMMAND</h1><p>Connecting to Azure SQL…</p></section></main>;
+  if(startupError && !session)return <main className="loginShell"><section className="loginPanel"><h1>FSQ COMMAND</h1><div className="error">Azure SQL connection failed: {startupError}</div><p className="muted">Open /api/diagnostics/database for technical details.</p><button className="primaryBtn" onClick={()=>{setLoadingUsers(true);loadUsers(false)}}>TRY AGAIN</button></section></main>;
   return session?<AppShell session={session} onLogout={logout} users={users} setUsers={setUsers}/>:<Login onLogin={setSession} users={users}/>;
 }

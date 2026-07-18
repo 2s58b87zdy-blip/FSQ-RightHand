@@ -17,7 +17,8 @@ export async function GET() {
     });
     return NextResponse.json({
       error: 'Kunne ikke hente brugere fra Azure SQL.',
-      detail: process.env.NODE_ENV === 'development' ? error?.message : undefined
+      detail: error?.message || 'Unknown database error',
+      code: error?.code || null
     }, { status: 500 });
   }
 }

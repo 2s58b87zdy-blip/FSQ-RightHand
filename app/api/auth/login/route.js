@@ -15,5 +15,8 @@ export async function POST(request) {
     const response=NextResponse.json({user:{id:user.Id,name:user.Name,role:user.Role,permissions}}); response.cookies.set(sessionCookie(token));
     await pool.request().input('id',sql.Int,user.Id).input('user',sql.NVarChar,user.Name).query("UPDATE dbo.Users SET LastLoginAt=SYSUTCDATETIME() WHERE Id=@id; INSERT INTO dbo.AuditLog(UserName,Action,EntityType) VALUES(@user,'LOGIN','AUTH');");
     return response;
-  } catch (error) { return NextResponse.json({error:error.message},{status:500}); }
+  } catch (error) {
+    console.error('[FSQ /api/auth/login]', { message: error?.message, code: error?.code, stack: error?.stack });
+    return NextResponse.json({ error: 'Login service error', detail: error?.message || 'Unknown error', code: error?.code || null }, { status: 500 });
+  }
 }
