@@ -1,4 +1,4 @@
-# FSQ Command v8.1.0 – Shared Operations Data
+# FSQ Command v8.1.1 – Shared Operations Data
 
 ## New in v8.1
 
@@ -49,3 +49,10 @@ ALTER ROLE db_ddladmin ADD MEMBER [fsq-right-hand];
 ## Data model
 
 `Users`, `AppState`, `AuditLog`, `Projects`, `PlannerEvents`, `Machines` and `KnowledgeDocuments` are created automatically. Existing screens continue to use the shared AppState synchronization layer, preserving the current UI while the dedicated module APIs are introduced in subsequent releases.
+
+
+## v8.1.1 hotfix
+- Accepts either `SQL_SERVER` + `SQL_DATABASE` or a valid `DATABASE_URL`.
+- Keeps Managed Identity as the default when no SQL username/password is supplied.
+- Adds server-side logging for `/api/auth/users` so Azure Log Stream shows the exact database error.
+- Adds defensive checks around schema initialization and user seeding.
