@@ -111,3 +111,6 @@ Choose one authentication method:
    - Grant the App Service system-assigned identity the role `Storage Blob Data Contributor` on the Storage account.
 
 After deployment, sign in and open `/api/diagnostics/blob`. A working setup returns `"ok": true`.
+
+## Login recovery (v10.2.1)
+If an existing password hash no longer matches after an upgrade, configure `INITIAL_OWNER_PASSWORD` and optionally `INITIAL_COOWNER_PASSWORD` in Azure App Service > Environment variables. A successful login with the configured recovery password automatically writes a fresh bcrypt hash to Azure SQL.

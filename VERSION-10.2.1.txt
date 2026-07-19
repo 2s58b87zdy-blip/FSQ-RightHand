@@ -1,0 +1,11 @@
+FSQ Command v10.2.1 Login Recovery Hotfix
+
+- Restores Azure-based one-time password recovery for Flemming
+- Adds Azure-based recovery for Jakob
+- Accepts trimmed/case-insensitive usernames
+- Migrates legacy plain-text passwords to bcrypt automatically
+- Adds useful login diagnostics without logging passwords
+
+Azure App Service settings:
+- INITIAL_OWNER_PASSWORD: recovery password for Flemming
+- INITIAL_COOWNER_PASSWORD: recovery password for Jakob (falls back to INITIAL_OWNER_PASSWORD if omitted)
