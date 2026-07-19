@@ -4,12 +4,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 function safe(value){return String(value||'General').trim().replace(/[^a-zA-Z0-9._-]+/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,'')||'General'}
-function client(){
-  const connection=process.env.AZURE_STORAGE_CONNECTION_STRING;
-  if(!connection) throw new Error('AZURE_STORAGE_CONNECTION_STRING is not configured');
-  const service=BlobServiceClient.fromConnectionString(connection);
-  return service.getContainerClient(process.env.AZURE_STORAGE_CONTAINER||'fsq-documents');
-}
+function client(){ return getBlobContainerClient(); }
 
 export async function POST(request){
   try{

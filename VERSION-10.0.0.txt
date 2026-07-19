@@ -1,0 +1,9 @@
+FSQ Command Enterprise v10.0.0
+Project Binder storage foundation
+
+- Robust Azure Storage connection-string parsing
+- Supports AccountKey, SAS, development storage and Managed Identity
+- Can infer Managed Identity account URL from AccountName or BlobEndpoint
+- One Blob client shared by Project Binder, Knowledge Base and job photos
+- Sanitized diagnostics without exposing secrets
+- Folder-specific upload and ATLAS indexing retained

@@ -1,23 +1,20 @@
-FSQ COMMAND v9.2.1 - AZURE BLOB HOTFIX
+FSQ COMMAND ENTERPRISE v10.0.0
 
-1. Upload all files in this folder to the root of the GitHub repository and overwrite the existing files.
-2. Wait for GitHub Actions to finish successfully.
-3. Keep AZURE_STORAGE_CONTAINER set to: fsq-documents
-4. Choose ONE Blob authentication method:
-
-A. Existing connection string
-   AZURE_STORAGE_CONNECTION_STRING must contain the COMPLETE value from:
-   Azure Storage account > Security + networking > Access keys > Connection string.
-
-B. Managed Identity (recommended)
-   Add AZURE_STORAGE_ACCOUNT_URL, for example:
-   https://YOUR-STORAGE-ACCOUNT.blob.core.windows.net
-
-   On the Storage account, give the App Service identity fsq-right-hand this role:
-   Storage Blob Data Contributor
-
-5. Restart the App Service.
-6. Sign in and open:
+1. Extract this ZIP.
+2. Upload/replace all files in the root of the GitHub repository FSQ-RightHand.
+3. Commit the changes and wait for GitHub Actions to finish successfully.
+4. Open FSQ Command using the exact Default domain shown on the Azure App Service Overview page.
+5. Sign in, then open this path on the same domain:
    /api/diagnostics/blob
+6. The expected response is: "ok": true.
+7. Test one small PDF in Project Binder > Wind Orca > Drawings.
 
-A correct setup returns: "ok": true
+Storage configuration supports either:
+A) AZURE_STORAGE_CONNECTION_STRING with the complete value copied from
+   Storage account > Access keys > Connection string
+OR
+B) AZURE_STORAGE_ACCOUNT_URL, such as
+   https://YOURACCOUNT.blob.core.windows.net
+   plus Storage Blob Data Contributor access for the App Service Managed Identity.
+
+Never paste storage keys or OpenAI keys into chat, screenshots or source files.
