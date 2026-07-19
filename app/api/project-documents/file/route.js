@@ -1,8 +1,8 @@
-import { BlobServiceClient } from '@azure/storage-blob';
 import { readSession } from '../../../../lib/auth';
+import { getDocumentContainerClient } from '../../../../lib/storage';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
-function container(){const connection=process.env.AZURE_STORAGE_CONNECTION_STRING;if(!connection)throw new Error('AZURE_STORAGE_CONNECTION_STRING is not configured');return BlobServiceClient.fromConnectionString(connection).getContainerClient(process.env.AZURE_STORAGE_CONTAINER||'fsq-documents')}
+function container(){return getDocumentContainerClient()}
 export async function GET(request){
   const session=await readSession();
   if(!session)return Response.json({error:'Not authenticated'},{status:401});

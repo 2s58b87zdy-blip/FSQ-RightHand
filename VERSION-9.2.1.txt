@@ -1,0 +1,8 @@
+FSQ Command v9.2.1
+
+- Fixed Project Binder Azure Blob configuration handling
+- Accepts full connection string or Azure account URL with Managed Identity
+- Strips accidental quotes and line breaks from Azure environment values
+- Clearer Blob Storage error messages
+- ATLAS speech recognition, spoken voice and voice controls use English (en-GB)
+- ATLAS answers in English by default

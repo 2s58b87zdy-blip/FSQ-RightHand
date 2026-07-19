@@ -1,6 +1,6 @@
 {
-  "name": "fsq-command-v920",
-  "version": "9.2.0",
+  "name": "fsq-command-v921",
+  "version": "9.2.1",
   "private": true,
   "scripts": {
     "dev": "next dev",

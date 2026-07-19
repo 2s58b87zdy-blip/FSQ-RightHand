@@ -447,7 +447,7 @@ function AppShell({ session, onLogout, users, setUsers }) {
 
   const globalSpeech = useSpeechRecognition({
     onResult: handleGlobalVoiceCommand,
-    onError: error => setVoiceMessage(error==='not-supported'?'Talegenkendelse understøttes ikke i denne browser. Brug Microsoft Edge eller Chrome.':'Mikrofonen kunne ikke startes. Kontrollér browserens mikrofontilladelse.')
+    onError: error => setVoiceMessage(error==='not-supported'?'Speech recognition is not supported in this browser. Use Microsoft Edge or Chrome.':'The microphone could not start. Check the browser microphone permission.')
   });
 
   const isTechnician = session.role === 'Technician';
@@ -2110,11 +2110,11 @@ function AI({session,chat,setChat,voice,stats,context}) {
 
   const speech=useSpeechRecognition({
     onResult: transcript=>{setText(transcript);setSpeechError('');send(transcript)},
-    onError: error=>setSpeechError(error==='not-supported'?'Talegenkendelse understøttes ikke. Brug Microsoft Edge eller Chrome.':'Kontrollér, at browseren har adgang til mikrofonen.')
+    onError: error=>setSpeechError(error==='not-supported'?'Speech recognition is not supported. Use Microsoft Edge or Chrome.':'Check that the browser has microphone access.')
   });
 
   return <div className="content aiLayout atlasBrainPage">
-    <div className="sectionIntro"><div><p className="eyebrow">FSQ INTELLIGENCE LAYER</p><h1>ATLAS BRAIN</h1><p>FSQ Knowledge først · officiel online research som supplement · alle svar logges.</p></div><button className={`atlasMic ${speech.listening?'listening':''}`} onClick={speech.toggleListening}>{speech.listening?'● ATLAS lytter...':'🎙 Tal til ATLAS'}</button></div>
+    <div className="sectionIntro"><div><p className="eyebrow">FSQ INTELLIGENCE LAYER</p><h1>ATLAS BRAIN</h1><p>FSQ Knowledge først · officiel online research som supplement · alle svar logges.</p></div><button className={`atlasMic ${speech.listening?'listening':''}`} onClick={speech.toggleListening}>{speech.listening?'● ATLAS is listening...':'🎙 Talk to ATLAS'}</button></div>
     <div className="atlasBrainToolbar">
       <div className="atlasModes">
         <button className={mode==='assistant'?'active':''} onClick={()=>setMode('assistant')}>Assistant</button>
@@ -2130,7 +2130,7 @@ function AI({session,chat,setChat,voice,stats,context}) {
       <div className="chatPanel atlasChat">
         {chat.map((m,i)=><div key={i} className={`bubble ${m.from}`}>{m.text}</div>)}
         {busy&&<div className="bubble ai atlasThinking">ATLAS undersøger FSQ-viden{useWeb||mode==='research'?' og online kilder':''}…</div>}
-        <div className="chatInput"><textarea rows="2" value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}}} placeholder={mode==='developer'?'Beskriv den funktion eller fejl, ATLAS skal analysere…':'Spørg ATLAS om projekter, teknik, dokumenter eller online research…'}/><button className="micMini" onClick={speech.toggleListening}>{speech.listening?'●':'🎙'}</button><button disabled={busy} onClick={()=>send()}>{busy?'Arbejder…':'Send'}</button></div>
+        <div className="chatInput"><textarea rows="2" value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}}} placeholder={mode==='developer'?'Describe the feature or error ATLAS should analyse…':'Ask ATLAS about projects, engineering, documents or online research…'}/><button className="micMini" onClick={speech.toggleListening}>{speech.listening?'●':'🎙'}</button><button disabled={busy} onClick={()=>send()}>{busy?'Working…':'Send'}</button></div>
       </div>
       <aside className="atlasSourcePanel panel"><div className="panelHead"><h3>Kilder</h3><span>{sources.length}</span></div>{sources.length?sources.map((source,i)=><article key={i}><span>{source.type==='Online'?'🌐':'▤'}</span><div><b>{source.type}</b>{source.url?<a href={source.url} target="_blank" rel="noreferrer">{source.title}</a>:<small>{source.title}</small>}</div></article>):<div className="empty">Kilder vises efter næste svar.</div>}<hr/><small>Prioritet: FSQ approved knowledge → producent/klasse → øvrige pålidelige online kilder.</small></aside>
     </div>
