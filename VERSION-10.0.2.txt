@@ -1,0 +1,7 @@
+FSQ Command v10.0.2 Stability Hotfix
+
+- One-time Flemming password recovery from INITIAL_OWNER_PASSWORD
+- Node.js 20 build workflow
+- Deploys the actual Next.js standalone package
+- Removes invalid duplicate next.config.mjs
+- Keeps Azure SQL, Blob Storage and ATLAS functionality from v10.0.0
