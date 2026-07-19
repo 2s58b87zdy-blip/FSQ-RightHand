@@ -1796,6 +1796,14 @@ function ProjectBinder({ documents, setDocuments, projects, session }) {
         </>:<div className="binderPreviewPlaceholder"><span>ATLAS</span><h3>Select a document</h3><p>Preview, metadata and ATLAS indexing status will appear here.</p></div>}
       </aside>
     </section>
+
+    <section className="binderCommandStrip">
+      <div><small>UPLOAD QUEUE</small><b>{uploading.length ? `${uploading.length} active` : 'Ready'}</b><span>{uploading.length ? uploading[uploading.length-1]?.status : 'All uploads processed'}</span></div>
+      <div><small>ATLAS PROCESSING</small><b>{filtered.filter(d=>String(d.status||'').toLowerCase().includes('atlas')).length} ready</b><span>Text extraction and indexing</span></div>
+      <div><small>STORAGE</small><b>Azure Blob Storage</b><span>{selectedProject} / {selectedFolder}</span></div>
+      <div><small>FOLDER INSIGHT</small><b>{filtered.length} documents</b><span>{formatSize(filtered.reduce((sum,d)=>sum+Number(d.sizeBytes||0),0))} total size</span></div>
+      <button onClick={()=>setMessage(`ATLAS context selected: ${selectedProject} / ${selectedFolder}`)}>Ask ATLAS about this folder</button>
+    </section>
   </div>
 }
 

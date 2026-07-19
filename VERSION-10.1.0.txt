@@ -1,0 +1,10 @@
+FSQ Command v10.1.0
+Project Binder Command Center + Blob Upload Reliability
+
+- Three-panel Project Binder layout retained and refined
+- Uploads are stored in the active project/folder
+- Robust Azure connection-string parsing
+- Supports Azure App Settings and Connection strings prefixes
+- Managed Identity fallback for fsqrighthandstorage
+- Node.js 20 deterministic GitHub Actions build
+- Deploys the actual Next.js standalone package

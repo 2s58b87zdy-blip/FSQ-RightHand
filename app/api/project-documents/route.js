@@ -1,4 +1,4 @@
-import { getBlobContainerClient } from '../../../lib/blob';
+import { ensureBlobContainer, getBlobContainerClient } from '../../../lib/blob';
 import { readSession } from '../../../lib/auth';
 import { ensureSchema, sql } from '../../../lib/db';
 import { chunkText, extractDocumentText } from '../../../lib/documentText';
@@ -65,8 +65,7 @@ export async function POST(request) {
     const blobName = `project-binder/${safe(project)}/${safe(category)}/${Date.now()}-${safe(originalName, 'document')}`;
     const buffer = Buffer.from(await file.arrayBuffer());
 
-    const c = container();
-    await c.createIfNotExists({ access: 'private' });
+    const c = await ensureBlobContainer();
     const block = c.getBlockBlobClient(blobName);
     await block.uploadData(buffer, {
       blobHTTPHeaders: { blobContentType: file.type || 'application/octet-stream' },
