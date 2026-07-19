@@ -1,8 +1,8 @@
+import { getBlobContainerClient } from '../../../../lib/blob';
 import { readSession } from '../../../../lib/auth';
-import { getDocumentContainerClient } from '../../../../lib/storage';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
-function container(){return getDocumentContainerClient()}
+function container() { return getBlobContainerClient(); }
 export async function GET(request){
   const session=await readSession();
   if(!session)return Response.json({error:'Not authenticated'},{status:401});

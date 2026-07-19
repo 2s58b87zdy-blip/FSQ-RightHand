@@ -1,4 +1,4 @@
-import { BlobServiceClient } from '@azure/storage-blob';
+import { getBlobContainerClient } from '../../../lib/blob';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';

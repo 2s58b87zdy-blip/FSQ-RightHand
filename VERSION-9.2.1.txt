@@ -1,8 +1,7 @@
-FSQ Command v9.2.1
+FSQ Command v9.2.1 - Azure Blob Storage hotfix
 
-- Fixed Project Binder Azure Blob configuration handling
-- Accepts full connection string or Azure account URL with Managed Identity
-- Strips accidental quotes and line breaks from Azure environment values
-- Clearer Blob Storage error messages
-- ATLAS speech recognition, spoken voice and voice controls use English (en-GB)
-- ATLAS answers in English by default
+- Supports a complete AZURE_STORAGE_CONNECTION_STRING.
+- Supports Managed Identity with AZURE_STORAGE_ACCOUNT_URL.
+- Trims accidental quotes, spaces and line breaks in Azure environment values.
+- Uses one shared Blob Storage client across Project Binder, Knowledge and Job Photos.
+- Adds /api/diagnostics/blob for safe configuration testing without exposing secrets.

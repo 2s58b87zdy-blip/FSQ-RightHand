@@ -1,27 +1,23 @@
-FSQ COMMAND v8.1.1 HOTFIX - KLAR TIL GITHUB
+FSQ COMMAND v9.2.1 - AZURE BLOB HOTFIX
 
-1. Pak ZIP-filen ud.
-2. Aabn GitHub repository: FSQ-RightHand.
-3. Upload INDHOLDET af mappen direkte til repositoryets rod.
-4. Overskriv eksisterende filer, hvis GitHub spoerger.
-5. Commit direkte til main med teksten:
-   FSQ Command v8.1.1 login hotfix
-6. Aabn GitHub Actions og vent paa groent flueben.
-7. Genstart App Service, hvis deployment ikke goer det automatisk.
-8. Genindlaes FSQ Command med Ctrl+F5.
+1. Upload all files in this folder to the root of the GitHub repository and overwrite the existing files.
+2. Wait for GitHub Actions to finish successfully.
+3. Keep AZURE_STORAGE_CONTAINER set to: fsq-documents
+4. Choose ONE Blob authentication method:
 
-Azure App Settings:
-- SQL_SERVER=atlas-command-sql.database.windows.net
-- SQL_DATABASE=fsq-command
-- AUTH_SECRET=<lang tilfaeldig tekst>
-- INITIAL_OWNER_PASSWORD=<dit start-password>
-- AZURE_STORAGE_CONNECTION_STRING=<eksisterende vaerdi>
-- AZURE_STORAGE_CONTAINER=<eksisterende vaerdi>
+A. Existing connection string
+   AZURE_STORAGE_CONNECTION_STRING must contain the COMPLETE value from:
+   Azure Storage account > Security + networking > Access keys > Connection string.
 
-Alternativt kan DATABASE_URL bruges i stedet for SQL_SERVER og SQL_DATABASE.
-Managed Identity bruges automatisk, naar SQL_USER og SQL_PASSWORD ikke er angivet.
+B. Managed Identity (recommended)
+   Add AZURE_STORAGE_ACCOUNT_URL, for example:
+   https://YOUR-STORAGE-ACCOUNT.blob.core.windows.net
 
-Vigtigt:
-- GitHub Secret AZURE_WEBAPP_PUBLISH_PROFILE skal stadig eksistere.
-- Upload ikke PublishSettings-filen til repositoryet.
-- Hvis /api/auth/users stadig giver 500, vil den praecise fejl nu kunne ses i Azure Log Stream.
+   On the Storage account, give the App Service identity fsq-right-hand this role:
+   Storage Blob Data Contributor
+
+5. Restart the App Service.
+6. Sign in and open:
+   /api/diagnostics/blob
+
+A correct setup returns: "ok": true

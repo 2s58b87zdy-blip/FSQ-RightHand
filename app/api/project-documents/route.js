@@ -1,7 +1,7 @@
+import { getBlobContainerClient } from '../../../lib/blob';
 import { readSession } from '../../../lib/auth';
 import { ensureSchema, sql } from '../../../lib/db';
 import { chunkText, extractDocumentText } from '../../../lib/documentText';
-import { getDocumentContainerClient } from '../../../lib/storage';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -9,9 +9,7 @@ export const dynamic = 'force-dynamic';
 function safe(value, fallback='General') {
   return String(value || fallback).trim().replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || fallback;
 }
-function container() {
-  return getDocumentContainerClient();
-}
+function container() { return getBlobContainerClient(); }
 
 export async function GET() {
   const session = await readSession();

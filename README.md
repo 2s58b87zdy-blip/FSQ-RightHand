@@ -97,3 +97,17 @@ Project Binder is now ATLAS' primary live project source.
 - Files can be opened directly from Blob Storage and deletion also removes the ATLAS index.
 - Scanned PDFs, photos, videos and CAD drawings are stored but require a later OCR/Vision pipeline before their visual contents can be searched.
 - Existing local/demo Binder files must be uploaded again to become ATLAS-ready.
+
+## Azure Blob Storage (v9.2.1)
+Choose one authentication method:
+
+1. Connection string
+   - `AZURE_STORAGE_CONNECTION_STRING`: complete connection string copied from Storage account > Access keys.
+   - `AZURE_STORAGE_CONTAINER`: normally `fsq-documents`.
+
+2. Managed Identity (recommended)
+   - `AZURE_STORAGE_ACCOUNT_URL`: for example `https://YOURACCOUNT.blob.core.windows.net`.
+   - `AZURE_STORAGE_CONTAINER`: normally `fsq-documents`.
+   - Grant the App Service system-assigned identity the role `Storage Blob Data Contributor` on the Storage account.
+
+After deployment, sign in and open `/api/diagnostics/blob`. A working setup returns `"ok": true`.
