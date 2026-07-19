@@ -16,7 +16,7 @@ const FOLDER_ACCESS_LEVELS = ['No Access','Read','Edit','Full Control'];
 const MANAGED_FOLDERS = ['Projects','Workshop','Marine','Drawings','Procedures','QA / QC','Reports','Drone','Certificates','Templates','Finance','HR','Management','Contracts','Customers'];
 const DEFAULT_FOLDER_ACCESS = Object.fromEntries(MANAGED_FOLDERS.map(folder=>[folder,'No Access']));
 
-const APP_VERSION = '8.1.0';
+const APP_VERSION = '9.0.0';
 
 const USER_REGISTRY_DEFAULTS = [
   { id: 1, name: 'Flemming', role: 'Owner', password: 'fsq2027', active: true, permissions: ROLE_DEFINITIONS.Owner, folderAccess: Object.fromEntries(MANAGED_FOLDERS.map(folder=>[folder,'Full Control'])) },
@@ -493,7 +493,7 @@ function AppShell({ session, onLogout, users, setUsers }) {
         {active === 'knowledge' && <KnowledgeBase session={session} users={users} folders={knowledgeFolders} setFolders={setKnowledgeFolders} machines={knowledgeMachines} setMachines={setKnowledgeMachines} documents={knowledgeDocuments} setDocuments={setKnowledgeDocuments} solutions={knowledgeSolutions} setSolutions={setKnowledgeSolutions} />}
         {active === 'health' && <SystemHealth session={session} users={users} projects={projects} documents={documents} knowledgeDocuments={knowledgeDocuments} knowledgeMachines={knowledgeMachines} />}
         {active === 'admin' && <Admin session={session} users={users} setUsers={setUsers} people={people} setPeople={setPeople} machines={machines} setMachines={setMachines} materials={materials} setMaterials={setMaterials} />}
-        {active === 'ai' && <AI chat={chat} setChat={setChat} voice={voice} stats={stats} />}
+        {active === 'ai' && <AI session={session} chat={chat} setChat={setChat} voice={voice} stats={stats} context={{projects:visibleProjects,tasks:visibleTasks,people,machines,materials,knowledgeDocuments,knowledgeMachines,knowledgeSolutions}} />}
         {!['dashboard','myjobs','approvals','crew','projects','projectHub','documents','planner','health','admin','ai'].includes(active) && <ModulePlaceholder title={NAV.find(n=>n[0]===active)?.[1]} />}
       </main>
     </div>
@@ -2059,29 +2059,33 @@ function KnowledgeBase({session,users,folders,setFolders,machines,setMachines,do
   </div>
 }
 
-function AI({chat,setChat,voice,stats}) {
+function AI({session,chat,setChat,voice,stats,context}) {
   const [text,setText]=useState('');
   const [speechError,setSpeechError]=useState('');
+  const [mode,setMode]=useState('assistant');
+  const [useWeb,setUseWeb]=useState(true);
+  const [busy,setBusy]=useState(false);
+  const [error,setError]=useState('');
+  const [sources,setSources]=useState([]);
+  const [status,setStatus]=useState(null);
+  const developerAllowed=String(session?.name||'').trim().toLowerCase()==='flemming' && session?.role==='Owner';
 
-  function answerQuestion(q){
-    const lower=q.toLowerCase();
-    let answer='Jeg har registreret din forespørgsel. Når den fælles database er tilkoblet, kan jeg arbejde på tværs af alle projekter og dokumenter.';
-    if(lower.includes('værksted')) answer=`Status for værkstedet: ${stats.openTasks} åbne opgaver, ${stats.lowStock} materialer under minimum og ${stats.machinesDown} maskiner kræver opmærksomhed.`;
-    else if(lower.includes('material')) answer=`Der er ${stats.lowStock} materialer under minimumslager.`;
-    else if(lower.includes('maskine')) answer=`Der er ${stats.machinesDown} maskiner til service eller ude af drift.`;
-    else if(lower.includes('hast')||lower.includes('kritisk')) answer=`Der er ${stats.urgent} hasteopgaver.`;
-    else if(lower.includes('projekt')) answer=`Der er ${stats.projects} aktive projekter i FSQ Command.`;
-    else if(lower.includes('hej')||lower.includes('godmorgen')||lower.includes('god aften')) answer='Hej. Jeg er ATLAS, og jeg er klar til at hjælpe dig.';
-    setChat(c=>[...c,{from:'ai',text:answer}]);
-    speak(answer,voice);
-  }
+  useEffect(()=>{fetch('/api/atlas/status',{cache:'no-store'}).then(r=>r.json()).then(setStatus).catch(()=>{})},[]);
 
-  function send(value=text){
+  async function send(value=text){
     const q=value.trim();
-    if(!q)return;
+    if(!q||busy)return;
     setChat(c=>[...c,{from:'user',text:q}]);
-    setText('');
-    setTimeout(()=>answerQuestion(q),250);
+    setText('');setBusy(true);setError('');setSources([]);
+    try{
+      const response=await fetch('/api/atlas/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:q,mode,useWeb:useWeb||mode==='research',context:{stats,...context}})});
+      const data=await response.json().catch(()=>({}));
+      if(!response.ok)throw new Error(data.detail||data.error||`HTTP ${response.status}`);
+      setChat(c=>[...c,{from:'ai',text:data.answer}]);
+      setSources(data.sources||[]);
+      speak(data.answer,voice);
+    }catch(err){const message=`ATLAS fejl: ${err.message}`;setError(message);setChat(c=>[...c,{from:'ai',text:message}]);}
+    finally{setBusy(false)}
   }
 
   const speech=useSpeechRecognition({
@@ -2089,10 +2093,27 @@ function AI({chat,setChat,voice,stats}) {
     onError: error=>setSpeechError(error==='not-supported'?'Talegenkendelse understøttes ikke. Brug Microsoft Edge eller Chrome.':'Kontrollér, at browseren har adgang til mikrofonen.')
   });
 
-  return <div className="content aiLayout">
-    <div className="sectionIntro"><div><h1>ATLAS AI</h1><p>Tal eller skriv om projekter, værksted, materialer og prioriteter.</p></div><button className={`atlasMic ${speech.listening?'listening':''}`} onClick={speech.toggleListening}>{speech.listening?'● ATLAS lytter...':'🎙 Tal til ATLAS'}</button></div>
-    {speechError&&<div className="error">{speechError}</div>}
-    <div className="chatPanel">{chat.map((m,i)=><div key={i} className={`bubble ${m.from}`}>{m.text}</div>)}<div className="chatInput"><input value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>e.key==='Enter'&&send()} placeholder="Tal eller skriv til ATLAS..."/><button className="micMini" onClick={speech.toggleListening}>{speech.listening?'●':'🎙'}</button><button onClick={()=>send()}>Send</button></div></div>
+  return <div className="content aiLayout atlasBrainPage">
+    <div className="sectionIntro"><div><p className="eyebrow">FSQ INTELLIGENCE LAYER</p><h1>ATLAS BRAIN</h1><p>FSQ Knowledge først · officiel online research som supplement · alle svar logges.</p></div><button className={`atlasMic ${speech.listening?'listening':''}`} onClick={speech.toggleListening}>{speech.listening?'● ATLAS lytter...':'🎙 Tal til ATLAS'}</button></div>
+    <div className="atlasBrainToolbar">
+      <div className="atlasModes">
+        <button className={mode==='assistant'?'active':''} onClick={()=>setMode('assistant')}>Assistant</button>
+        <button className={mode==='research'?'active':''} onClick={()=>{setMode('research');setUseWeb(true)}}>Research</button>
+        {developerAllowed&&<button className={mode==='developer'?'active developer':''} onClick={()=>setMode('developer')}>Developer · Flemming</button>}
+      </div>
+      <label className="webToggle"><input type="checkbox" checked={useWeb} onChange={e=>setUseWeb(e.target.checked)} disabled={mode==='research'}/> Online research</label>
+      <div className="brainStatus"><i className={status?.ok?'online':''}/>{status?.ok?'Brain online':'Connecting'}{status&&` · ${status.ApprovedKnowledge||0} approved`}</div>
+    </div>
+    {mode==='developer'&&<div className="developerNotice"><b>ATLAS Developer</b><span>Kun Flemming har adgang. Denne version analyserer og planlægger kodeændringer; den ændrer eller deployer ikke uden en senere godkendelsesfunktion.</span></div>}
+    {speechError&&<div className="error">{speechError}</div>}{error&&<div className="error">{error}</div>}
+    <div className="atlasBrainGrid">
+      <div className="chatPanel atlasChat">
+        {chat.map((m,i)=><div key={i} className={`bubble ${m.from}`}>{m.text}</div>)}
+        {busy&&<div className="bubble ai atlasThinking">ATLAS undersøger FSQ-viden{useWeb||mode==='research'?' og online kilder':''}…</div>}
+        <div className="chatInput"><textarea rows="2" value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}}} placeholder={mode==='developer'?'Beskriv den funktion eller fejl, ATLAS skal analysere…':'Spørg ATLAS om projekter, teknik, dokumenter eller online research…'}/><button className="micMini" onClick={speech.toggleListening}>{speech.listening?'●':'🎙'}</button><button disabled={busy} onClick={()=>send()}>{busy?'Arbejder…':'Send'}</button></div>
+      </div>
+      <aside className="atlasSourcePanel panel"><div className="panelHead"><h3>Kilder</h3><span>{sources.length}</span></div>{sources.length?sources.map((source,i)=><article key={i}><span>{source.type==='Online'?'🌐':'▤'}</span><div><b>{source.type}</b>{source.url?<a href={source.url} target="_blank" rel="noreferrer">{source.title}</a>:<small>{source.title}</small>}</div></article>):<div className="empty">Kilder vises efter næste svar.</div>}<hr/><small>Prioritet: FSQ approved knowledge → producent/klasse → øvrige pålidelige online kilder.</small></aside>
+    </div>
   </div>
 }
 

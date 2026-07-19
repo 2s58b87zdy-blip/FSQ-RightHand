@@ -64,3 +64,19 @@ ALTER ROLE db_ddladmin ADD MEMBER [fsq-right-hand];
 - Uses Node.js 20 in GitHub Actions.
 - Deploys the tested Next.js standalone output rather than the entire repository.
 - Removes the invalid duplicate `next.config.mjs` file.
+
+## ATLAS BRAIN v9.0
+
+Azure App Service environment variables:
+
+- `OPENAI_API_KEY` - required for ATLAS answers and online research.
+- `OPENAI_MODEL` - optional, defaults to `gpt-5`.
+- `OPENAI_VECTOR_STORE_ID` - optional. When configured, ATLAS uses OpenAI File Search across indexed FSQ documents.
+
+ATLAS modes:
+
+- Assistant: internal FSQ context first, optional web research.
+- Research: web research is always enabled and sources are shown.
+- Developer: visible and available only when the signed-in user is Flemming with Owner role. v9.0 is analysis-only and cannot change or deploy code.
+
+The application automatically creates `AtlasConversations` and `AtlasKnowledge` tables in Azure SQL on first use.
