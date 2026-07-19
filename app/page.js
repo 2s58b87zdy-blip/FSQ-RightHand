@@ -16,7 +16,7 @@ const FOLDER_ACCESS_LEVELS = ['No Access','Read','Edit','Full Control'];
 const MANAGED_FOLDERS = ['Projects','Workshop','Marine','Drawings','Procedures','QA / QC','Reports','Drone','Certificates','Templates','Finance','HR','Management','Contracts','Customers'];
 const DEFAULT_FOLDER_ACCESS = Object.fromEntries(MANAGED_FOLDERS.map(folder=>[folder,'No Access']));
 
-const APP_VERSION = '9.0.0';
+const APP_VERSION = '9.2.0';
 
 const USER_REGISTRY_DEFAULTS = [
   { id: 1, name: 'Flemming', role: 'Owner', password: 'fsq2027', active: true, permissions: ROLE_DEFINITIONS.Owner, folderAccess: Object.fromEntries(MANAGED_FOLDERS.map(folder=>[folder,'Full Control'])) },
@@ -493,7 +493,7 @@ function AppShell({ session, onLogout, users, setUsers }) {
         {active === 'knowledge' && <KnowledgeBase session={session} users={users} folders={knowledgeFolders} setFolders={setKnowledgeFolders} machines={knowledgeMachines} setMachines={setKnowledgeMachines} documents={knowledgeDocuments} setDocuments={setKnowledgeDocuments} solutions={knowledgeSolutions} setSolutions={setKnowledgeSolutions} />}
         {active === 'health' && <SystemHealth session={session} users={users} projects={projects} documents={documents} knowledgeDocuments={knowledgeDocuments} knowledgeMachines={knowledgeMachines} />}
         {active === 'admin' && <Admin session={session} users={users} setUsers={setUsers} people={people} setPeople={setPeople} machines={machines} setMachines={setMachines} materials={materials} setMaterials={setMaterials} />}
-        {active === 'ai' && <AI session={session} chat={chat} setChat={setChat} voice={voice} stats={stats} context={{projects:visibleProjects,tasks:visibleTasks,people,machines,materials,knowledgeDocuments,knowledgeMachines,knowledgeSolutions}} />}
+        {active === 'ai' && <AI session={session} chat={chat} setChat={setChat} voice={voice} stats={stats} context={{projects:visibleProjects,tasks:visibleTasks,people,machines,materials,documents,knowledgeDocuments,knowledgeMachines,knowledgeSolutions}} />}
         {!['dashboard','myjobs','approvals','crew','projects','projectHub','documents','planner','health','admin','ai'].includes(active) && <ModulePlaceholder title={NAV.find(n=>n[0]===active)?.[1]} />}
       </main>
     </div>
@@ -1618,10 +1618,15 @@ function Reports({reports,setReports}) {
 function ProjectBinder({ documents, setDocuments, projects, session }) {
   const [selectedProject,setSelectedProject]=useState(projects[0]?.name || 'General');
   const [selectedFolder,setSelectedFolder]=useState('Drawings');
+  const [selectedDocument,setSelectedDocument]=useState(null);
   const [search,setSearch]=useState('');
   const [message,setMessage]=useState('');
   const [newFolder,setNewFolder]=useState('');
+  const [isDragging,setIsDragging]=useState(false);
+  const [uploading,setUploading]=useState([]);
+  const [loading,setLoading]=useState(true);
   const [customFolders,setCustomFolders]=useStoredState('fsq-v50-custom-folders',{});
+  const fileInputRef=useRef(null);
 
   const projectFolders=[...DEFAULT_BINDER_FOLDERS,...(customFolders[selectedProject]||[])];
   const projectDocs=documents.filter(d=>d.project===selectedProject);
@@ -1631,153 +1636,168 @@ function ProjectBinder({ documents, setDocuments, projects, session }) {
     return matchesFolder&&matchesSearch;
   });
 
+  useEffect(()=>{
+    let cancelled=false;
+    async function loadDocuments(){
+      setLoading(true);
+      try{
+        const response=await fetch('/api/project-documents',{cache:'no-store'});
+        const data=await response.json();
+        if(!response.ok)throw new Error(data.error||'Could not load Project Binder');
+        if(!cancelled)setDocuments(data.documents||[]);
+      }catch(error){
+        if(!cancelled)setMessage(`Project Binder: ${error.message}`);
+      }finally{
+        if(!cancelled)setLoading(false);
+      }
+    }
+    loadDocuments();
+    return()=>{cancelled=true};
+  },[setDocuments]);
+
+  useEffect(()=>{setSelectedDocument(null)},[selectedProject,selectedFolder]);
+
   function formatSize(bytes){
-    if(bytes<1024)return `${bytes} B`;
-    if(bytes<1024*1024)return `${Math.round(bytes/1024)} KB`;
-    return `${(bytes/1024/1024).toFixed(1)} MB`;
+    const value=Number(bytes||0);
+    if(value<1024)return `${value} B`;
+    if(value<1024*1024)return `${Math.round(value/1024)} KB`;
+    return `${(value/1024/1024).toFixed(1)} MB`;
+  }
+
+  async function processFiles(fileList){
+    const files=Array.from(fileList||[]);
+    if(!files.length)return;
+    if(!selectedFolder){setMessage('Select a folder before uploading.');return}
+    for(const file of files){
+      const uploadId=`${Date.now()}-${Math.random()}`;
+      const versions=documents
+        .filter(d=>d.name.toLowerCase()===file.name.toLowerCase()&&d.project===selectedProject&&d.category===selectedFolder)
+        .map(d=>Number(d.version)||1);
+      const version=versions.length?Math.max(...versions)+1:1;
+      setUploading(current=>[...current,{id:uploadId,name:file.name,status:'Uploading'}]);
+      setMessage(`Uploading ${file.name} to ${selectedProject} / ${selectedFolder}...`);
+      try{
+        const form=new FormData();
+        form.append('file',file);
+        form.append('project',selectedProject);
+        form.append('category',selectedFolder);
+        form.append('version',String(version));
+        const response=await fetch('/api/project-documents',{method:'POST',body:form});
+        const data=await response.json();
+        if(!response.ok)throw new Error(data.error||'Upload failed');
+        setDocuments(current=>[data.document,...current.filter(d=>d.id!==data.document.id)]);
+        setSelectedDocument(data.document);
+        setUploading(current=>current.map(u=>u.id===uploadId?{...u,status:data.document.status||'Completed'}:u));
+        setMessage(`${file.name} uploaded to ${selectedProject} / ${selectedFolder}.`);
+      }catch(error){
+        setUploading(current=>current.map(u=>u.id===uploadId?{...u,status:`Failed: ${error.message}`}:u));
+        setMessage(`${file.name}: ${error.message}`);
+      }
+    }
+    setTimeout(()=>setUploading(current=>current.filter(u=>!String(u.status).startsWith('ATLAS')&&u.status!=='Completed')),5000);
   }
 
   function uploadFiles(event){
-    const files=Array.from(event.target.files||[]);
-    if(!files.length)return;
-    files.forEach(file=>{
-      if(file.size>2*1024*1024){
-        setMessage(`${file.name} is larger than 2 MB. Azure Blob Storage is required for larger files.`);
-        return;
-      }
-      const reader=new FileReader();
-      reader.onload=()=>{
-        const versions=documents
-          .filter(d=>d.name.toLowerCase()===file.name.toLowerCase()&&d.project===selectedProject&&d.category===selectedFolder)
-          .map(d=>d.version||1);
-        const version=versions.length?Math.max(...versions)+1:1;
-        const doc={
-          id:Date.now()+Math.random(),
-          name:file.name,
-          project:selectedProject,
-          category:selectedFolder,
-          version,
-          size:formatSize(file.size),
-          uploadedBy:session.name,
-          date:new Date().toISOString().slice(0,10),
-          dataUrl:reader.result,
-          status:'Active',
-          tags:[]
-        };
-        setDocuments(current=>[doc,...current]);
-        setMessage(`${file.name} uploaded to ${selectedFolder} as version ${version}.`);
-      };
-      reader.onerror=()=>setMessage(`Could not read ${file.name}.`);
-      reader.readAsDataURL(file);
-    });
+    processFiles(event.target.files);
     event.target.value='';
   }
 
-  function openDocument(doc){
-    if(!doc.dataUrl){
-      setMessage('This demo item contains metadata only. Upload the real file to open it.');
-      return;
-    }
-    const link=document.createElement('a');
-    link.href=doc.dataUrl;
-    link.download=doc.name;
-    link.click();
+  function handleDrop(event){
+    event.preventDefault();
+    setIsDragging(false);
+    processFiles(event.dataTransfer.files);
   }
 
-  function removeDocument(id){
-    if(!window.confirm('Delete this document from the local Project Binder?'))return;
-    setDocuments(documents.filter(d=>d.id!==id));
+  function openDocument(doc){
+    if(doc?.url)window.open(doc.url,'_blank','noopener,noreferrer');
+  }
+
+  async function removeDocument(id){
+    const doc=documents.find(item=>item.id===id);
+    if(!doc||!window.confirm(`Delete ${doc.name} from Project Binder and ATLAS index?`))return;
+    try{
+      const response=await fetch(`/api/project-documents?id=${encodeURIComponent(doc.id)}&blob=${encodeURIComponent(doc.blobName)}`,{method:'DELETE'});
+      const data=await response.json();
+      if(!response.ok)throw new Error(data.error||'Delete failed');
+      setDocuments(current=>current.filter(d=>d.id!==id));
+      if(selectedDocument?.id===id)setSelectedDocument(null);
+      setMessage(`${doc.name} deleted.`);
+    }catch(error){setMessage(error.message)}
   }
 
   function addFolder(){
     const folder=newFolder.trim();
     if(!folder)return;
-    if(projectFolders.includes(folder)){
-      setMessage('Folder already exists.');
-      return;
-    }
-    setCustomFolders({
-      ...customFolders,
-      [selectedProject]:[...(customFolders[selectedProject]||[]),folder]
-    });
+    if(projectFolders.includes(folder)){setMessage('Folder already exists.');return}
+    setCustomFolders({...customFolders,[selectedProject]:[...(customFolders[selectedProject]||[]),folder]});
     setSelectedFolder(folder);
     setNewFolder('');
   }
 
-  const counts=DEFAULT_BINDER_FOLDERS.reduce((acc,folder)=>{
-    acc[folder]=projectDocs.filter(d=>d.category===folder).length;
-    return acc;
-  },{});
+  const counts=projectFolders.reduce((acc,folder)=>{acc[folder]=projectDocs.filter(d=>d.category===folder).length;return acc},{});
 
   return <div className="content projectBinder">
     <div className="sectionIntro binderIntro">
-      <div><h1>Project Binder</h1><p>Structured project documentation for every FSQ job.</p></div>
+      <div><h1>Project Binder</h1><p>Upload directly into the selected project folder. ATLAS indexes readable documents automatically.</p></div>
       <div className="binderTotal"><strong>{projectDocs.length}</strong><small>documents in project</small></div>
     </div>
 
     <section className="binderProjectBar">
       <label>Project<select value={selectedProject} onChange={e=>{setSelectedProject(e.target.value);setSelectedFolder('Drawings')}}>
-        <option>General</option>
-        {projects.map(p=><option key={p.id}>{p.name}</option>)}
+        <option>General</option>{projects.map(p=><option key={p.id}>{p.name}</option>)}
       </select></label>
       <input placeholder="Search in selected folder..." value={search} onChange={e=>setSearch(e.target.value)} />
-      <label className="binderUpload">Upload files<input type="file" multiple onChange={uploadFiles}/></label>
-      <button onClick={()=>setMessage('Archive workflow will be connected to Azure in the next infrastructure step.')}>Archive</button>
+      <button className="primaryBtn" onClick={()=>fileInputRef.current?.click()}>+ Upload files</button>
+      <input ref={fileInputRef} type="file" multiple hidden onChange={uploadFiles}/>
+      <button onClick={()=>setSearch('')}>Clear search</button>
     </section>
 
+    <div className="binderDestination">Upload destination: <b>{selectedProject} / {selectedFolder}</b></div>
     {message&&<div className="documentMessage">{message}</div>}
 
-    <section className="binderLayout">
+    <section className="binderEnterpriseLayout">
       <aside className="panel binderFolders">
         <div className="panelHead"><h3>{selectedProject}</h3><span>{projectFolders.length} folders</span></div>
         {projectFolders.map(folder=><button key={folder} className={selectedFolder===folder?'active':''} onClick={()=>setSelectedFolder(folder)}>
-          <span>{folder}</span><em>{projectDocs.filter(d=>d.category===folder).length}</em>
+          <span>📁 {folder}</span><em>{counts[folder]||0}</em>
         </button>)}
-        <div className="newFolderBox">
-          <input placeholder="New folder" value={newFolder} onChange={e=>setNewFolder(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addFolder()}/>
-          <button onClick={addFolder}>Add</button>
-        </div>
+        <div className="newFolderBox"><input placeholder="New folder" value={newFolder} onChange={e=>setNewFolder(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addFolder()}/><button onClick={addFolder}>Add</button></div>
       </aside>
 
       <main className="panel binderMain">
         <div className="binderHeader">
-          <div><small>PROJECT BINDER / {selectedProject.toUpperCase()}</small><h2>{selectedFolder}</h2></div>
-          <div className="binderActions">
-            <label className="binderUpload compact">Upload<input type="file" multiple onChange={uploadFiles}/></label>
-            <button onClick={()=>setSearch('')}>Clear search</button>
-          </div>
+          <div><small>PROJECT BINDER / {selectedProject.toUpperCase()}</small><h2>📁 {selectedFolder}</h2></div>
+          <div className="binderActions"><button className="primaryBtn" onClick={()=>fileInputRef.current?.click()}>+ Upload files</button></div>
         </div>
 
-        <div className="binderTableHeader">
-          <span>Name</span><span>Version</span><span>Size</span><span>Uploaded</span><span>Status</span><span/>
+        <div className={`binderDropZone ${isDragging?'dragging':''}`} onDragEnter={e=>{e.preventDefault();setIsDragging(true)}} onDragOver={e=>e.preventDefault()} onDragLeave={e=>{if(!e.currentTarget.contains(e.relatedTarget))setIsDragging(false)}} onDrop={handleDrop} onClick={()=>fileInputRef.current?.click()}>
+          <strong>☁ Drag files here or click to upload</strong>
+          <span>Files will be uploaded to: {selectedProject} / {selectedFolder}</span>
         </div>
 
-        {filtered.length?filtered.map(doc=><div className="binderRow" key={doc.id}>
-          <button className="binderDocName" onClick={()=>openDocument(doc)}>
-            <span className="fileIcon">{doc.name.toLowerCase().endsWith('.pdf')?'PDF':doc.name.toLowerCase().match(/\.(jpg|jpeg|png|webp)$/)?'IMG':'FILE'}</span>
-            <div><b>{doc.name}</b><small>{doc.uploadedBy} · {doc.project}</small></div>
+        {uploading.length>0&&<div className="uploadQueue">{uploading.map(item=><div key={item.id}><span>{item.name}</span><em>{item.status}</em></div>)}</div>}
+
+        <div className="binderTableHeader"><span>Name</span><span>Version</span><span>Size</span><span>Uploaded</span><span>Status</span><span/></div>
+        {loading?<div className="binderEmpty"><h3>Loading documents...</h3></div>:filtered.length?filtered.map(doc=><div className={`binderRow ${selectedDocument?.id===doc.id?'selected':''}`} key={doc.id}>
+          <button className="binderDocName" onClick={()=>setSelectedDocument(doc)}>
+            <span className="fileIcon">{doc.name.toLowerCase().endsWith('.pdf')?'PDF':doc.name.toLowerCase().match(/\.(jpg|jpeg|png|webp)$/)?'IMG':doc.name.toLowerCase().match(/\.xlsx?$/)?'XLS':'FILE'}</span>
+            <div><b>{doc.name}</b><small>{doc.uploadedBy} · {doc.category}</small></div>
           </button>
-          <span className="versionBadge">V{doc.version}</span>
-          <span>{doc.size}</span>
-          <span>{doc.date}</span>
-          <span className="statusBadge">{doc.status||'Active'}</span>
-          <button className="deleteDocument" onClick={()=>removeDocument(doc.id)}>×</button>
-        </div>):<div className="binderEmpty">
-          <div className="binderEmptyIcon">▱</div>
-          <h3>No documents in {selectedFolder}</h3>
-          <p>Upload files or drag them here in the Azure-backed version.</p>
-        </div>}
+          <span className="versionBadge">V{doc.version}</span><span>{doc.size||formatSize(doc.sizeBytes)}</span><span>{doc.date}</span><span className="statusBadge">{doc.status||'Stored'}</span><button className="deleteDocument" onClick={()=>removeDocument(doc.id)}>×</button>
+        </div>):<div className="binderEmpty"><div className="binderEmptyIcon">▱</div><h3>No documents in {selectedFolder}</h3><p>Drag files into the upload area above. They will be stored in this exact folder.</p></div>}
       </main>
-    </section>
 
-    <section className="binderOverview">
-      {DEFAULT_BINDER_FOLDERS.map(folder=><button key={folder} onClick={()=>setSelectedFolder(folder)}>
-        <small>{folder}</small><strong>{counts[folder]||0}</strong>
-      </button>)}
+      <aside className="panel binderPreview">
+        {selectedDocument?<>
+          <div className="panelHead"><h3>{selectedDocument.name}</h3><button onClick={()=>setSelectedDocument(null)}>×</button></div>
+          {selectedDocument.mimeType==='application/pdf'?<iframe title={selectedDocument.name} src={selectedDocument.url}/>:selectedDocument.mimeType?.startsWith('image/')?<img src={selectedDocument.url} alt={selectedDocument.name}/>:<div className="binderPreviewPlaceholder"><span>FILE</span><p>Preview is available by opening the document.</p></div>}
+          <div className="binderMeta"><div><small>Location</small><b>{selectedDocument.project} / {selectedDocument.category}</b></div><div><small>Version</small><b>V{selectedDocument.version}</b></div><div><small>Uploaded by</small><b>{selectedDocument.uploadedBy}</b></div><div><small>Status</small><b>{selectedDocument.status}</b></div></div>
+          <button className="primaryBtn previewOpen" onClick={()=>openDocument(selectedDocument)}>Open file</button>
+        </>:<div className="binderPreviewPlaceholder"><span>ATLAS</span><h3>Select a document</h3><p>Preview, metadata and ATLAS indexing status will appear here.</p></div>}
+      </aside>
     </section>
   </div>
 }
-
 
 
 function getIsoWeek(date){

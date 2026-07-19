@@ -1,3 +1,7 @@
+# FSQ Command v9.2.0 - Project Binder Enterprise
+
+Folder-specific Azure upload, drag and drop, SQL-backed document listing, file preview and automatic ATLAS indexing.
+
 # FSQ Command v8.1.1 – Shared Operations Data
 
 ## New in v8.1
@@ -80,3 +84,16 @@ ATLAS modes:
 - Developer: visible and available only when the signed-in user is Flemming with Owner role. v9.0 is analysis-only and cannot change or deploy code.
 
 The application automatically creates `AtlasConversations` and `AtlasKnowledge` tables in Azure SQL on first use.
+
+## v9.1.0 - ATLAS Project Binder Knowledge Engine
+
+Project Binder is now ATLAS' primary live project source.
+
+- Project Binder files are stored in Azure Blob Storage (up to 100 MB per file).
+- PDF, DOCX, XLS/XLSX, TXT, CSV, Markdown, JSON, XML and LOG text is extracted during upload.
+- Extracted text is split into searchable chunks in Azure SQL.
+- ATLAS automatically retrieves relevant Binder chunks before answering.
+- ATLAS answers include Project Binder source names and versions.
+- Files can be opened directly from Blob Storage and deletion also removes the ATLAS index.
+- Scanned PDFs, photos, videos and CAD drawings are stored but require a later OCR/Vision pipeline before their visual contents can be searched.
+- Existing local/demo Binder files must be uploaded again to become ATLAS-ready.

@@ -1,0 +1,14 @@
+FSQ Command v9.2.0 - Project Binder Enterprise
+
+Implemented:
+- Upload directly to the currently selected Project Binder folder
+- Drag and drop upload in the active folder
+- Azure Blob Storage path follows project/folder structure
+- SQL-backed document list loaded on page open
+- Automatic ATLAS text extraction and indexing
+- PDF and image preview
+- File metadata and indexing status
+- Multiple files and automatic version increments
+- Delete from Azure Blob Storage, SQL and ATLAS index
+
+Build verification: npm run build completed successfully.

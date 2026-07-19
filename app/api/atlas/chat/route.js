@@ -1,5 +1,5 @@
 import { readSession } from '../../../../lib/auth';
-import { atlasClient, extractSources, isFlemming, loadInternalKnowledge, saveAtlasConversation } from '../../../../lib/atlas';
+import { atlasClient, extractSources, isFlemming, loadInternalKnowledge, loadProjectBinderKnowledge, saveAtlasConversation } from '../../../../lib/atlas';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -24,8 +24,11 @@ export async function POST(request) {
 
   try {
     const approvedKnowledge = await loadInternalKnowledge(40);
+    const allowedProjects = Array.isArray(body?.context?.projects) ? body.context.projects.map(project => project?.name).filter(Boolean) : [];
+    const binderKnowledge = await loadProjectBinderKnowledge(question, allowedProjects, 12);
     const clientContext = trimContext(body.context);
     const internalContext = trimContext(approvedKnowledge);
+    const binderContext = trimContext(binderKnowledge.map(item => ({ project:item.ProjectName, category:item.Category, document:item.Name, version:item.Version, chunk:item.ChunkNo, content:item.Content })), 30000);
     const vectorStoreId = process.env.OPENAI_VECTOR_STORE_ID;
 
     const tools = [];
@@ -43,6 +46,9 @@ ATLAS Developer is a planning and code-review mode only in this release: do not 
 Approved FSQ knowledge:
 ${internalContext}
 
+Relevant Project Binder documents (primary live project source):
+${binderContext}
+
 Current FSQ application context supplied by the client:
 ${clientContext}`;
 
@@ -56,6 +62,10 @@ ${clientContext}`;
 
     const answer = response.output_text || 'ATLAS could not generate an answer.';
     const sources = extractSources(response);
+    if (binderKnowledge.length) {
+      const uniqueDocs = [...new Map(binderKnowledge.map(item => [item.Id, item])).values()];
+      sources.unshift(...uniqueDocs.map(item => ({ title: `${item.ProjectName} / ${item.Name} (V${item.Version})`, type: 'Project Binder', documentId: item.Id })));
+    }
     if (approvedKnowledge.length) sources.unshift({ title: `${approvedKnowledge.length} approved FSQ knowledge entries checked`, type: 'FSQ Knowledge' });
     await saveAtlasConversation({ userName: session.name, mode, question, answer, usedWeb: useWeb, sources });
     return Response.json({ answer, sources, mode, usedWeb: useWeb, model: process.env.OPENAI_MODEL || 'gpt-5' });
