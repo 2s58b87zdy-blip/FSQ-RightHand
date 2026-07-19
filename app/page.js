@@ -1976,29 +1976,50 @@ function Admin({session,users,setUsers,people,setPeople,machines,setMachines,mat
 
 
 function KnowledgeBase({session,users,folders,setFolders,machines,setMachines,documents,setDocuments,solutions,setSolutions}) {
-  const [tab,setTab]=useState('library');
-  const [selectedFolder,setSelectedFolder]=useState(folders[0]?.id||null);
-  const [selectedMachine,setSelectedMachine]=useState('All');
+  const [tab,setTab]=useState('machineBinder');
+  const [selectedFolder,setSelectedFolder]=useState(folders.find(f=>!f.machineId)?.id||null);
+  const [selectedMachine,setSelectedMachine]=useState(machines[0]?.id||null);
+  const [selectedMachineFolder,setSelectedMachineFolder]=useState(null);
+  const [selectedDoc,setSelectedDoc]=useState(null);
   const [folderForm,setFolderForm]=useState({name:'',description:'',accessFolder:'Workshop'});
-  const [machineForm,setMachineForm]=useState({name:'',manufacturer:'',model:'',serial:'',location:'Workshop',folderId:folders[0]?.id||'',notes:''});
+  const [machineFolderName,setMachineFolderName]=useState('');
+  const [machineForm,setMachineForm]=useState({name:'',manufacturer:'',model:'',serial:'',location:'Workshop',notes:''});
   const [question,setQuestion]=useState('');
   const [answer,setAnswer]=useState('');
   const [solutionText,setSolutionText]=useState('');
   const [message,setMessage]=useState('');
   const [uploading,setUploading]=useState(false);
   const canManage=canManagePermissions(session);
+  const DEFAULT_MACHINE_FOLDERS=['Manuals','Electrical Drawings','Maintenance','Spare Parts','Service History','Software','Photos'];
 
-  useEffect(()=>{if(!folders.some(f=>f.id===selectedFolder))setSelectedFolder(folders[0]?.id||null)},[folders,selectedFolder]);
+  const libraryFolders=folders.filter(f=>!f.machineId);
+  const machineFolders=folders.filter(f=>String(f.machineId)===String(selectedMachine));
+  const currentMachine=machines.find(m=>String(m.id)===String(selectedMachine));
+  const currentMachineFolder=machineFolders.find(f=>String(f.id)===String(selectedMachineFolder));
+
+  useEffect(()=>{
+    if(!machines.some(m=>String(m.id)===String(selectedMachine))) setSelectedMachine(machines[0]?.id||null);
+  },[machines,selectedMachine]);
+  useEffect(()=>{
+    const available=folders.filter(f=>String(f.machineId)===String(selectedMachine));
+    if(!available.some(f=>String(f.id)===String(selectedMachineFolder))) setSelectedMachineFolder(available[0]?.id||null);
+  },[folders,selectedMachine,selectedMachineFolder]);
+  useEffect(()=>{
+    if(!libraryFolders.some(f=>String(f.id)===String(selectedFolder))) setSelectedFolder(libraryFolders[0]?.id||null);
+  },[folders,selectedFolder]);
 
   function folderAllowed(folder){
     if(canManage)return true;
-    const level=(session.folderAccess||{})[folder.accessFolder]||'No Access';
+    const level=(session.folderAccess||{})[folder.accessFolder||'Workshop']||'No Access';
     return level!=='No Access';
   }
-  const visibleFolders=folders.filter(folderAllowed);
-  const visibleFolderIds=new Set(visibleFolders.map(f=>f.id));
-  const visibleDocs=documents.filter(d=>visibleFolderIds.has(d.folderId));
-  const filteredDocs=visibleDocs.filter(d=>(!selectedFolder||d.folderId===selectedFolder)&&(selectedMachine==='All'||String(d.machineId)===String(selectedMachine)));
+  const visibleLibraryFolders=libraryFolders.filter(folderAllowed);
+  const visibleDocs=documents.filter(d=>{
+    const folder=folders.find(f=>String(f.id)===String(d.folderId));
+    return !folder || folderAllowed(folder);
+  });
+  const libraryDocs=visibleDocs.filter(d=>String(d.folderId)===String(selectedFolder));
+  const machineDocs=visibleDocs.filter(d=>String(d.machineId)===String(selectedMachine)&&String(d.folderId)===String(selectedMachineFolder));
 
   function addFolder(){
     if(!canManage)return setMessage('Kun Flemming og Jakob kan oprette mapper.');
@@ -2008,39 +2029,66 @@ function KnowledgeBase({session,users,folders,setFolders,machines,setMachines,do
   }
   function deleteFolder(id){
     if(!canManage)return;
-    if(documents.some(d=>d.folderId===id))return setMessage('Mappen indeholder dokumenter. Flyt eller slet dem først.');
-    if(window.confirm('Slet denne mappe?'))setFolders(folders.filter(f=>f.id!==id));
+    if(documents.some(d=>String(d.folderId)===String(id)))return setMessage('Mappen indeholder dokumenter. Flyt eller slet dem først.');
+    if(window.confirm('Slet denne mappe?'))setFolders(folders.filter(f=>String(f.id)!==String(id)));
   }
   function addMachine(){
     if(!canManage)return setMessage('Kun Flemming og Jakob kan oprette maskiner.');
     if(!machineForm.name.trim())return setMessage('Skriv maskinens navn.');
-    setMachines([...machines,{...machineForm,id:Date.now(),name:machineForm.name.trim(),folderId:Number(machineForm.folderId)||folders[0]?.id,status:'Active'}]);
-    setMachineForm({name:'',manufacturer:'',model:'',serial:'',location:'Workshop',folderId:folders[0]?.id||'',notes:''});setMessage('Maskine oprettet. Du kan nu uploade manualer til den.');
+    const id=Date.now();
+    const machine={...machineForm,id,name:machineForm.name.trim(),status:'Active'};
+    const createdFolders=DEFAULT_MACHINE_FOLDERS.map((name,index)=>({id:`${id}-${index}`,name,description:`${name} for ${machine.name}`,accessFolder:'Workshop',machineId:id}));
+    setMachines([...machines,machine]);
+    setFolders([...folders,...createdFolders]);
+    setSelectedMachine(id);setSelectedMachineFolder(createdFolders[0].id);
+    setMachineForm({name:'',manufacturer:'',model:'',serial:'',location:'Workshop',notes:''});
+    setMessage(`${machine.name} er oprettet med ${createdFolders.length} undermapper.`);
   }
-  function deleteMachine(id){if(canManage&&window.confirm('Slet maskinen fra ATLAS Knowledge?'))setMachines(machines.filter(m=>m.id!==id))}
+  function deleteMachine(id){
+    if(!canManage||!window.confirm('Slet maskinen og dens tomme undermapper?'))return;
+    const machineFolderIds=folders.filter(f=>String(f.machineId)===String(id)).map(f=>String(f.id));
+    if(documents.some(d=>machineFolderIds.includes(String(d.folderId))))return setMessage('Maskinen indeholder dokumenter. Slet dokumenterne først.');
+    setMachines(machines.filter(m=>String(m.id)!==String(id)));
+    setFolders(folders.filter(f=>String(f.machineId)!==String(id)));
+  }
+  function addMachineFolder(){
+    if(!canManage)return setMessage('Kun Flemming og Jakob kan oprette undermapper.');
+    if(!selectedMachine)return setMessage('Vælg en maskine først.');
+    if(!machineFolderName.trim())return setMessage('Skriv navnet på undermappen.');
+    const folder={id:`${Date.now()}-mf`,name:machineFolderName.trim(),description:`${machineFolderName.trim()} for ${currentMachine?.name||'maskine'}`,accessFolder:'Workshop',machineId:selectedMachine};
+    setFolders([...folders,folder]);setSelectedMachineFolder(folder.id);setMachineFolderName('');setMessage('Undermappen er oprettet.');
+  }
 
-  async function uploadFiles(event){
-    const files=[...event.target.files];event.target.value='';
-    if(!files.length||!selectedFolder)return;
+  async function uploadKnowledgeFiles(fileList,targetFolderId,targetMachineId=null){
+    const files=[...fileList];
+    if(!files.length||!targetFolderId)return;
+    const targetFolder=folders.find(f=>String(f.id)===String(targetFolderId));
+    const targetMachine=machines.find(m=>String(m.id)===String(targetMachineId));
     setUploading(true);setMessage('');
     for(const file of files){
       try{
-        const form=new FormData();form.append('file',file);form.append('folder',folders.find(f=>f.id===selectedFolder)?.name||'Knowledge');form.append('machine',selectedMachine==='All'?'General':machines.find(m=>String(m.id)===String(selectedMachine))?.name||'General');form.append('uploadedBy',session.name);
+        const form=new FormData();
+        form.append('file',file);
+        form.append('folder',targetFolder?.name||'Knowledge');
+        form.append('machine',targetMachine?.name||'General');
+        form.append('uploadedBy',session.name);
         const response=await fetch('/api/knowledge',{method:'POST',body:form});
         const data=await response.json();
         if(!response.ok)throw new Error(data.error||'Upload failed');
-        setDocuments(current=>[...current,{...data.document,id:`${Date.now()}-${Math.random()}`,folderId:selectedFolder,machineId:selectedMachine==='All'?null:Number(selectedMachine),description:'',tags:[],status:'Indexed metadata'}]);
+        const doc={...data.document,id:`${Date.now()}-${Math.random()}`,folderId:targetFolderId,machineId:targetMachineId||null,description:'',tags:[],status:'ATLAS Ready'};
+        setDocuments(current=>[...current,doc]);
+        setSelectedDoc(doc);
       }catch(error){setMessage(`${file.name}: ${error.message}`)}
     }
-    setUploading(false);setMessage(current=>current||'Filer uploadet til ATLAS Knowledge.');
+    setUploading(false);setMessage(current=>current||'Filer uploadet og klar til ATLAS.');
   }
   async function deleteDocument(doc){
     if(!canManage)return;
     if(!window.confirm(`Slet ${doc.name}?`))return;
     if(doc.blobName){try{await fetch(`/api/knowledge?blob=${encodeURIComponent(doc.blobName)}`,{method:'DELETE'})}catch{}}
     setDocuments(documents.filter(d=>d.id!==doc.id));
+    if(selectedDoc?.id===doc.id)setSelectedDoc(null);
   }
-  function updateDocument(id,field,value){setDocuments(documents.map(d=>d.id===id?{...d,[field]:value}:d))}
 
   function askAtlas(){
     const q=question.trim();if(!q)return;
@@ -2061,25 +2109,55 @@ function KnowledgeBase({session,users,folders,setFolders,machines,setMachines,do
   }
   function saveSolution(){
     if(!question.trim()||!solutionText.trim())return setMessage('Skriv både spørgsmål og løsning.');
-    setSolutions([...solutions,{id:Date.now(),question:question.trim(),solution:solutionText.trim(),machine:machines.find(m=>String(m.id)===String(selectedMachine))?.name||'',askedBy:session.name,date:new Date().toISOString(),status:canManage?'Verified':'Unverified'}]);
+    setSolutions([...solutions,{id:Date.now(),question:question.trim(),solution:solutionText.trim(),machine:currentMachine?.name||'',askedBy:session.name,date:new Date().toISOString(),status:canManage?'Verified':'Unverified'}]);
     setSolutionText('');setMessage(canManage?'Løsningen er gemt som verificeret FSQ-viden.':'Løsningen er gemt og afventer godkendelse.');
   }
   function verifySolution(id){if(canManage)setSolutions(solutions.map(x=>x.id===id?{...x,status:'Verified',verifiedBy:session.name}:x))}
 
+  const FileList=({items})=><div className="machineBinderFiles">{items.length?items.map(doc=><button key={doc.id} className={selectedDoc?.id===doc.id?'active':''} onClick={()=>setSelectedDoc(doc)}><span className="machineFileIcon">{String(doc.name).split('.').pop().toUpperCase()}</span><div><b>{doc.name}</b><small>{doc.size||'—'} · {doc.uploadedBy||'FSQ'} · {doc.status||'Stored'}</small></div><em>›</em></button>):<div className="machineBinderEmpty"><span>▱</span><b>Ingen dokumenter i denne mappe</b><small>Upload manualer, diagrammer, servicehistorik eller billeder.</small></div>}</div>;
+
   return <div className="content knowledgePage">
-    <div className="sectionIntro"><div><h1>ATLAS Knowledge Base</h1><p>Opret mapper og maskiner, upload manualer og gem FSQ-løsninger.</p></div><div className="knowledgeStatus"><i/> {visibleDocs.length} filer · {machines.length} maskiner</div></div>
+    <div className="sectionIntro"><div><p className="eyebrow">FSQ TECHNICAL KNOWLEDGE</p><h1>Machine Binder</h1><p>Opret maskiner med undermapper, upload manualer og gør dem søgbare for ATLAS.</p></div><div className="knowledgeStatus"><i/> {documents.filter(d=>d.machineId).length} maskinfiler · {machines.length} maskiner</div></div>
     {message&&<div className="documentMessage">{message}</div>}
-    <div className="knowledgeTabs">{[['library','Bibliotek'],['machines','Maskiner'],['ask','Spørg ATLAS'],['experience','Erfaringer']].map(([id,label])=><button key={id} className={tab===id?'active':''} onClick={()=>setTab(id)}>{label}</button>)}</div>
+    <div className="knowledgeTabs">{[['machineBinder','Machine Binder'],['library','Knowledge Library'],['ask','Spørg ATLAS'],['experience','Erfaringer']].map(([id,label])=><button key={id} className={tab===id?'active':''} onClick={()=>setTab(id)}>{label}</button>)}</div>
 
-    {tab==='library'&&<div className="knowledgeLibrary">
-      <aside className="knowledgeFolders panel"><div className="panelHead"><h3>Mapper</h3><span>{visibleFolders.length}</span></div>{visibleFolders.map(folder=><button key={folder.id} className={selectedFolder===folder.id?'active':''} onClick={()=>setSelectedFolder(folder.id)}><div><b>{folder.name}</b><small>{folder.description}</small></div>{canManage&&<span onClick={e=>{e.stopPropagation();deleteFolder(folder.id)}}>×</span>}</button>)}
-      {canManage&&<div className="knowledgeCreate"><h4>Ny mappe</h4><input placeholder="Mappenavn" value={folderForm.name} onChange={e=>setFolderForm({...folderForm,name:e.target.value})}/><input placeholder="Beskrivelse" value={folderForm.description} onChange={e=>setFolderForm({...folderForm,description:e.target.value})}/><select value={folderForm.accessFolder} onChange={e=>setFolderForm({...folderForm,accessFolder:e.target.value})}>{MANAGED_FOLDERS.map(f=><option key={f}>{f}</option>)}</select><button onClick={addFolder}>Opret mappe</button></div>}</aside>
-      <section className="panel knowledgeFiles"><div className="panelHead"><div><h3>{folders.find(f=>f.id===selectedFolder)?.name||'Vælg mappe'}</h3><small>Filer gemmes i Azure Blob Storage</small></div><div className="knowledgeUploadRow"><select value={selectedMachine} onChange={e=>setSelectedMachine(e.target.value)}><option>All</option>{machines.map(m=><option value={m.id} key={m.id}>{m.name}</option>)}</select><label className="binderUpload">{uploading?'Uploader...':'Upload filer'}<input disabled={uploading||!selectedFolder} type="file" multiple onChange={uploadFiles}/></label></div></div>
-      <div className="knowledgeDocList">{filteredDocs.length?filteredDocs.map(doc=><article key={doc.id}><div className="knowledgeFileIcon">DOC</div><div><b>{doc.name}</b><small>{machines.find(m=>m.id===doc.machineId)?.name||'General'} · {doc.size||''} · {doc.uploadedBy}</small><input placeholder="Beskrivelse til ATLAS" value={doc.description||''} onChange={e=>updateDocument(doc.id,'description',e.target.value)}/></div><div className="knowledgeDocActions">{doc.url&&<a href={doc.url} target="_blank">Åbn</a>}{canManage&&<button onClick={()=>deleteDocument(doc)}>Slet</button>}</div></article>):<div className="empty">Ingen filer i denne mappe endnu.</div>}</div></section>
-    </div>}
+    {tab==='machineBinder'&&<>
+      <div className="machineBinderToolbar panel">
+        <div><b>{currentMachine?.name||'Vælg eller opret en maskine'}</b><small>{currentMachine?[currentMachine.manufacturer,currentMachine.model,currentMachine.serial].filter(Boolean).join(' · '):'Manualer, el-diagrammer, service og reservedele samlet ét sted.'}</small></div>
+        {canManage&&<button className="primaryBtn" onClick={()=>document.getElementById('machine-create-panel')?.scrollIntoView({behavior:'smooth'})}>+ Opret maskine</button>}
+      </div>
+      <div className="machineBinderLayout">
+        <aside className="panel machineBinderMachines">
+          <div className="panelHead"><h3>Maskiner</h3><span>{machines.length}</span></div>
+          {machines.map(machine=><button key={machine.id} className={String(selectedMachine)===String(machine.id)?'active':''} onClick={()=>{setSelectedMachine(machine.id);setSelectedDoc(null)}}><span className="machineBinderCog">⚙</span><div><b>{machine.name}</b><small>{[machine.manufacturer,machine.model].filter(Boolean).join(' ')||machine.location||'FSQ machine'}</small></div><em>{documents.filter(d=>String(d.machineId)===String(machine.id)).length}</em></button>)}
+          {!machines.length&&<div className="machineBinderEmpty"><b>Ingen maskiner endnu</b><small>Opret den første maskine nedenfor.</small></div>}
+        </aside>
 
-    {tab==='machines'&&<div className="knowledgeMachineLayout"><section className="panel"><div className="panelHead"><h3>Maskinregister</h3><span>{machines.length}</span></div><div className="machineKnowledgeGrid">{machines.map(machine=><article key={machine.id}><div className="machineKnowledgeTop"><span>⚙</span><div><h3>{machine.name}</h3><small>{machine.manufacturer} {machine.model}</small></div></div><p>{machine.notes||'Ingen noter'}</p><dl><div><dt>Serienr.</dt><dd>{machine.serial||'—'}</dd></div><div><dt>Placering</dt><dd>{machine.location}</dd></div><div><dt>Manualer</dt><dd>{documents.filter(d=>d.machineId===machine.id).length}</dd></div></dl>{canManage&&<button className="dangerAction" onClick={()=>deleteMachine(machine.id)}>Slet maskine</button>}</article>)}</div></section>
-    {canManage&&<section className="panel machineCreatePanel"><h3>Opret ny maskine</h3><label>Navn<input value={machineForm.name} onChange={e=>setMachineForm({...machineForm,name:e.target.value})}/></label><label>Producent<input value={machineForm.manufacturer} onChange={e=>setMachineForm({...machineForm,manufacturer:e.target.value})}/></label><label>Model<input value={machineForm.model} onChange={e=>setMachineForm({...machineForm,model:e.target.value})}/></label><label>Serienummer<input value={machineForm.serial} onChange={e=>setMachineForm({...machineForm,serial:e.target.value})}/></label><label>Placering<input value={machineForm.location} onChange={e=>setMachineForm({...machineForm,location:e.target.value})}/></label><label>Standardmappe<select value={machineForm.folderId} onChange={e=>setMachineForm({...machineForm,folderId:e.target.value})}>{folders.map(f=><option value={f.id} key={f.id}>{f.name}</option>)}</select></label><label>Noter<textarea value={machineForm.notes} onChange={e=>setMachineForm({...machineForm,notes:e.target.value})}/></label><button className="primaryBtn" onClick={addMachine}>Opret maskine</button></section>}</div>}
+        <section className="panel machineBinderFolders">
+          <div className="panelHead"><div><p className="panelEyebrow">{currentMachine?.name||'MACHINE'}</p><h3>Undermapper</h3></div><span>{machineFolders.length}</span></div>
+          {machineFolders.map(folder=><button key={folder.id} className={String(selectedMachineFolder)===String(folder.id)?'active':''} onClick={()=>{setSelectedMachineFolder(folder.id);setSelectedDoc(null)}}><span>📁</span><div><b>{folder.name}</b><small>{documents.filter(d=>String(d.folderId)===String(folder.id)).length} filer</small></div>{canManage&&<em onClick={e=>{e.stopPropagation();deleteFolder(folder.id)}}>×</em>}</button>)}
+          {canManage&&selectedMachine&&<div className="machineFolderCreate"><input value={machineFolderName} onChange={e=>setMachineFolderName(e.target.value)} placeholder="Ny undermappe"/><button onClick={addMachineFolder}>Opret</button></div>}
+        </section>
+
+        <section className="panel machineBinderDocuments">
+          <div className="panelHead"><div><p className="panelEyebrow">{currentMachine?.name||'MACHINE'} / {currentMachineFolder?.name||'MAPPE'}</p><h3>Dokumenter</h3></div><label className="binderUpload">{uploading?'Uploader...':'+ Upload filer'}<input disabled={uploading||!selectedMachineFolder} type="file" multiple onChange={e=>{uploadKnowledgeFiles(e.target.files,selectedMachineFolder,selectedMachine);e.target.value=''}}/></label></div>
+          <label className={`machineDropZone ${!selectedMachineFolder?'disabled':''}`}><span>☁</span><b>Træk filer hertil eller klik for upload</b><small>Destination: {currentMachine?.name||'—'} / {currentMachineFolder?.name||'vælg mappe'}</small><input disabled={uploading||!selectedMachineFolder} type="file" multiple onChange={e=>{uploadKnowledgeFiles(e.target.files,selectedMachineFolder,selectedMachine);e.target.value=''}}/></label>
+          <FileList items={machineDocs}/>
+        </section>
+
+        <aside className="panel machineBinderPreview">
+          {selectedDoc?<><div className="panelHead"><h3>{selectedDoc.name}</h3>{canManage&&<button className="dangerAction" onClick={()=>deleteDocument(selectedDoc)}>Slet</button>}</div>
+            <div className="machinePreviewIcon">{String(selectedDoc.name).split('.').pop().toUpperCase()}</div>
+            <dl><div><dt>Maskine</dt><dd>{currentMachine?.name||'—'}</dd></div><div><dt>Mappe</dt><dd>{folders.find(f=>String(f.id)===String(selectedDoc.folderId))?.name||'—'}</dd></div><div><dt>Størrelse</dt><dd>{selectedDoc.size||'—'}</dd></div><div><dt>Uploadet af</dt><dd>{selectedDoc.uploadedBy||'—'}</dd></div><div><dt>Status</dt><dd className="atlasReady">● {selectedDoc.status||'Stored'}</dd></div></dl>
+            <div className="machinePreviewActions"><a href={selectedDoc.url} target="_blank" rel="noreferrer">Åbn dokument</a><a href={selectedDoc.url} download>Download</a></div>
+          </>:<div className="machineBinderEmpty preview"><div className="atlasOrb"><span>ATLAS</span></div><b>Vælg et dokument</b><small>Preview, metadata og ATLAS-status vises her.</small></div>}
+        </aside>
+      </div>
+
+      {canManage&&<section id="machine-create-panel" className="panel machineCreateWide"><div><p className="panelEyebrow">MACHINE REGISTRY</p><h3>Opret ny maskine</h3><p>Maskinen oprettes automatisk med standardmapper til manualer, el, vedligehold, reservedele, service, software og billeder.</p></div><div className="machineCreateFields"><label>Navn<input value={machineForm.name} onChange={e=>setMachineForm({...machineForm,name:e.target.value})}/></label><label>Producent<input value={machineForm.manufacturer} onChange={e=>setMachineForm({...machineForm,manufacturer:e.target.value})}/></label><label>Model<input value={machineForm.model} onChange={e=>setMachineForm({...machineForm,model:e.target.value})}/></label><label>Serienummer<input value={machineForm.serial} onChange={e=>setMachineForm({...machineForm,serial:e.target.value})}/></label><label>Placering<input value={machineForm.location} onChange={e=>setMachineForm({...machineForm,location:e.target.value})}/></label><label className="wide">Noter<textarea value={machineForm.notes} onChange={e=>setMachineForm({...machineForm,notes:e.target.value})}/></label><button className="primaryBtn wide" onClick={addMachine}>Opret maskine med undermapper</button></div></section>}
+    </>}
+
+    {tab==='library'&&<div className="knowledgeLibrary"><aside className="knowledgeFolders panel"><div className="panelHead"><h3>Knowledge-mapper</h3><span>{visibleLibraryFolders.length}</span></div>{visibleLibraryFolders.map(folder=><button key={folder.id} className={String(selectedFolder)===String(folder.id)?'active':''} onClick={()=>{setSelectedFolder(folder.id);setSelectedDoc(null)}}><div><b>{folder.name}</b><small>{folder.description}</small></div>{canManage&&<span onClick={e=>{e.stopPropagation();deleteFolder(folder.id)}}>×</span>}</button>)}{canManage&&<div className="knowledgeCreate"><h4>Ny mappe</h4><input placeholder="Mappenavn" value={folderForm.name} onChange={e=>setFolderForm({...folderForm,name:e.target.value})}/><input placeholder="Beskrivelse" value={folderForm.description} onChange={e=>setFolderForm({...folderForm,description:e.target.value})}/><select value={folderForm.accessFolder} onChange={e=>setFolderForm({...folderForm,accessFolder:e.target.value})}>{MANAGED_FOLDERS.map(f=><option key={f}>{f}</option>)}</select><button onClick={addFolder}>Opret mappe</button></div>}</aside><section className="panel knowledgeFiles"><div className="panelHead"><div><h3>{folders.find(f=>String(f.id)===String(selectedFolder))?.name||'Vælg mappe'}</h3><small>Generel godkendt FSQ-viden</small></div><label className="binderUpload">{uploading?'Uploader...':'Upload filer'}<input disabled={uploading||!selectedFolder} type="file" multiple onChange={e=>{uploadKnowledgeFiles(e.target.files,selectedFolder,null);e.target.value=''}}/></label></div><FileList items={libraryDocs}/></section></div>}
 
     {tab==='ask'&&<div className="knowledgeAskGrid"><section className="panel atlasAskPanel"><div className="atlasOrb"><span>ATLAS</span></div><h2>Hvad skal du have hjælp til?</h2><textarea value={question} onChange={e=>setQuestion(e.target.value)} placeholder="Eksempel: Hvad betyder alarm 201 på plasmaskæreren?"/><button className="primaryBtn" onClick={askAtlas}>Søg i FSQ-viden</button>{answer&&<div className="atlasKnowledgeAnswer"><b>ATLAS</b><p>{answer}</p></div>}</section><section className="panel"><h3>Gem løsning fra arbejdet</h3><p className="muted">Medarbejdere kan registrere den løsning, der virkede. Flemming eller Jakob kan verificere den.</p><textarea value={solutionText} onChange={e=>setSolutionText(e.target.value)} placeholder="Hvad var årsagen, og hvad løste problemet?"/><button onClick={saveSolution}>Gem løsning</button></section></div>}
 

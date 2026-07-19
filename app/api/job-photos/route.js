@@ -19,7 +19,7 @@ export async function POST(request){
     const name=safe(file.name);
     const blobName=`jobs/${project}/${taskId}/${Date.now()}-${name}`;
     const container=client();
-    await container.createIfNotExists({access:'private'});
+    await container.createIfNotExists();
     const block=container.getBlockBlobClient(blobName);
     const buffer=Buffer.from(await file.arrayBuffer());
     await block.uploadData(buffer,{blobHTTPHeaders:{blobContentType:file.type},metadata:{project,taskid:taskId,technician,originalname:name}});

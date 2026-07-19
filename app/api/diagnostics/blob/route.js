@@ -12,7 +12,7 @@ export async function GET() {
   try {
     const config = getBlobConfiguration();
     const container = getBlobContainerClient();
-    await container.createIfNotExists({ access: 'private' });
+    await container.createIfNotExists();
     const properties = await container.getProperties();
     return Response.json({
       ok: true,

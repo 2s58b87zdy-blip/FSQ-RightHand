@@ -1,0 +1,10 @@
+FSQ Command v10.2.0 - Machine Binder
+
+- New Machine Binder three/four panel layout
+- Create machines directly in Machine Binder
+- Automatic standard subfolders for every new machine
+- Create custom machine subfolders
+- Upload files directly into the selected machine subfolder
+- Azure Blob upload fixed: removed invalid access="private" option
+- Document preview metadata and open/download actions
+- Machine files remain available to ATLAS Knowledge
