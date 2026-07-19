@@ -1,0 +1,11 @@
+FSQ Command v10.3.0 - Lager Center & Gasflasker
+
+Nyheder:
+- Nyt Lager Center i hovedmenuen.
+- Alle medarbejdere kan registrere flaskeskift på deres egen bruger.
+- Standard gasarter: Mission18, Argon, Oxygen og Acetylen.
+- Flemming/Jakob kan oprette egne varer, materialer, kategorier og enheder.
+- Lagerjustering, varemodtagelse, placering og minimumslager.
+- Minimum kan stå tomt og opdateres senere.
+- Komplet historik med medarbejder, tidspunkt og lagerbevægelse.
+- Automatisk Azure SQL-tabeller: InventoryItems og InventoryTransactions.

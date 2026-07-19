@@ -89,3 +89,22 @@ CREATE TABLE dbo.ProjectDocumentChunks (
   CONSTRAINT FK_ProjectDocumentChunks_Document FOREIGN KEY (DocumentId) REFERENCES dbo.ProjectDocuments(Id) ON DELETE CASCADE
 );
 GO
+
+
+IF OBJECT_ID('dbo.InventoryItems','U') IS NULL
+CREATE TABLE dbo.InventoryItems (
+  Id NVARCHAR(100) PRIMARY KEY, Sku NVARCHAR(100), Name NVARCHAR(200) NOT NULL,
+  Category NVARCHAR(100) NOT NULL, Unit NVARCHAR(50) NOT NULL DEFAULT 'stk.',
+  Quantity DECIMAL(18,3) NOT NULL DEFAULT 0, MinimumQuantity DECIMAL(18,3) NULL,
+  Location NVARCHAR(200), Active BIT NOT NULL DEFAULT 1, UpdatedBy NVARCHAR(100),
+  UpdatedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
+);
+GO
+IF OBJECT_ID('dbo.InventoryTransactions','U') IS NULL
+CREATE TABLE dbo.InventoryTransactions (
+  Id BIGINT IDENTITY(1,1) PRIMARY KEY, ItemId NVARCHAR(100) NOT NULL,
+  ChangeQuantity DECIMAL(18,3) NOT NULL, ActionType NVARCHAR(100) NOT NULL,
+  UserName NVARCHAR(100), Note NVARCHAR(500), CreatedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+  CONSTRAINT FK_InventoryTransactions_Item FOREIGN KEY (ItemId) REFERENCES dbo.InventoryItems(Id)
+);
+GO

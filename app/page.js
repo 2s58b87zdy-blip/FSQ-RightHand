@@ -16,7 +16,7 @@ const FOLDER_ACCESS_LEVELS = ['No Access','Read','Edit','Full Control'];
 const MANAGED_FOLDERS = ['Projects','Workshop','Marine','Drawings','Procedures','QA / QC','Reports','Drone','Certificates','Templates','Finance','HR','Management','Contracts','Customers'];
 const DEFAULT_FOLDER_ACCESS = Object.fromEntries(MANAGED_FOLDERS.map(folder=>[folder,'No Access']));
 
-const APP_VERSION = '9.2.0';
+const APP_VERSION = '10.3.0';
 
 const USER_REGISTRY_DEFAULTS = [
   { id: 1, name: 'Flemming', role: 'Owner', password: 'fsq2027', active: true, permissions: ROLE_DEFINITIONS.Owner, folderAccess: Object.fromEntries(MANAGED_FOLDERS.map(folder=>[folder,'Full Control'])) },
@@ -60,6 +60,7 @@ const NAV = [
   ['projects', 'Projects', '◫'],
   ['crew', 'People', '◉'],
   ['documents', 'Project Binder', '▱'],
+  ['inventory', 'Lager Center', '▣'],
   ['planner', 'Operations Planner', '▦'],
   ['knowledge', 'ATLAS Knowledge', '▤'],
   ['ai', 'ATLAS AI', '◎'],
@@ -432,6 +433,7 @@ function AppShell({ session, onLogout, users, setUsers }) {
     if (command.includes('projektmappe') || command.includes('dokument')) setActive('documents');
     else if (command.includes('projekt')) setActive('projects');
     else if (command.includes('medarbejder') || command.includes('personale') || command.includes('folk')) setActive('crew');
+    else if (command.includes('lager') || command.includes('gas') || command.includes('flaske') || command.includes('material')) setActive('inventory');
     else if (command.includes('plan') || command.includes('uge')) setActive('planner');
     else if (command.includes('system') || command.includes('health') || command.includes('status')) setActive('health');
     else if (command.includes('indstilling')) setActive('admin');
@@ -455,7 +457,7 @@ function AppShell({ session, onLogout, users, setUsers }) {
   const assignedProjectNames = new Set(visibleTasks.map(task => task.project));
   const visibleProjects = isTechnician ? projects.filter(project => assignedProjectNames.has(project.name)) : projects;
   const visibleNav = isTechnician
-    ? NAV.filter(item => ['myjobs','knowledge','ai'].includes(item[0]))
+    ? NAV.filter(item => ['myjobs','inventory','knowledge','ai'].includes(item[0]))
     : NAV;
 
   const stats = useMemo(() => ({
@@ -489,12 +491,13 @@ function AppShell({ session, onLogout, users, setUsers }) {
         {active === 'projects' && <Projects projects={projects} setProjects={setProjects} deletedProjects={deletedProjects} setDeletedProjects={setDeletedProjects} setActive={setActive} setActiveProjectId={setActiveProjectId} tasks={tasks} setTasks={setTasks} people={people} users={users} />}
         {active === 'projectHub' && <ProjectHub session={session} users={users} project={projects.find(p=>p.id===activeProjectId)} projects={projects} setProjects={setProjects} people={people} tasks={tasks} setTasks={setTasks} documents={documents} materials={materials} setMaterials={setMaterials} quotes={quotes} reports={reports} setActive={setActive} deletedProjects={deletedProjects} setDeletedProjects={setDeletedProjects} setActiveProjectId={setActiveProjectId} droneInspections={droneInspections} setDroneInspections={setDroneInspections} />}
         {active === 'documents' && <ProjectBinder documents={documents} setDocuments={setDocuments} projects={projects} session={session} />}
+        {active === 'inventory' && <InventoryCenter session={session} />}
         {active === 'planner' && <OperationsPlanner people={people} projects={projects} />}
         {active === 'knowledge' && <KnowledgeBase session={session} users={users} folders={knowledgeFolders} setFolders={setKnowledgeFolders} machines={knowledgeMachines} setMachines={setKnowledgeMachines} documents={knowledgeDocuments} setDocuments={setKnowledgeDocuments} solutions={knowledgeSolutions} setSolutions={setKnowledgeSolutions} />}
         {active === 'health' && <SystemHealth session={session} users={users} projects={projects} documents={documents} knowledgeDocuments={knowledgeDocuments} knowledgeMachines={knowledgeMachines} />}
         {active === 'admin' && <Admin session={session} users={users} setUsers={setUsers} people={people} setPeople={setPeople} machines={machines} setMachines={setMachines} materials={materials} setMaterials={setMaterials} />}
         {active === 'ai' && <AI session={session} chat={chat} setChat={setChat} voice={voice} stats={stats} context={{projects:visibleProjects,tasks:visibleTasks,people,machines,materials,documents,knowledgeDocuments,knowledgeMachines,knowledgeSolutions}} />}
-        {!['dashboard','myjobs','approvals','crew','projects','projectHub','documents','planner','health','admin','ai'].includes(active) && <ModulePlaceholder title={NAV.find(n=>n[0]===active)?.[1]} />}
+        {!['dashboard','myjobs','approvals','crew','projects','projectHub','documents','inventory','planner','health','admin','ai'].includes(active) && <ModulePlaceholder title={NAV.find(n=>n[0]===active)?.[1]} />}
       </main>
     </div>
   );
@@ -1614,6 +1617,101 @@ function Reports({reports,setReports}) {
 }
 
 
+
+
+function InventoryCenter({ session }) {
+  const [items,setItems]=useState([]);
+  const [history,setHistory]=useState([]);
+  const [canManage,setCanManage]=useState(['Owner','Co-Owner'].includes(session.role));
+  const [loading,setLoading]=useState(true);
+  const [message,setMessage]=useState('');
+  const [category,setCategory]=useState('Alle');
+  const [showCreate,setShowCreate]=useState(false);
+  const [draft,setDraft]=useState({name:'',sku:'',category:'Materialer',unit:'stk.',quantity:0,minimum:'',location:''});
+
+  async function load(){
+    setLoading(true);
+    try{
+      const response=await fetch('/api/inventory',{cache:'no-store'});
+      const data=await response.json();
+      if(!response.ok)throw new Error(data.error||'Lageret kunne ikke indlæses.');
+      setItems(data.items||[]);setHistory(data.history||[]);setCanManage(Boolean(data.canManage));setMessage('');
+    }catch(error){setMessage(error.message);}finally{setLoading(false);}
+  }
+  useEffect(()=>{load();},[]);
+
+  async function action(payload,success){
+    setMessage('Gemmer...');
+    try{
+      const response=await fetch('/api/inventory',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+      const data=await response.json();
+      if(!response.ok)throw new Error(data.error||'Handlingen fejlede.');
+      setMessage(success);await load();return true;
+    }catch(error){setMessage(error.message);return false;}
+  }
+
+  async function issue(item){
+    if(!confirm(`Registrer flaskeskift: 1 ${item.unit} ${item.name}?\n\nRegistreres på ${session.name}.`))return;
+    await action({action:'issue',itemId:item.id,quantity:1},`${item.name}: flaskeskift registreret på ${session.name}.`);
+  }
+  async function createItem(event){
+    event.preventDefault();
+    const ok=await action({action:'create',...draft},`${draft.name} er oprettet.`);
+    if(ok){setShowCreate(false);setDraft({name:'',sku:'',category:'Materialer',unit:'stk.',quantity:0,minimum:'',location:''});}
+  }
+  async function adjust(item){
+    const raw=prompt(`Justér lager for ${item.name}.\nBrug plus for modtagelse (fx 5) og minus for forbrug (fx -2).`, '1');
+    if(raw===null)return;const change=Number(String(raw).replace(',','.'));
+    if(!Number.isFinite(change)||change===0){setMessage('Skriv et gyldigt antal.');return;}
+    await action({action:'adjust',itemId:item.id,change,note:'Manuel lagerjustering'},`${item.name} er justeret med ${change}.`);
+  }
+  async function editMinimum(item){
+    const raw=prompt(`Minimumslager for ${item.name}.\nLad feltet være tomt, hvis minimum ikke er fastsat endnu.`,item.minimum??'');
+    if(raw===null)return;
+    const location=prompt(`Lagerplacering for ${item.name}:`,item.location||'') ?? item.location;
+    await action({action:'update',itemId:item.id,minimum:raw,location},`${item.name} er opdateret.`);
+  }
+
+  const categories=['Alle',...Array.from(new Set(items.map(i=>i.category))).sort()];
+  const visible=category==='Alle'?items:items.filter(i=>i.category===category);
+  const low=items.filter(i=>i.minimum!=null&&i.quantity<=i.minimum).length;
+  const gasItems=items.filter(i=>i.category==='Gasflasker');
+
+  return <section className="inventoryCenter">
+    <div className="inventoryHero">
+      <div><p className="eyebrow">FSQ WORKSHOP INVENTORY</p><h1>Lager Center</h1><p>Materialer, reservedele, forbrugsvarer og gasflasker samlet ét sted.</p></div>
+      {canManage&&<button className="primaryBtn" onClick={()=>setShowCreate(true)}>＋ Opret nyt emne</button>}
+    </div>
+    {message&&<div className="inventoryMessage">{message}</div>}
+    <div className="inventoryStats">
+      <div><span>Aktive emner</span><b>{items.length}</b></div>
+      <div><span>Gasarter</span><b>{gasItems.length}</b></div>
+      <div><span>Under minimum</span><b>{low}</b></div>
+      <div><span>Seneste registrering</span><b>{history[0]?.userName||'—'}</b></div>
+    </div>
+
+    <div className="inventoryGrid">
+      <div className="inventoryMain panel">
+        <div className="inventoryToolbar"><h3>Lagerbeholdning</h3><select value={category} onChange={e=>setCategory(e.target.value)}>{categories.map(c=><option key={c}>{c}</option>)}</select></div>
+        {loading?<div className="emptyState">Indlæser lager...</div>:<div className="inventoryTableWrap"><table className="inventoryTable"><thead><tr><th>Emne</th><th>Kategori</th><th>Placering</th><th>På lager</th><th>Minimum</th><th>Status</th><th>Handling</th></tr></thead><tbody>
+          {visible.map(item=>{const isLow=item.minimum!=null&&item.quantity<=item.minimum;return <tr key={item.id}>
+            <td><b>{item.name}</b><small>{item.sku||'Intet varenr.'}</small></td><td>{item.category}</td><td>{item.location||'—'}</td><td><strong>{item.quantity}</strong> {item.unit}</td><td>{item.minimum==null?'Ikke fastsat':`${item.minimum} ${item.unit}`}</td><td><span className={`stockBadge ${isLow?'low':'ok'}`}>{isLow?'Bestil':'OK'}</span></td><td><div className="inventoryActions">{item.category==='Gasflasker'&&<button onClick={()=>issue(item)} disabled={item.quantity<=0}>Skift flaske</button>}{canManage&&<button onClick={()=>adjust(item)}>± Lager</button>}{canManage&&<button onClick={()=>editMinimum(item)}>Rediger</button>}</div></td>
+          </tr>})}
+          {!visible.length&&<tr><td colSpan="7" className="emptyState">Ingen emner i denne kategori.</td></tr>}
+        </tbody></table></div>}
+      </div>
+      <aside className="inventoryHistory panel"><h3>Seneste lagerbevægelser</h3>{history.slice(0,12).map(row=><div className="historyRow" key={row.id}><div className={row.change<0?'minus':'plus'}>{row.change>0?'+':''}{row.change}</div><div><b>{row.itemName}</b><span>{row.action} · {row.userName}</span><small>{new Date(row.createdAt).toLocaleString('da-DK')}</small></div></div>)}{!history.length&&<div className="emptyState">Ingen registreringer endnu.</div>}</aside>
+    </div>
+
+    {showCreate&&<div className="modalBackdrop" onMouseDown={()=>setShowCreate(false)}><form className="inventoryModal" onSubmit={createItem} onMouseDown={e=>e.stopPropagation()}><div className="modalTitle"><div><p className="eyebrow">LAGER CENTER</p><h2>Opret nyt emne</h2></div><button type="button" onClick={()=>setShowCreate(false)}>×</button></div>
+      <label>Navn<input required value={draft.name} onChange={e=>setDraft({...draft,name:e.target.value})} placeholder="Fx SMO254 plade eller Nitrogen" /></label>
+      <div className="formGrid"><label>Varenummer<input value={draft.sku} onChange={e=>setDraft({...draft,sku:e.target.value})}/></label><label>Kategori<input list="inventoryCategories" value={draft.category} onChange={e=>setDraft({...draft,category:e.target.value})}/><datalist id="inventoryCategories">{categories.filter(c=>c!=='Alle').map(c=><option key={c} value={c}/>)}</datalist></label></div>
+      <div className="formGrid"><label>Enhed<input value={draft.unit} onChange={e=>setDraft({...draft,unit:e.target.value})} placeholder="stk., meter, kg, flasker"/></label><label>Startbeholdning<input type="number" step="0.001" value={draft.quantity} onChange={e=>setDraft({...draft,quantity:e.target.value})}/></label></div>
+      <div className="formGrid"><label>Minimum (kan udfyldes senere)<input type="number" step="0.001" value={draft.minimum} onChange={e=>setDraft({...draft,minimum:e.target.value})}/></label><label>Placering<input value={draft.location} onChange={e=>setDraft({...draft,location:e.target.value})} placeholder="Fx Reol A3 eller Gaslager"/></label></div>
+      <div className="modalActions"><button type="button" onClick={()=>setShowCreate(false)}>Annuller</button><button className="primaryBtn" type="submit">Opret emne</button></div>
+    </form></div>}
+  </section>;
+}
 
 function ProjectBinder({ documents, setDocuments, projects, session }) {
   const [selectedProject,setSelectedProject]=useState(projects[0]?.name || 'General');
