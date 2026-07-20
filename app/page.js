@@ -1627,7 +1627,7 @@ function InventoryCenter({ session }) {
   const [message,setMessage]=useState('');
   const [category,setCategory]=useState('Alle');
   const [showCreate,setShowCreate]=useState(false);
-  const [draft,setDraft]=useState({name:'',sku:'',category:'Materialer',unit:'stk.',quantity:0,minimum:'',location:''});
+  const [draft,setDraft]=useState({name:'',sku:'',category:'Materialer',unit:'stk.',issueMode:'none',quantity:0,minimum:'',location:''});
 
   async function load(){
     setLoading(true);
@@ -1651,13 +1651,15 @@ function InventoryCenter({ session }) {
   }
 
   async function issue(item){
-    if(!confirm(`Registrer flaskeskift: 1 ${item.unit} ${item.name}?\n\nRegistreres på ${session.name}.`))return;
-    await action({action:'issue',itemId:item.id,quantity:1},`${item.name}: flaskeskift registreret på ${session.name}.`);
+    const isGas=item.issueMode==='gas';
+    const label=isGas?'gasflaske':'trådrulle';
+    if(!confirm(`Bekræft skift af 1 ${label}: ${item.name}?\n\nDer trækkes 1 fra lageret og registreres på ${session.name}.`))return;
+    await action({action:'issue',itemId:item.id},`${item.name}: ${isGas?'flaskeskift':'trådskift'} registreret på ${session.name}.`);
   }
   async function createItem(event){
     event.preventDefault();
     const ok=await action({action:'create',...draft},`${draft.name} er oprettet.`);
-    if(ok){setShowCreate(false);setDraft({name:'',sku:'',category:'Materialer',unit:'stk.',quantity:0,minimum:'',location:''});}
+    if(ok){setShowCreate(false);setDraft({name:'',sku:'',category:'Materialer',unit:'stk.',issueMode:'none',quantity:0,minimum:'',location:''});}
   }
   async function adjust(item){
     const raw=prompt(`Justér lager for ${item.name}.\nBrug plus for modtagelse (fx 5) og minus for forbrug (fx -2).`, '1');
@@ -1669,7 +1671,10 @@ function InventoryCenter({ session }) {
     const raw=prompt(`Minimumslager for ${item.name}.\nLad feltet være tomt, hvis minimum ikke er fastsat endnu.`,item.minimum??'');
     if(raw===null)return;
     const location=prompt(`Lagerplacering for ${item.name}:`,item.location||'') ?? item.location;
-    await action({action:'update',itemId:item.id,minimum:raw,location},`${item.name} er opdateret.`);
+    const mode=prompt(`Medarbejderknap for ${item.name}:\nSkriv gas, wire eller none.`,item.issueMode||'none');
+    if(mode===null)return;
+    const issueMode=['gas','wire'].includes(mode.toLowerCase())?mode.toLowerCase():'none';
+    await action({action:'update',itemId:item.id,minimum:raw,location,issueMode},`${item.name} er opdateret.`);
   }
 
   const categories=['Alle',...Array.from(new Set(items.map(i=>i.category))).sort()];
@@ -1695,7 +1700,7 @@ function InventoryCenter({ session }) {
         <div className="inventoryToolbar"><h3>Lagerbeholdning</h3><select value={category} onChange={e=>setCategory(e.target.value)}>{categories.map(c=><option key={c}>{c}</option>)}</select></div>
         {loading?<div className="emptyState">Indlæser lager...</div>:<div className="inventoryTableWrap"><table className="inventoryTable"><thead><tr><th>Emne</th><th>Kategori</th><th>Placering</th><th>På lager</th><th>Minimum</th><th>Status</th><th>Handling</th></tr></thead><tbody>
           {visible.map(item=>{const isLow=item.minimum!=null&&item.quantity<=item.minimum;return <tr key={item.id}>
-            <td><b>{item.name}</b><small>{item.sku||'Intet varenr.'}</small></td><td>{item.category}</td><td>{item.location||'—'}</td><td><strong>{item.quantity}</strong> {item.unit}</td><td>{item.minimum==null?'Ikke fastsat':`${item.minimum} ${item.unit}`}</td><td><span className={`stockBadge ${isLow?'low':'ok'}`}>{isLow?'Bestil':'OK'}</span></td><td><div className="inventoryActions">{item.category==='Gasflasker'&&<button onClick={()=>issue(item)} disabled={item.quantity<=0}>Skift flaske</button>}{canManage&&<button onClick={()=>adjust(item)}>± Lager</button>}{canManage&&<button onClick={()=>editMinimum(item)}>Rediger</button>}</div></td>
+            <td><b>{item.name}</b><small>{item.sku||'Intet varenr.'}</small></td><td>{item.category}</td><td>{item.location||'—'}</td><td><strong>{item.quantity}</strong> {item.unit}</td><td>{item.minimum==null?'Ikke fastsat':`${item.minimum} ${item.unit}`}</td><td><span className={`stockBadge ${isLow?'low':'ok'}`}>{isLow?'Bestil':'OK'}</span></td><td><div className="inventoryActions">{item.issueMode==='gas'&&<button onClick={()=>issue(item)} disabled={item.quantity<=0}>☐ Skift gas</button>}{item.issueMode==='wire'&&<button onClick={()=>issue(item)} disabled={item.quantity<=0}>☐ Skift tråd</button>}{canManage&&<button onClick={()=>adjust(item)}>± Lager</button>}{canManage&&<button onClick={()=>editMinimum(item)}>Rediger</button>}</div></td>
           </tr>})}
           {!visible.length&&<tr><td colSpan="7" className="emptyState">Ingen emner i denne kategori.</td></tr>}
         </tbody></table></div>}
@@ -1707,6 +1712,7 @@ function InventoryCenter({ session }) {
       <label>Navn<input required value={draft.name} onChange={e=>setDraft({...draft,name:e.target.value})} placeholder="Fx SMO254 plade eller Nitrogen" /></label>
       <div className="formGrid"><label>Varenummer<input value={draft.sku} onChange={e=>setDraft({...draft,sku:e.target.value})}/></label><label>Kategori<input list="inventoryCategories" value={draft.category} onChange={e=>setDraft({...draft,category:e.target.value})}/><datalist id="inventoryCategories">{categories.filter(c=>c!=='Alle').map(c=><option key={c} value={c}/>)}</datalist></label></div>
       <div className="formGrid"><label>Enhed<input value={draft.unit} onChange={e=>setDraft({...draft,unit:e.target.value})} placeholder="stk., meter, kg, flasker"/></label><label>Startbeholdning<input type="number" step="0.001" value={draft.quantity} onChange={e=>setDraft({...draft,quantity:e.target.value})}/></label></div>
+      <label>Medarbejderregistrering<select value={draft.issueMode} onChange={e=>setDraft({...draft,issueMode:e.target.value})}><option value="none">Ingen hurtigknap</option><option value="gas">Skift gasflaske (træk 1)</option><option value="wire">Skift trådrulle (træk 1)</option></select></label>
       <div className="formGrid"><label>Minimum (kan udfyldes senere)<input type="number" step="0.001" value={draft.minimum} onChange={e=>setDraft({...draft,minimum:e.target.value})}/></label><label>Placering<input value={draft.location} onChange={e=>setDraft({...draft,location:e.target.value})} placeholder="Fx Reol A3 eller Gaslager"/></label></div>
       <div className="modalActions"><button type="button" onClick={()=>setShowCreate(false)}>Annuller</button><button className="primaryBtn" type="submit">Opret emne</button></div>
     </form></div>}

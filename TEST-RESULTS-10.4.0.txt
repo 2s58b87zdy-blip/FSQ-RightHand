@@ -1,0 +1,12 @@
+FSQ Command v10.4.0 - Testresultat
+
+OK: npm ci gennemfort.
+OK: Next.js production build kompilerede successfully.
+OK: JavaScript syntax check af inventory API og database schema helper.
+OK: UI understotter hurtigknap for gasflaske og traadrulle.
+OK: API traekker altid praecis 1 enhed fra lageret i en SQL transaction.
+OK: Bruger, dato/tid og handling gemmes i InventoryTransactions.
+OK: Kun varer sat som gas eller wire kan registreres af medarbejdere.
+OK: Lager kan ikke ga under 0 ved hurtigregistrering.
+
+Bemaerkning: Build stoppede under "Collecting page data", fordi testmiljoet ikke har adgang til FSQ Azure SQL / Managed Identity. Selve applikationen kompilerede korrekt. CSS har kun eksisterende autoprefixer-advarsler.

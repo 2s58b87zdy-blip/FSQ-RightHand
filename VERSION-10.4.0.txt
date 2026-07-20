@@ -1,0 +1,8 @@
+FSQ Command v10.4.0 - Gas- og traadskift
+
+- Alle medarbejdere kan registrere skift af gasflaske eller traadrulle.
+- Et klik traekker automatisk 1 enhed fra lagerbeholdningen.
+- Bruger, dato, tidspunkt og handling gemmes i lagerhistorikken.
+- Owner/Co-Owner kan vaelge medarbejderknap ved oprettelse og redigering: gas, wire eller none.
+- Eksisterende gasarter migreres automatisk til gas-knappen.
+- Minimumslager kan fortsat udfyldes senere.

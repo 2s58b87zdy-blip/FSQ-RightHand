@@ -100,6 +100,8 @@ CREATE TABLE dbo.InventoryItems (
   UpdatedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
 );
 GO
+IF COL_LENGTH('dbo.InventoryItems','IssueMode') IS NULL ALTER TABLE dbo.InventoryItems ADD IssueMode NVARCHAR(50) NOT NULL CONSTRAINT DF_InventoryItems_IssueMode DEFAULT 'none';
+
 IF OBJECT_ID('dbo.InventoryTransactions','U') IS NULL
 CREATE TABLE dbo.InventoryTransactions (
   Id BIGINT IDENTITY(1,1) PRIMARY KEY, ItemId NVARCHAR(100) NOT NULL,

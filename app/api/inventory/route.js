@@ -12,6 +12,7 @@ function item(row) {
     name: row.Name,
     category: row.Category,
     unit: row.Unit,
+    issueMode: row.IssueMode || 'none',
     quantity: Number(row.Quantity || 0),
     minimum: row.MinimumQuantity == null ? null : Number(row.MinimumQuantity),
     location: row.Location || '',
@@ -31,9 +32,10 @@ async function seedGases(pool, userName) {
       .input('Name', sql.NVarChar(200), name)
       .input('Category', sql.NVarChar(100), 'Gasflasker')
       .input('Unit', sql.NVarChar(50), 'flasker')
+      .input('IssueMode', sql.NVarChar(50), 'gas')
       .input('UpdatedBy', sql.NVarChar(100), userName || 'System')
-      .query(`INSERT INTO dbo.InventoryItems (Id,Sku,Name,Category,Unit,Quantity,MinimumQuantity,Location,Active,UpdatedBy)
-              VALUES (@Id,@Sku,@Name,@Category,@Unit,0,NULL,'Gaslager',1,@UpdatedBy)`);
+      .query(`INSERT INTO dbo.InventoryItems (Id,Sku,Name,Category,Unit,IssueMode,Quantity,MinimumQuantity,Location,Active,UpdatedBy)
+              VALUES (@Id,@Sku,@Name,@Category,@Unit,@IssueMode,0,NULL,'Gaslager',1,@UpdatedBy)`);
   }
 }
 
@@ -43,6 +45,7 @@ export async function GET() {
   try {
     const pool = await ensureSchema();
     await seedGases(pool, session.name);
+    await pool.request().query(`UPDATE dbo.InventoryItems SET IssueMode='gas' WHERE Category='Gasflasker' AND (IssueMode IS NULL OR IssueMode='none')`);
     const [itemsResult, historyResult] = await Promise.all([
       pool.request().query(`SELECT * FROM dbo.InventoryItems WHERE Active=1 ORDER BY Category, Name`),
       pool.request().query(`SELECT TOP 100 t.Id,t.ItemId,i.Name AS ItemName,t.ChangeQuantity,t.ActionType,t.UserName,t.Note,t.CreatedAt
@@ -73,23 +76,30 @@ export async function POST(request) {
     const pool = await ensureSchema();
 
     if (body.action === 'issue') {
-      const quantity = Math.max(1, Number(body.quantity || 1));
+      const quantity = 1;
       const tx = new sql.Transaction(pool);
       await tx.begin();
       try {
         const current = await new sql.Request(tx).input('Id', sql.NVarChar(100), body.itemId)
-          .query(`SELECT Quantity FROM dbo.InventoryItems WITH (UPDLOCK,ROWLOCK) WHERE Id=@Id AND Active=1`);
-        if (!current.recordset[0]) throw new Error('Varen blev ikke fundet.');
-        if (Number(current.recordset[0].Quantity) < quantity) throw new Error('Der er ikke nok på lager.');
+          .query(`SELECT Name,Quantity,Unit,IssueMode FROM dbo.InventoryItems WITH (UPDLOCK,ROWLOCK) WHERE Id=@Id AND Active=1`);
+        const selected = current.recordset[0];
+        if (!selected) throw new Error('Varen blev ikke fundet.');
+        if (!['gas','wire'].includes(String(selected.IssueMode || 'none'))) throw new Error('Varen er ikke sat op til medarbejderregistrering.');
+        if (Number(selected.Quantity) < quantity) throw new Error('Der er ikke nok på lager.');
+        const isGas = selected.IssueMode === 'gas';
+        const actionType = isGas ? 'Flaskeskift' : 'Trådskift';
+        const note = isGas ? 'Medarbejder registrerede skift af gasflaske' : 'Medarbejder registrerede skift af trådrulle';
         await new sql.Request(tx)
           .input('Id', sql.NVarChar(100), body.itemId)
           .input('Quantity', sql.Decimal(18,3), quantity)
           .input('UserName', sql.NVarChar(100), session.name)
+          .input('ActionType', sql.NVarChar(100), actionType)
+          .input('Note', sql.NVarChar(500), note)
           .query(`UPDATE dbo.InventoryItems SET Quantity=Quantity-@Quantity,UpdatedBy=@UserName,UpdatedAt=SYSUTCDATETIME() WHERE Id=@Id;
                   INSERT INTO dbo.InventoryTransactions (ItemId,ChangeQuantity,ActionType,UserName,Note)
-                  VALUES (@Id,-@Quantity,'Flaskeskift',@UserName,'Medarbejder registrerede flaskeskift');`);
+                  VALUES (@Id,-@Quantity,@ActionType,@UserName,@Note);`);
         await tx.commit();
-        return NextResponse.json({ ok: true });
+        return NextResponse.json({ ok: true, actionType });
       } catch (error) { await tx.rollback(); throw error; }
     }
 
@@ -105,12 +115,13 @@ export async function POST(request) {
         .input('Name', sql.NVarChar(200), name)
         .input('Category', sql.NVarChar(100), String(body.category || 'Materialer').trim())
         .input('Unit', sql.NVarChar(50), String(body.unit || 'stk.').trim())
+        .input('IssueMode', sql.NVarChar(50), ['gas','wire'].includes(body.issueMode) ? body.issueMode : 'none')
         .input('Quantity', sql.Decimal(18,3), Number(body.quantity || 0))
         .input('Minimum', sql.Decimal(18,3), body.minimum === '' || body.minimum == null ? null : Number(body.minimum))
         .input('Location', sql.NVarChar(200), String(body.location || '').trim())
         .input('UserName', sql.NVarChar(100), session.name)
-        .query(`INSERT INTO dbo.InventoryItems (Id,Sku,Name,Category,Unit,Quantity,MinimumQuantity,Location,Active,UpdatedBy)
-                VALUES (@Id,@Sku,@Name,@Category,@Unit,@Quantity,@Minimum,@Location,1,@UserName);
+        .query(`INSERT INTO dbo.InventoryItems (Id,Sku,Name,Category,Unit,IssueMode,Quantity,MinimumQuantity,Location,Active,UpdatedBy)
+                VALUES (@Id,@Sku,@Name,@Category,@Unit,@IssueMode,@Quantity,@Minimum,@Location,1,@UserName);
                 INSERT INTO dbo.InventoryTransactions (ItemId,ChangeQuantity,ActionType,UserName,Note)
                 VALUES (@Id,@Quantity,'Oprettet',@UserName,'Nyt lageremne oprettet');`);
       return NextResponse.json({ ok: true, id });
@@ -134,8 +145,9 @@ export async function POST(request) {
         .input('Id', sql.NVarChar(100), body.itemId)
         .input('Minimum', sql.Decimal(18,3), body.minimum === '' || body.minimum == null ? null : Number(body.minimum))
         .input('Location', sql.NVarChar(200), String(body.location || '').trim())
+        .input('IssueMode', sql.NVarChar(50), ['gas','wire'].includes(body.issueMode) ? body.issueMode : 'none')
         .input('UserName', sql.NVarChar(100), session.name)
-        .query(`UPDATE dbo.InventoryItems SET MinimumQuantity=@Minimum,Location=@Location,UpdatedBy=@UserName,UpdatedAt=SYSUTCDATETIME() WHERE Id=@Id`);
+        .query(`UPDATE dbo.InventoryItems SET MinimumQuantity=@Minimum,Location=@Location,IssueMode=@IssueMode,UpdatedBy=@UserName,UpdatedAt=SYSUTCDATETIME() WHERE Id=@Id`);
       return NextResponse.json({ ok: true });
     }
 
