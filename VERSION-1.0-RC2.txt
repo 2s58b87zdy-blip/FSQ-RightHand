@@ -1,0 +1,16 @@
+FSQ COMMAND v1.0 RC2 - GO LIVE
+
+Included:
+- Commander Jobs starts empty (all demo projects/jobs removed)
+- All demo tasks, including fictional tasks assigned to Tommy, removed
+- Legacy demo materials removed
+- "Kran 2" / "Crane 2" removed
+- Workshop Machine Status and dashboard now use Machine Binder as the single machine registry
+- Only machines created in Machine Binder appear on the dashboard
+- New or deleted Machine Binder machines update the dashboard automatically
+- Extended Lager Center retained from v10.5.0
+- Users, roles, login, Project Binder documents, Machine Binder documents and ATLAS knowledge preserved
+- No Factory Reset function included
+
+Deployment note:
+A one-time migration runs after first login and cleans shared Azure state. It is protected by the key fsq-v1-rc2-go-live-applied.

@@ -16,7 +16,7 @@ const FOLDER_ACCESS_LEVELS = ['No Access','Read','Edit','Full Control'];
 const MANAGED_FOLDERS = ['Projects','Workshop','Marine','Drawings','Procedures','QA / QC','Reports','Drone','Certificates','Templates','Finance','HR','Management','Contracts','Customers'];
 const DEFAULT_FOLDER_ACCESS = Object.fromEntries(MANAGED_FOLDERS.map(folder=>[folder,'No Access']));
 
-const APP_VERSION = '10.3.0';
+const APP_VERSION = '1.0 RC2';
 
 const USER_REGISTRY_DEFAULTS = [
   { id: 1, name: 'Flemming', role: 'Owner', password: 'fsq2027', active: true, permissions: ROLE_DEFINITIONS.Owner, folderAccess: Object.fromEntries(MANAGED_FOLDERS.map(folder=>[folder,'Full Control'])) },
@@ -68,22 +68,9 @@ const NAV = [
   ['admin', 'Settings', '⚙']
 ];
 
-const DEFAULT_PROJECTS = [
-  { id: 1, type: 'Marine', name: 'Wind Orca', customer: 'Cadeler', imo: '9671414', projectNo: 'FSQ-26071', status: 'Fabrication', progress: 68, lead: 'Jakob', location: 'Esbjerg', startDate: '2026-07-15', mobilisation: '2026-07-20', next: 'Complete SMO fabrication', notes: 'Priority scrubber modification project.' },
-  { id: 2, type: 'Marine', name: 'Wind Osprey', customer: 'Cadeler', imo: '9671426', projectNo: 'FSQ-26072', status: 'Planning', progress: 42, lead: 'Flemming', location: 'Esbjerg', startDate: '2026-07-18', mobilisation: '2026-07-27', next: 'Finalize material package', notes: 'Prepare fabrication and mobilisation package.' },
-  { id: 4, type: 'Workshop', name: 'Stainless Frames', customer: 'Cadeler', imo: '', projectNo: 'FSQ-26074', status: 'Fabrication', progress: 35, lead: 'Jakob', location: 'Nibe Workshop', startDate: '2026-07-16', mobilisation: '2026-07-28', next: 'Complete frame welding', notes: 'Workshop fabrication of stainless frames.' },
-  { id: 3, type: 'Inspection', name: 'TORM Splendid', customer: 'TORM', imo: '9683572', projectNo: 'FSQ-26073', status: 'Inspection', progress: 27, lead: 'Jakob', location: 'Rotterdam', startDate: '2026-07-10', mobilisation: 'In progress', next: 'Finish inspection report', notes: 'Scrubber inspection and repair scope.' }
-];
+const DEFAULT_PROJECTS = [];
 
-const DEFAULT_TASKS = [
-  { id: 1, title: 'Klargør svejserobot til SMO', person: 'Jakob', priority: 'High', status: 'In progress', due: 'Today', project: 'Wind Orca' },
-  { id: 2, title: 'Skær sidste pinde og pak på paller', person: 'Tommy', priority: 'Normal', status: 'Planned', due: 'Today', project: 'Workshop' },
-  { id: 3, title: 'Rengør plasmaskærer og skærebord', person: 'Anders', priority: 'Normal', status: 'Planned', due: 'Today', project: 'Workshop' },
-  { id: 4, title: 'Drej pumpeemne på drejebænk', person: 'Jakob', priority: 'High', status: 'In progress', due: 'Today', project: 'Wind Orca' },
-  { id: 5, title: 'Afventer SMO254 6 mm', person: 'Tommy', priority: 'High', status: 'Waiting', due: 'Tomorrow', project: 'Wind Osprey' },
-  { id: 6, title: 'Finalize service report', person: 'Flemming', priority: 'High', status: 'Waiting', due: 'Overdue', project: 'TORM Splendid' },
-  { id: 7, title: 'Inspection report issued', person: 'Stefan', priority: 'Normal', status: 'Completed', due: 'Done', project: 'TORM Splendid' }
-];
+const DEFAULT_TASKS = [];
 
 const DEFAULT_PEOPLE = [
   { id: 1, name: 'Flemming', location: 'Office', detail: 'Quotes and planning', status: 'Available', task: 'Commercial follow-up', progress: 55, skills: ['Management', 'Marine', 'Quotations'], certificates: [] },
@@ -96,23 +83,9 @@ const DEFAULT_PEOPLE = [
   { id: 8, name: 'Kim', location: 'Travel', detail: 'Mobilisation', status: 'Travelling', task: 'Mobilisation', progress: 30, skills: ['Offshore', 'Installation'], certificates: ['GWO'] }
 ];
 
-const DEFAULT_MACHINES = [
-  { id: 1, name: 'Welding robot', status: 'In use', note: 'Wind Orca SMO welding', lastService: '2026-06-18' },
-  { id: 2, name: 'Plasma cutter', status: 'Ready', note: 'Available', lastService: '2026-05-12' },
-  { id: 3, name: 'Lathe', status: 'In use', note: 'Pump component', lastService: '2026-04-30' },
-  { id: 4, name: 'Press brake', status: 'Service', note: 'Maintenance tomorrow', lastService: '2026-07-01' },
-  { id: 5, name: 'Crane 2', status: 'Out of service', note: 'Awaiting inspection', lastService: '2026-03-15' },
-  { id: 6, name: 'Forklift', status: 'Ready', note: 'Available', lastService: '2026-06-02' }
-];
+const DEFAULT_MACHINES = [];
 
-const DEFAULT_MATERIALS = [
-  { id: 1, name: 'SMO254 6 mm', quantity: 3, unit: 'plates', minimum: 5 },
-  { id: 2, name: 'SMO254 8 mm', quantity: 7, unit: 'plates', minimum: 4 },
-  { id: 3, name: '2507 plate', quantity: 6, unit: 'plates', minimum: 4 },
-  { id: 4, name: '2507 pipe', quantity: 8, unit: 'lengths', minimum: 5 },
-  { id: 5, name: 'Shielding gas', quantity: 14, unit: 'bottles', minimum: 8 },
-  { id: 6, name: 'Grinding discs', quantity: 38, unit: 'pcs', minimum: 20 }
-];
+const DEFAULT_MATERIALS = [];
 
 const DEFAULT_QUOTES = [
   { id: 1, reference: 'Q-2026-071', customer: 'Cadeler', title: 'Wind Orca modification', value: 385000, status: 'Draft' },
@@ -188,11 +161,7 @@ const DEFAULT_KNOWLEDGE_FOLDERS = [
   { id: 4, name: 'Safety Procedures', description: 'Risk assessments, LOTO and safe work instructions', accessFolder: 'Procedures' }
 ];
 
-const DEFAULT_KNOWLEDGE_MACHINES = [
-  { id: 1, name: 'Welding Robot', manufacturer: 'FSQ Workshop', model: 'Robot Cell 1', serial: '', location: 'Workshop', folderId: 1, notes: 'SMO254 and Super Duplex welding cell', status: 'Active' },
-  { id: 2, name: 'Plasma Cutter', manufacturer: 'Hypertherm', model: '', serial: '', location: 'Workshop', folderId: 1, notes: 'Plasma cutting table and power source', status: 'Active' },
-  { id: 3, name: 'Press Brake', manufacturer: 'SafanDarley', model: '', serial: '', location: 'Workshop', folderId: 1, notes: 'Hydraulic press brake', status: 'Active' }
-];
+const DEFAULT_KNOWLEDGE_MACHINES = [];
 
 const DEFAULT_KNOWLEDGE_DOCUMENTS = [];
 const DEFAULT_KNOWLEDGE_SOLUTIONS = [];
@@ -423,6 +392,50 @@ function AppShell({ session, onLogout, users, setUsers }) {
   const [knowledgeMachines, setKnowledgeMachines] = useStoredState('fsq-v72-knowledge-machines', DEFAULT_KNOWLEDGE_MACHINES);
   const [knowledgeDocuments, setKnowledgeDocuments] = useStoredState('fsq-v72-knowledge-documents', DEFAULT_KNOWLEDGE_DOCUMENTS);
   const [knowledgeSolutions, setKnowledgeSolutions] = useStoredState('fsq-v72-knowledge-solutions', DEFAULT_KNOWLEDGE_SOLUTIONS);
+
+  // One-time Go Live cleanup: remove demonstration jobs, tasks and materials.
+  // Users, roles, Project Binder documents and ATLAS knowledge documents are preserved.
+  useEffect(() => {
+    let cancelled = false;
+    async function applyGoLiveCleanup() {
+      try {
+        const markerResponse = await fetch('/api/state?key=fsq-v1-rc2-go-live-applied', { cache: 'no-store' });
+        const markerData = markerResponse.ok ? await markerResponse.json() : { value: null };
+        if (cancelled || markerData.value === true) return;
+
+        const cleanMachines = (Array.isArray(knowledgeMachines) ? knowledgeMachines : []).filter(machine => {
+          const name = String(machine?.name || '').trim().toLowerCase();
+          const isRemovedCrane = ['kran 2', 'crane 2'].includes(name);
+          const isOriginalDemoMachine = [1, 2, 3].includes(Number(machine?.id)) && ['welding robot', 'plasma cutter', 'press brake'].includes(name);
+          return !isRemovedCrane && !isOriginalDemoMachine;
+        });
+
+        setProjects([]);
+        setTasks([]);
+        setMaterials([]);
+        setMachines([]); // legacy workshop-machine list is no longer used
+        setKnowledgeMachines(cleanMachines);
+        setDeletedProjects([]);
+
+        const updates = [
+          ['fsq-v40-projects', []],
+          ['fsq-v40-tasks', []],
+          ['fsq-v40-materials', []],
+          ['fsq-v40-machines', []],
+          ['fsq-v40-deleted-projects', []],
+          ['fsq-v72-knowledge-machines', cleanMachines],
+          ['fsq-v1-rc2-go-live-applied', true]
+        ];
+        await Promise.all(updates.map(([key, value]) => fetch('/api/state', {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key, value })
+        })));
+      } catch (error) {
+        console.error('Go Live cleanup could not be completed:', error);
+      }
+    }
+    const timer = setTimeout(applyGoLiveCleanup, 800);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, []);
   const [chat, setChat] = useState([{ from: 'ai', text: `${getGreeting(session.name)} How can I assist you today?` }]);
   const [voice, setVoice] = useState(session.voice);
   const [voiceMessage,setVoiceMessage] = useState('');
@@ -466,8 +479,8 @@ function AppShell({ session, onLogout, users, setUsers }) {
     urgent: visibleTasks.filter(t => (t.priority === 'High' || t.due === 'Overdue') && t.status !== 'Completed').length,
     people: people.filter(p => !['Free', 'Off'].includes(p.status)).length,
     lowStock: materials.filter(m => m.quantity < m.minimum).length,
-    machinesDown: machines.filter(m => ['Service','Out of service'].includes(m.status)).length
-  }), [visibleProjects, visibleTasks, people, materials, machines]);
+    machinesDown: knowledgeMachines.filter(m => ['Service','Out of service','Maintenance','Breakdown'].includes(m.status)).length
+  }), [visibleProjects, visibleTasks, people, materials, knowledgeMachines]);
 
   return (
     <div className="appShell">
@@ -484,7 +497,7 @@ function AppShell({ session, onLogout, users, setUsers }) {
         </header>
         {voiceMessage&&<div className="voiceStatus">{voiceMessage}</div>}
 
-        {active === 'dashboard' && <Dashboard session={session} stats={stats} projects={visibleProjects} tasks={visibleTasks} people={people} machines={machines} materials={materials} quotes={quotes} droneInspections={droneInspections} setActive={setActive} />}
+        {active === 'dashboard' && <Dashboard session={session} stats={stats} projects={visibleProjects} tasks={visibleTasks} people={people} machines={knowledgeMachines} materials={materials} quotes={quotes} droneInspections={droneInspections} setActive={setActive} />}
         {active === 'myjobs' && <MyJobs session={session} tasks={tasks} setTasks={setTasks} projects={projects} />}
         {active === 'approvals' && <JobApprovals session={session} tasks={tasks} setTasks={setTasks} projects={projects} />}
         {active === 'crew' && <CrewManagement people={people} setPeople={setPeople} projects={projects} />}
@@ -495,8 +508,8 @@ function AppShell({ session, onLogout, users, setUsers }) {
         {active === 'planner' && <OperationsPlanner people={people} projects={projects} />}
         {active === 'knowledge' && <KnowledgeBase session={session} users={users} folders={knowledgeFolders} setFolders={setKnowledgeFolders} machines={knowledgeMachines} setMachines={setKnowledgeMachines} documents={knowledgeDocuments} setDocuments={setKnowledgeDocuments} solutions={knowledgeSolutions} setSolutions={setKnowledgeSolutions} />}
         {active === 'health' && <SystemHealth session={session} users={users} projects={projects} documents={documents} knowledgeDocuments={knowledgeDocuments} knowledgeMachines={knowledgeMachines} />}
-        {active === 'admin' && <Admin session={session} users={users} setUsers={setUsers} people={people} setPeople={setPeople} machines={machines} setMachines={setMachines} materials={materials} setMaterials={setMaterials} />}
-        {active === 'ai' && <AI session={session} chat={chat} setChat={setChat} voice={voice} stats={stats} context={{projects:visibleProjects,tasks:visibleTasks,people,machines,materials,documents,knowledgeDocuments,knowledgeMachines,knowledgeSolutions}} />}
+        {active === 'admin' && <Admin session={session} users={users} setUsers={setUsers} people={people} setPeople={setPeople} machines={knowledgeMachines} setMachines={setKnowledgeMachines} materials={materials} setMaterials={setMaterials} />}
+        {active === 'ai' && <AI session={session} chat={chat} setChat={setChat} voice={voice} stats={stats} context={{projects:visibleProjects,tasks:visibleTasks,people,machines:knowledgeMachines,materials,documents,knowledgeDocuments,knowledgeMachines,knowledgeSolutions}} />}
         {!['dashboard','myjobs','approvals','crew','projects','projectHub','documents','inventory','planner','health','admin','ai'].includes(active) && <ModulePlaceholder title={NAV.find(n=>n[0]===active)?.[1]} />}
       </main>
     </div>
@@ -966,13 +979,13 @@ function WorkshopControl({ tasks, setTasks, people, machines, setMachines, mater
 
     <section className="workshopLowerGrid">
       <div className="panel">
-        <div className="panelHead"><h3>Machine status</h3><button onClick={()=>setMachines(DEFAULT_MACHINES)}>Reset</button></div>
+        <div className="panelHead"><h3>Machine status</h3><small>Styres fra Machine Binder</small></div>
         <div className="machineGrid">
           {machines.map(m=><MachineCard key={m.id} machine={m} setMachines={setMachines} machines={machines} />)}
         </div>
       </div>
       <div className="panel">
-        <div className="panelHead"><h3>Material overview</h3><button onClick={()=>setMaterials(DEFAULT_MATERIALS)}>Reset</button></div>
+        <div className="panelHead"><h3>Material overview</h3><small>Styres fra Lager Center</small></div>
         {materials.map(m=><MaterialRow key={m.id} material={m} materials={materials} setMaterials={setMaterials} />)}
       </div>
     </section>
@@ -2086,7 +2099,7 @@ function Admin({session,users,setUsers,people,setPeople,machines,setMachines,mat
         <div className="userActions"><button disabled={!owner||['Flemming','Jakob'].includes(user.name)} onClick={()=>toggleActive(user.id)}>{user.active?'Lock user':'Unlock user'}</button><button className="dangerAction" disabled={!owner||['Flemming','Jakob'].includes(user.name)} onClick={()=>deleteUser(user.id)}>Delete</button></div>
       </article>)}</div>
     </section>
-    <div className="dashboardGrid adminSupportGrid"><div className="panel"><h3>Personnel location</h3>{people.map(p=><button className="listRow" key={p.id} onClick={()=>cyclePerson(p.id)}><div><b>{p.name}</b><small>{p.task}</small></div><em>{p.location}</em></button>)}</div><div className="panel"><h3>System resets</h3><button className="primaryBtn" onClick={()=>setMachines(DEFAULT_MACHINES)}>Restore machines</button><button className="primaryBtn" onClick={()=>setMaterials(DEFAULT_MATERIALS)}>Restore materials</button></div></div>
+    <div className="dashboardGrid adminSupportGrid"><div className="panel"><h3>Personnel location</h3>{people.map(p=><button className="listRow" key={p.id} onClick={()=>cyclePerson(p.id)}><div><b>{p.name}</b><small>{p.task}</small></div><em>{p.location}</em></button>)}</div><div className="panel"><h3>Go Live status</h3><p className="muted">Testjobs, testopgaver og gamle demo-materialer er fjernet. Maskiner administreres kun i Machine Binder.</p></div></div>
   </div>
 }
 

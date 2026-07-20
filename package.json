@@ -1,6 +1,6 @@
 {
-  "name": "fsq-command-v1050",
-  "version": "10.5.0",
+  "name": "fsq-command-v1-rc2",
+  "version": "1.0.0-rc2",
   "private": true,
   "scripts": {
     "dev": "next dev",
