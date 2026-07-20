@@ -101,6 +101,7 @@ CREATE TABLE dbo.InventoryItems (
 );
 GO
 IF COL_LENGTH('dbo.InventoryItems','IssueMode') IS NULL ALTER TABLE dbo.InventoryItems ADD IssueMode NVARCHAR(50) NOT NULL CONSTRAINT DF_InventoryItems_IssueMode DEFAULT 'none';
+IF COL_LENGTH('dbo.InventoryItems','Supplier') IS NULL ALTER TABLE dbo.InventoryItems ADD Supplier NVARCHAR(200) NULL;
 
 IF OBJECT_ID('dbo.InventoryTransactions','U') IS NULL
 CREATE TABLE dbo.InventoryTransactions (

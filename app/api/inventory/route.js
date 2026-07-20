@@ -16,6 +16,7 @@ function item(row) {
     quantity: Number(row.Quantity || 0),
     minimum: row.MinimumQuantity == null ? null : Number(row.MinimumQuantity),
     location: row.Location || '',
+    supplier: row.Supplier || '',
     active: row.Active !== false,
     updatedAt: row.UpdatedAt
   };
@@ -76,7 +77,11 @@ export async function POST(request) {
     const pool = await ensureSchema();
 
     if (body.action === 'issue') {
-      const quantity = 1;
+      const requestedQuantity = Number(body.quantity == null ? 1 : body.quantity);
+      if (!Number.isFinite(requestedQuantity) || requestedQuantity <= 0) {
+        return NextResponse.json({ error: 'Antallet skal være større end 0.' }, { status: 400 });
+      }
+      const quantity = requestedQuantity;
       const tx = new sql.Transaction(pool);
       await tx.begin();
       try {
@@ -84,11 +89,17 @@ export async function POST(request) {
           .query(`SELECT Name,Quantity,Unit,IssueMode FROM dbo.InventoryItems WITH (UPDLOCK,ROWLOCK) WHERE Id=@Id AND Active=1`);
         const selected = current.recordset[0];
         if (!selected) throw new Error('Varen blev ikke fundet.');
-        if (!['gas','wire'].includes(String(selected.IssueMode || 'none'))) throw new Error('Varen er ikke sat op til medarbejderregistrering.');
+        const issueMode = String(selected.IssueMode || 'none');
+        if (!['gas','wire','each','meter','kg'].includes(issueMode)) throw new Error('Varen er ikke sat op til medarbejderregistrering.');
         if (Number(selected.Quantity) < quantity) throw new Error('Der er ikke nok på lager.');
-        const isGas = selected.IssueMode === 'gas';
-        const actionType = isGas ? 'Flaskeskift' : 'Trådskift';
-        const note = isGas ? 'Medarbejder registrerede skift af gasflaske' : 'Medarbejder registrerede skift af trådrulle';
+        const actionMap = {
+          gas: ['Flaskeskift', 'Medarbejder registrerede skift af gasflaske'],
+          wire: ['Trådskift', 'Medarbejder registrerede skift af trådrulle'],
+          each: ['Forbrug', 'Medarbejder tog en vare fra lager'],
+          meter: ['Meterforbrug', 'Medarbejder registrerede forbrug i meter'],
+          kg: ['Kg-forbrug', 'Medarbejder registrerede forbrug i kg']
+        };
+        const [actionType, note] = actionMap[issueMode];
         await new sql.Request(tx)
           .input('Id', sql.NVarChar(100), body.itemId)
           .input('Quantity', sql.Decimal(18,3), quantity)
@@ -111,17 +122,24 @@ export async function POST(request) {
       const id = crypto.randomUUID();
       await pool.request()
         .input('Id', sql.NVarChar(100), id)
-        .input('Sku', sql.NVarChar(100), String(body.sku || '').trim())
+        .input('Sku', sql.NVarChar(100), String(body.sku || '').trim() || null)
         .input('Name', sql.NVarChar(200), name)
         .input('Category', sql.NVarChar(100), String(body.category || 'Materialer').trim())
         .input('Unit', sql.NVarChar(50), String(body.unit || 'stk.').trim())
-        .input('IssueMode', sql.NVarChar(50), ['gas','wire'].includes(body.issueMode) ? body.issueMode : 'none')
+        .input('IssueMode', sql.NVarChar(50), ['gas','wire','each','meter','kg'].includes(body.issueMode) ? body.issueMode : 'none')
         .input('Quantity', sql.Decimal(18,3), Number(body.quantity || 0))
         .input('Minimum', sql.Decimal(18,3), body.minimum === '' || body.minimum == null ? null : Number(body.minimum))
         .input('Location', sql.NVarChar(200), String(body.location || '').trim())
+        .input('Supplier', sql.NVarChar(200), String(body.supplier || '').trim())
         .input('UserName', sql.NVarChar(100), session.name)
-        .query(`INSERT INTO dbo.InventoryItems (Id,Sku,Name,Category,Unit,IssueMode,Quantity,MinimumQuantity,Location,Active,UpdatedBy)
-                VALUES (@Id,@Sku,@Name,@Category,@Unit,@IssueMode,@Quantity,@Minimum,@Location,1,@UserName);
+        .query(`IF @Sku IS NULL OR LTRIM(RTRIM(@Sku))=''
+                BEGIN
+                  DECLARE @Prefix NVARCHAR(20)=UPPER(LEFT(REPLACE(REPLACE(REPLACE(@Category,' ',''),'Æ','AE'),'Ø','O'),5));
+                  DECLARE @NextNo INT=(SELECT ISNULL(COUNT(*),0)+1 FROM dbo.InventoryItems WHERE Category=@Category);
+                  SET @Sku=CONCAT(@Prefix,'-',RIGHT(CONCAT('0000',@NextNo),4));
+                END;
+                INSERT INTO dbo.InventoryItems (Id,Sku,Name,Category,Unit,IssueMode,Quantity,MinimumQuantity,Location,Supplier,Active,UpdatedBy)
+                VALUES (@Id,@Sku,@Name,@Category,@Unit,@IssueMode,@Quantity,@Minimum,@Location,@Supplier,1,@UserName);
                 INSERT INTO dbo.InventoryTransactions (ItemId,ChangeQuantity,ActionType,UserName,Note)
                 VALUES (@Id,@Quantity,'Oprettet',@UserName,'Nyt lageremne oprettet');`);
       return NextResponse.json({ ok: true, id });
@@ -145,9 +163,10 @@ export async function POST(request) {
         .input('Id', sql.NVarChar(100), body.itemId)
         .input('Minimum', sql.Decimal(18,3), body.minimum === '' || body.minimum == null ? null : Number(body.minimum))
         .input('Location', sql.NVarChar(200), String(body.location || '').trim())
-        .input('IssueMode', sql.NVarChar(50), ['gas','wire'].includes(body.issueMode) ? body.issueMode : 'none')
+        .input('IssueMode', sql.NVarChar(50), ['gas','wire','each','meter','kg'].includes(body.issueMode) ? body.issueMode : 'none')
+        .input('Supplier', sql.NVarChar(200), String(body.supplier || '').trim())
         .input('UserName', sql.NVarChar(100), session.name)
-        .query(`UPDATE dbo.InventoryItems SET MinimumQuantity=@Minimum,Location=@Location,IssueMode=@IssueMode,UpdatedBy=@UserName,UpdatedAt=SYSUTCDATETIME() WHERE Id=@Id`);
+        .query(`UPDATE dbo.InventoryItems SET MinimumQuantity=@Minimum,Location=@Location,Supplier=@Supplier,IssueMode=@IssueMode,UpdatedBy=@UserName,UpdatedAt=SYSUTCDATETIME() WHERE Id=@Id`);
       return NextResponse.json({ ok: true });
     }
 
