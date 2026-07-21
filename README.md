@@ -1,113 +1,46 @@
-# FSQ Command v9.2.0 - Project Binder Enterprise
+# FSQ Command 1.0 RC2 Secure
 
-Folder-specific Azure upload, drag and drop, SQL-backed document listing, file preview and automatic ATLAS indexing.
-
-# FSQ Command v8.1.1 – Shared Operations Data
-
-## New in v8.1
-
-- Azure SQL authentication through the App Service system-assigned Managed Identity
-- SQL username/password remains an optional local-development fallback
-- Shared SQL storage for the existing Projects, Planner, Machines and ATLAS Knowledge state
-- Dedicated future-ready SQL tables for Projects, Planner Events, Machines and Knowledge Documents
-- User passwords stored only as bcrypt hashes
-- Secure HTTP-only login session
-- Last-login tracking for users
-- Expanded System Health database information
-- Owner-only audit-log API
-- Automatic schema upgrades during startup
+Production-hardened Next.js application for FSQ operations, Azure SQL, Azure Blob Storage and ATLAS.
 
 ## Required Azure App Service settings
 
-Set these under **App Service → Settings → Environment variables**:
+Create these environment variables before the first start:
 
-- `SQL_SERVER=atlas-command-sql.database.windows.net`
-- `SQL_DATABASE=fsq-command`
-- `AUTH_SECRET` – at least 32 random characters
-- `INITIAL_OWNER_PASSWORD` – used only if the Users table is empty
-- `AZURE_STORAGE_CONNECTION_STRING`
-- `AZURE_STORAGE_CONTAINER=fsq-documents`
+- `AUTH_SECRET`: unique random value with at least 32 characters.
+- `INITIAL_OWNER_PASSWORD`: unique password with at least 12 characters.
+- `INITIAL_OWNER_NAME`: optional; defaults to `Flemming`.
+- `SQL_SERVER` and `SQL_DATABASE`, or a valid `DATABASE_URL`.
+- `AZURE_STORAGE_CONNECTION_STRING`, or `AZURE_STORAGE_ACCOUNT_URL` with Managed Identity.
+- `AZURE_STORAGE_CONTAINER`: normally `fsq-documents`.
+- `OPENAI_API_KEY`: required for ATLAS.
+- `OPENAI_MODEL`: optional; defaults to `gpt-5`.
 
-Do not add `SQL_USER` or `SQL_PASSWORD` in Azure when Managed Identity is used.
+Never commit real secrets. `.env.example` contains placeholders only.
 
-## Azure SQL permission
+## Secure upgrade from an older release
 
-The database must contain the external user for the App Service identity:
+On the first start, the application detects accounts still using the old shared password. The selected Owner receives `INITIAL_OWNER_PASSWORD`; other affected accounts are disabled. The Owner must assign each person a new unique password (minimum 12 characters) before reactivating them.
 
-```sql
-CREATE USER [fsq-right-hand] FROM EXTERNAL PROVIDER;
-ALTER ROLE db_datareader ADD MEMBER [fsq-right-hand];
-ALTER ROLE db_datawriter ADD MEMBER [fsq-right-hand];
-ALTER ROLE db_ddladmin ADD MEMBER [fsq-right-hand];
+## Local verification
+
+```bash
+corepack enable
+pnpm install --frozen-lockfile
+pnpm run test:security
+pnpm audit --prod --audit-level high
+pnpm run build
 ```
 
-## First deployment
+## Deployment
 
-1. Add the environment variables.
-2. Deploy this project through the existing GitHub Actions/App Service workflow.
-3. Restart the App Service.
-4. Open FSQ Command and log in with the `INITIAL_OWNER_PASSWORD`.
-5. In **Settings → Users & Permissions**, assign a unique password to every user.
-6. Open **System Health** and confirm that Azure SQL reports Connected and Managed Identity.
+Push to `main`. GitHub Actions installs from `pnpm-lock.yaml`, runs security checks and audit, builds the app, and deploys only the standalone artifact to Azure App Service.
 
-## Data model
+The Azure startup command should be `npm start` or `node server.js` for the deployed standalone package.
 
-`Users`, `AppState`, `AuditLog`, `Projects`, `PlannerEvents`, `Machines` and `KnowledgeDocuments` are created automatically. Existing screens continue to use the shared AppState synchronization layer, preserving the current UI while the dedicated module APIs are introduced in subsequent releases.
+After deployment:
 
+1. Sign in with `INITIAL_OWNER_NAME` and `INITIAL_OWNER_PASSWORD`.
+2. Assign unique passwords and permissions to every required user.
+3. Verify `/api/diagnostics/database` and `/api/diagnostics/blob` while signed in as Owner or Co-Owner.
+4. Test a small PDF in Project Binder and a permitted image in My Jobs.
 
-## v8.1.1 hotfix
-- Accepts either `SQL_SERVER` + `SQL_DATABASE` or a valid `DATABASE_URL`.
-- Keeps Managed Identity as the default when no SQL username/password is supplied.
-- Adds server-side logging for `/api/auth/users` so Azure Log Stream shows the exact database error.
-- Adds defensive checks around schema initialization and user seeding.
-
-## v8.1.2 login diagnostics hotfix
-- Uses the known Azure SQL server/database as safe defaults when only Managed Identity is configured.
-- Adds `/api/diagnostics/database` with non-secret connection diagnostics.
-- Shows the actual Azure SQL error on the login screen instead of silently displaying an empty user list.
-- Uses Node.js 20 in GitHub Actions.
-- Deploys the tested Next.js standalone output rather than the entire repository.
-- Removes the invalid duplicate `next.config.mjs` file.
-
-## ATLAS BRAIN v9.0
-
-Azure App Service environment variables:
-
-- `OPENAI_API_KEY` - required for ATLAS answers and online research.
-- `OPENAI_MODEL` - optional, defaults to `gpt-5`.
-- `OPENAI_VECTOR_STORE_ID` - optional. When configured, ATLAS uses OpenAI File Search across indexed FSQ documents.
-
-ATLAS modes:
-
-- Assistant: internal FSQ context first, optional web research.
-- Research: web research is always enabled and sources are shown.
-- Developer: visible and available only when the signed-in user is Flemming with Owner role. v9.0 is analysis-only and cannot change or deploy code.
-
-The application automatically creates `AtlasConversations` and `AtlasKnowledge` tables in Azure SQL on first use.
-
-## v9.1.0 - ATLAS Project Binder Knowledge Engine
-
-Project Binder is now ATLAS' primary live project source.
-
-- Project Binder files are stored in Azure Blob Storage (up to 100 MB per file).
-- PDF, DOCX, XLS/XLSX, TXT, CSV, Markdown, JSON, XML and LOG text is extracted during upload.
-- Extracted text is split into searchable chunks in Azure SQL.
-- ATLAS automatically retrieves relevant Binder chunks before answering.
-- ATLAS answers include Project Binder source names and versions.
-- Files can be opened directly from Blob Storage and deletion also removes the ATLAS index.
-- Scanned PDFs, photos, videos and CAD drawings are stored but require a later OCR/Vision pipeline before their visual contents can be searched.
-- Existing local/demo Binder files must be uploaded again to become ATLAS-ready.
-
-## Azure Blob Storage (v9.2.1)
-Choose one authentication method:
-
-1. Connection string
-   - `AZURE_STORAGE_CONNECTION_STRING`: complete connection string copied from Storage account > Access keys.
-   - `AZURE_STORAGE_CONTAINER`: normally `fsq-documents`.
-
-2. Managed Identity (recommended)
-   - `AZURE_STORAGE_ACCOUNT_URL`: for example `https://YOURACCOUNT.blob.core.windows.net`.
-   - `AZURE_STORAGE_CONTAINER`: normally `fsq-documents`.
-   - Grant the App Service system-assigned identity the role `Storage Blob Data Contributor` on the Storage account.
-
-After deployment, sign in and open `/api/diagnostics/blob`. A working setup returns `"ok": true`.

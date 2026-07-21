@@ -1,0 +1,9 @@
+FSQ Command 1.0 RC2 Secure
+
+- Server-side session refresh and role enforcement
+- Secure first-owner bootstrap and legacy password migration
+- Authenticated, prefix-scoped Blob Storage routes
+- Project, task and folder access enforced server-side
+- Safe download headers and file-type validation
+- Dependency audit gate and reproducible pnpm deployment
+- Standalone-only Azure deployment artifact
