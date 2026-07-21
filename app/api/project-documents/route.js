@@ -1,5 +1,7 @@
 import { ensureBlobContainer, getBlobContainerClient } from '../../../lib/blob';
-import { readSession } from '../../../lib/auth';
+import { readSession, canManage } from '../../../lib/auth';
+import { binderAccessFolder, canAccessProject, canEditFolder, canReadFolder, getAllowedProjectNames, folderLevel } from '../../../lib/access';
+import { isAllowedDocument } from '../../../lib/files';
 import { ensureSchema, sql } from '../../../lib/db';
 import { chunkText, extractDocumentText } from '../../../lib/documentText';
 
@@ -16,13 +18,24 @@ export async function GET() {
   if (!session) return Response.json({ error: 'Not authenticated' }, { status: 401 });
   try {
     const pool = await ensureSchema();
-    const result = await pool.request().query(`
+    const allowedProjects = await getAllowedProjectNames(session);
+    const dbRequest = pool.request();
+    let where = '';
+    if (allowedProjects !== null) {
+      const names = [...allowedProjects].slice(0, 100).map((name, index) => {
+        dbRequest.input(`project${index}`, sql.NVarChar(200), name);
+        return `@project${index}`;
+      });
+      where = names.length ? `WHERE ProjectName='General' OR ProjectName IN (${names.join(',')})` : "WHERE ProjectName='General'";
+    }
+    const result = await dbRequest.query(`
       SELECT Id, ProjectName, Category, Name, Version, BlobName, MimeType, SizeBytes,
              UploadedBy, IndexStatus, IndexError, CreatedAt
       FROM dbo.ProjectDocuments
+      ${where}
       ORDER BY CreatedAt DESC
     `);
-    const documents = result.recordset.map(row => ({
+    const documents = result.recordset.filter(row => canReadFolder(session, binderAccessFolder(row.Category))).map(row => ({
       id: row.Id,
       project: row.ProjectName,
       category: row.Category,
@@ -44,7 +57,7 @@ export async function GET() {
     return Response.json({ documents });
   } catch (error) {
     console.error('Project Binder list failed', error);
-    return Response.json({ error: error?.message || 'Could not load documents' }, { status: 500 });
+    return Response.json({ error: 'Could not load documents. See server log.' }, { status: 500 });
   }
 }
 
@@ -55,10 +68,14 @@ export async function POST(request) {
     const form = await request.formData();
     const file = form.get('file');
     if (!file || typeof file === 'string') return Response.json({ error: 'No file received' }, { status: 400 });
-    if (file.size > 100 * 1024 * 1024) return Response.json({ error: 'Maximum file size is 100 MB' }, { status: 413 });
+    if (!isAllowedDocument(file.name)) return Response.json({ error: 'Filtypen er ikke tilladt.' }, { status: 415 });
+    if (file.size <= 0 || file.size > 50 * 1024 * 1024) return Response.json({ error: 'Filen skal være mellem 1 byte og 50 MB.' }, { status: 413 });
 
     const project = String(form.get('project') || 'General').trim() || 'General';
     const category = String(form.get('category') || 'Other').trim() || 'Other';
+    if (!await canAccessProject(session, project) || !canEditFolder(session, binderAccessFolder(category))) {
+      return Response.json({ error: 'Du har ikke skriverettighed til dette projekt eller denne mappe.' }, { status: 403 });
+    }
     const version = Math.max(1, Number(form.get('version') || 1));
     const id = crypto.randomUUID();
     const originalName = file.name;
@@ -126,7 +143,7 @@ export async function POST(request) {
     }});
   } catch (error) {
     console.error('Project Binder upload failed', error);
-    return Response.json({ error: error?.message || 'Upload failed' }, { status: 500 });
+    return Response.json({ error: 'Upload failed. See server log.' }, { status: 500 });
   }
 }
 
@@ -136,13 +153,21 @@ export async function DELETE(request) {
   try {
     const url = new URL(request.url);
     const id = url.searchParams.get('id');
-    const blob = url.searchParams.get('blob');
-    if (!id || !blob) return Response.json({ error: 'Document id and blob name are required' }, { status: 400 });
+    if (!id) return Response.json({ error: 'Document id is required' }, { status: 400 });
     const pool = await ensureSchema();
+    const found = await pool.request().input('id', sql.NVarChar(100), id)
+      .query('SELECT TOP 1 ProjectName,Category,BlobName FROM dbo.ProjectDocuments WHERE Id=@id');
+    const document = found.recordset[0];
+    if (!document) return Response.json({ error: 'Document not found' }, { status: 404 });
+    const mayDelete = canManage(session) || (
+      await canAccessProject(session, document.ProjectName) && folderLevel(session, binderAccessFolder(document.Category)) === 'Full Control'
+    );
+    if (!mayDelete) return Response.json({ error: 'Forbidden' }, { status: 403 });
     await pool.request().input('id', sql.NVarChar(100), id).query('DELETE FROM dbo.ProjectDocuments WHERE Id=@id');
-    await container().deleteBlob(blob, { deleteSnapshots: 'include' });
+    await container().deleteBlob(document.BlobName, { deleteSnapshots: 'include' });
     return Response.json({ ok: true });
   } catch (error) {
-    return Response.json({ error: error?.message || 'Delete failed' }, { status: 500 });
+    console.error('Project Binder delete failed', error);
+    return Response.json({ error: 'Delete failed. See server log.' }, { status: 500 });
   }
 }

@@ -1,5 +1,6 @@
 import { readSession } from '../../../../lib/auth';
 import { atlasClient, extractSources, isFlemming, loadInternalKnowledge, loadProjectBinderKnowledge, saveAtlasConversation } from '../../../../lib/atlas';
+import { getAllowedProjectNames } from '../../../../lib/access';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -24,8 +25,8 @@ export async function POST(request) {
 
   try {
     const approvedKnowledge = await loadInternalKnowledge(40);
-    const allowedProjects = Array.isArray(body?.context?.projects) ? body.context.projects.map(project => project?.name).filter(Boolean) : [];
-    const binderKnowledge = await loadProjectBinderKnowledge(question, allowedProjects, 12);
+    const serverAllowedProjects = await getAllowedProjectNames(session);
+    const binderKnowledge = await loadProjectBinderKnowledge(question, serverAllowedProjects === null ? [] : [...serverAllowedProjects], 12);
     const clientContext = trimContext(body.context);
     const internalContext = trimContext(approvedKnowledge);
     const binderContext = trimContext(binderKnowledge.map(item => ({ project:item.ProjectName, category:item.Category, document:item.Name, version:item.Version, chunk:item.ChunkNo, content:item.Content })), 30000);
@@ -72,6 +73,6 @@ ${clientContext}`;
   } catch (error) {
     console.error('ATLAS chat error', error);
     try { await saveAtlasConversation({ userName: session.name, mode, question, answer: null, usedWeb: useWeb, sources: [], status:'failed' }); } catch {}
-    return Response.json({ error: 'ATLAS could not complete the request.', detail: error?.message || String(error) }, { status: 500 });
+    return Response.json({ error: 'ATLAS could not complete the request. See server log.' }, { status: 500 });
   }
 }

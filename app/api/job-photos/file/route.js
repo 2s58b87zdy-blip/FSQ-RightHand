@@ -1,16 +1,34 @@
 import { getBlobContainerClient } from '../../../../lib/blob';
-export const runtime='nodejs';
-export const dynamic='force-dynamic';
+import { readSession, canManage } from '../../../../lib/auth';
+import { downloadHeaders, safeSegment } from '../../../../lib/files';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 function container() { return getBlobContainerClient(); }
-export async function GET(request){
-  try{
-    const blob=new URL(request.url).searchParams.get('blob');
-    if(!blob)return new Response('Blob name required',{status:400});
-    const response=await container().getBlobClient(blob).download();
-    const headers=new Headers();
-    headers.set('Content-Type',response.contentType||'application/octet-stream');
-    headers.set('Cache-Control','private, max-age=300');
-    if(response.contentLength)headers.set('Content-Length',String(response.contentLength));
-    return new Response(response.readableStreamBody,{status:200,headers});
-  }catch(error){return new Response(error.message||'File not found',{status:404})}
+
+export async function GET(request) {
+  const session = await readSession();
+  if (!session) return Response.json({ error: 'Not authenticated' }, { status: 401 });
+  try {
+    const blob = new URL(request.url).searchParams.get('blob');
+    if (!blob?.startsWith('jobs/')) return Response.json({ error: 'Invalid blob name' }, { status: 400 });
+    const client = container().getBlobClient(blob);
+    const properties = await client.getProperties();
+    const owner = String(properties.metadata?.technician || '').toLowerCase();
+    if (!canManage(session) && owner !== safeSegment(session.name).toLowerCase()) return Response.json({ error: 'Forbidden' }, { status: 403 });
+    const download = await client.download();
+    return new Response(download.readableStreamBody, {
+      status: 200,
+      headers: downloadHeaders({
+        contentType: download.contentType,
+        contentLength: download.contentLength,
+        filename: properties.metadata?.originalname || blob.split('/').pop().replace(/^\d+-/, ''),
+        inline: true
+      })
+    });
+  } catch (error) {
+    console.error('Job photo download failed', error);
+    return Response.json({ error: 'File not found' }, { status: 404 });
+  }
 }
+

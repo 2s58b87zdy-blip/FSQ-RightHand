@@ -1,141 +1,81 @@
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
-import { ensureSchema, resetPool, sql } from '../../../../lib/db';
+import { ensureSchema, sql } from '../../../../lib/db';
 import { seedUsers } from '../../../../lib/users';
 import { createSession, sessionCookie } from '../../../../lib/auth';
-import { withRetry } from '../../../../lib/retry';
 
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
+const attempts = globalThis.__fsqLoginAttempts || new Map();
+globalThis.__fsqLoginAttempts = attempts;
+const WINDOW_MS = 15 * 60 * 1000;
+const MAX_ATTEMPTS = 5;
 
-function normalizeName(value) {
-  return String(value || '').trim().replace(/\s+/g, ' ');
+function clientKey(request, name) {
+  const forwarded = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim();
+  const ip = request.headers.get('x-azure-clientip') || forwarded || 'unknown';
+  return `${ip}:${String(name || '').trim().toLowerCase()}`;
 }
 
-function safeJsonArray(value) {
-  try {
-    const parsed = JSON.parse(value || '[]');
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
+function rateState(key) {
+  const now = Date.now();
+  const current = attempts.get(key);
+  if (!current || current.resetAt <= now) {
+    const fresh = { count: 0, resetAt: now + WINDOW_MS };
+    attempts.set(key, fresh);
+    return fresh;
   }
-}
-
-function recoveryPasswordFor(user) {
-  const name = normalizeName(user?.Name).toLowerCase();
-  if (name === 'flemming') return process.env.INITIAL_OWNER_PASSWORD || null;
-  if (name === 'jakob') return process.env.INITIAL_COOWNER_PASSWORD || process.env.INITIAL_OWNER_PASSWORD || null;
-  return null;
-}
-
-async function updatePasswordHash(pool, userId, password) {
-  const hash = await bcrypt.hash(password, 12);
-  await pool.request()
-    .input('id', sql.Int, userId)
-    .input('hash', sql.NVarChar(255), hash)
-    .query('UPDATE dbo.Users SET PasswordHash=@hash, UpdatedAt=SYSUTCDATETIME() WHERE Id=@id');
-}
-
-async function verifyPassword(pool, user, suppliedPassword) {
-  const password = String(suppliedPassword || '');
-  const stored = String(user?.PasswordHash || '');
-  if (!password || !stored) return false;
-
-  if (/^\$2[aby]\$\d{2}\$/.test(stored)) {
-    try {
-      if (await bcrypt.compare(password, stored)) return true;
-    } catch (error) {
-      console.error('[FSQ auth] Invalid password hash', { userId: user.Id, code: error?.code, message: error?.message });
-    }
-  } else if (password === stored) {
-    await updatePasswordHash(pool, user.Id, password);
-    console.warn('[FSQ auth] Legacy plain-text password migrated', { userId: user.Id, name: user.Name });
-    return true;
-  }
-
-  // Azure-controlled recovery for Flemming and Jakob. When the configured
-  // recovery password is used, the database hash is repaired automatically.
-  const recoveryPassword = recoveryPasswordFor(user);
-  if (recoveryPassword && password === recoveryPassword) {
-    await updatePasswordHash(pool, user.Id, password);
-    console.warn('[FSQ auth] Password hash repaired from Azure setting', { userId: user.Id, name: user.Name });
-    return true;
-  }
-
-  return false;
-}
-
-async function openLoginDatabase() {
-  return withRetry(async attempt => {
-    if (attempt > 1) resetPool();
-    await seedUsers();
-    return ensureSchema();
-  }, { attempts: 3, baseDelayMs: 300 });
+  return current;
 }
 
 export async function POST(request) {
-  const requestId = crypto.randomUUID();
+  let name = '';
   try {
-    const body = await request.json().catch(() => ({}));
-    const name = normalizeName(body?.name);
-    const password = String(body?.password || '');
-
-    if (!name || !password) {
-      return NextResponse.json({ error: 'Brugernavn og adgangskode skal udfyldes', requestId }, { status: 400 });
+    const body = await request.json();
+    name = String(body?.name || '').trim().slice(0, 100);
+    const password = String(body?.password || '').slice(0, 256);
+    const key = clientKey(request, name);
+    const state = rateState(key);
+    if (state.count >= MAX_ATTEMPTS) {
+      const retryAfter = Math.max(1, Math.ceil((state.resetAt - Date.now()) / 1000));
+      return NextResponse.json({ error: 'For mange loginforsøg. Prøv igen senere.' }, {
+        status: 429,
+        headers: { 'Retry-After': String(retryAfter), 'Cache-Control': 'no-store' }
+      });
     }
 
-    const pool = await openLoginDatabase();
+    await seedUsers();
+    const pool = await ensureSchema();
     const result = await pool.request()
       .input('name', sql.NVarChar(100), name)
-      .query(`
-        SELECT TOP 1 *
-        FROM dbo.Users
-        WHERE LOWER(LTRIM(RTRIM(Name))) = LOWER(LTRIM(RTRIM(@name)))
-          AND Active = 1
-      `);
+      .query('SELECT TOP 1 * FROM dbo.Users WHERE Name=@name AND Active=1');
     const user = result.recordset[0];
-
-    if (!user || !(await verifyPassword(pool, user, password))) {
-      console.warn('[FSQ auth] Login rejected', { requestId, suppliedName: name, userFound: Boolean(user) });
-      return NextResponse.json({ error: 'Forkert brugernavn eller adgangskode', requestId }, { status: 401 });
+    const valid = user ? await bcrypt.compare(password, user.PasswordHash) : false;
+    if (!valid) {
+      state.count += 1;
+      attempts.set(key, state);
+      return NextResponse.json({ error: 'Forkert brugernavn eller adgangskode' }, {
+        status: 401, headers: { 'Cache-Control': 'no-store' }
+      });
     }
 
-    const permissions = safeJsonArray(user.PermissionsJson);
-    const token = await createSession({
-      sub: String(user.Id),
-      name: user.Name,
-      role: user.Role,
-      permissions,
-      sessionVersion: 1
-    });
-
-    const response = NextResponse.json({
-      user: { id: user.Id, name: user.Name, role: user.Role, permissions },
-      requestId
-    });
+    attempts.delete(key);
+    const permissions = (() => { try { return JSON.parse(user.PermissionsJson || '[]'); } catch { return []; } })();
+    const folderAccess = (() => { try { return JSON.parse(user.FolderAccessJson || '{}'); } catch { return {}; } })();
+    const token = await createSession(user.Id);
+    const response = NextResponse.json({ user: {
+      id: user.Id, name: user.Name, role: user.Role, permissions, folderAccess
+    } }, { headers: { 'Cache-Control': 'no-store' } });
     response.cookies.set(sessionCookie(token));
-
-    // Login must still succeed if audit logging is temporarily unavailable.
-    try {
-      await pool.request()
-        .input('id', sql.Int, user.Id)
-        .input('user', sql.NVarChar(100), user.Name)
-        .input('requestId', sql.NVarChar(100), requestId)
-        .query(`
-          UPDATE dbo.Users SET LastLoginAt=SYSUTCDATETIME(), UpdatedAt=SYSUTCDATETIME() WHERE Id=@id;
-          INSERT INTO dbo.AuditLog(UserName,Action,EntityType,DetailsJson)
-          VALUES(@user,'LOGIN','AUTH',CONCAT('{"requestId":"',@requestId,'"}'));
-        `);
-    } catch (auditError) {
-      console.error('[FSQ auth] Non-critical login audit failure', { requestId, code: auditError?.code, message: auditError?.message });
-    }
-
+    await pool.request()
+      .input('id', sql.Int, user.Id)
+      .input('user', sql.NVarChar(100), user.Name)
+      .query("UPDATE dbo.Users SET LastLoginAt=SYSUTCDATETIME() WHERE Id=@id; INSERT INTO dbo.AuditLog(UserName,Action,EntityType) VALUES(@user,'LOGIN','AUTH');");
     return response;
   } catch (error) {
-    console.error('[FSQ /api/auth/login]', { requestId, name: error?.name, code: error?.code, message: error?.message, stack: error?.stack });
+    console.error('[FSQ /api/auth/login]', { message: error?.message, code: error?.code });
+    const configurationError = error?.code === 'AUTH_CONFIGURATION_ERROR';
     return NextResponse.json({
-      error: 'Login-tjenesten kan ikke nå databasen lige nu. Prøv igen om et øjeblik.',
-      requestId
-    }, { status: 503 });
+      error: configurationError ? 'Login er ikke konfigureret. Kontakt systemadministratoren.' : 'Login-tjenesten er midlertidigt utilgængelig.'
+    }, { status: configurationError ? 503 : 500, headers: { 'Cache-Control': 'no-store' } });
   }
 }
+

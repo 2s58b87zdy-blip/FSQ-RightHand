@@ -18,21 +18,7 @@ const DEFAULT_FOLDER_ACCESS = Object.fromEntries(MANAGED_FOLDERS.map(folder=>[fo
 
 const APP_VERSION = '1.0 RC2';
 
-const USER_REGISTRY_DEFAULTS = [
-  { id: 1, name: 'Flemming', role: 'Owner', password: 'fsq2027', active: true, permissions: ROLE_DEFINITIONS.Owner, folderAccess: Object.fromEntries(MANAGED_FOLDERS.map(folder=>[folder,'Full Control'])) },
-  { id: 2, name: 'Jakob', role: 'Co-Owner', password: 'fsq2027', active: true, permissions: ROLE_DEFINITIONS['Co-Owner'], folderAccess: Object.fromEntries(MANAGED_FOLDERS.map(folder=>[folder,'Full Control'])) },
-  { id: 3, name: 'Tommy', role: 'Technician', password: 'fsq2027', active: true, permissions: ROLE_DEFINITIONS.Technician },
-  { id: 4, name: 'Anders', role: 'Technician', password: 'fsq2027', active: true, permissions: ROLE_DEFINITIONS.Technician },
-  { id: 5, name: 'Mathias', role: 'Technician', password: 'fsq2027', active: true, permissions: ROLE_DEFINITIONS.Technician },
-  { id: 6, name: 'Magnus', role: 'Technician', password: 'fsq2027', active: true, permissions: ROLE_DEFINITIONS.Technician },
-  { id: 7, name: 'Kim', role: 'Technician', password: 'fsq2027', active: true, permissions: ROLE_DEFINITIONS.Technician },
-  { id: 8, name: 'Stefan', role: 'Engineer', password: 'fsq2027', active: true, permissions: ROLE_DEFINITIONS.Engineer },
-  { id: 9, name: 'QA', role: 'QA Inspector', password: 'fsq2027', active: true, permissions: ROLE_DEFINITIONS['QA Inspector'] },
-  { id: 10, name: 'Supervisor', role: 'Supervisor', password: 'fsq2027', active: true, permissions: ROLE_DEFINITIONS.Supervisor }
-];
-
-// Compatibility guard only. New code must use the user registry passed through props.
-const USERS = USER_REGISTRY_DEFAULTS;
+const USER_REGISTRY_DEFAULTS = [];
 
 function normalizeUserRegistry(value) {
   if (!Array.isArray(value)) return USER_REGISTRY_DEFAULTS;
@@ -40,11 +26,10 @@ function normalizeUserRegistry(value) {
     id: user.id ?? `user-${index + 1}`,
     name: String(user.name || '').trim(),
     role: user.role || 'Technician',
-    password: user.password || 'fsq2027',
+    password: user.password || '',
     active: user.active !== false,
-    permissions: ['Flemming','Jakob'].includes(String(user.name||'').trim()) ? [...ROLE_DEFINITIONS[String(user.name||'').trim()==='Flemming'?'Owner':'Co-Owner']] : (Array.isArray(user.permissions) ? user.permissions : [...(ROLE_DEFINITIONS[user.role] || [])]),
-    role: String(user.name||'').trim()==='Flemming' ? 'Owner' : (String(user.name||'').trim()==='Jakob' ? 'Co-Owner' : (user.role || 'Technician')),
-    folderAccess: ['Flemming','Jakob'].includes(String(user.name||'').trim()) ? Object.fromEntries(MANAGED_FOLDERS.map(folder=>[folder,'Full Control'])) : {...DEFAULT_FOLDER_ACCESS,...(user.folderAccess||{})}
+    permissions: Array.isArray(user.permissions) ? user.permissions : [...(ROLE_DEFINITIONS[user.role] || [])],
+    folderAccess: {...DEFAULT_FOLDER_ACCESS,...(user.folderAccess||{})}
   })).filter(user => user.name);
   return cleaned.length ? cleaned : USER_REGISTRY_DEFAULTS;
 }
@@ -187,30 +172,12 @@ function chooseEnglishFemaleVoice() {
 
 
 function canApproveTackAndComplete(session) {
-  if (!session) return false;
-
-  const name = String(session.name || session.user || session.username || '')
-    .trim()
-    .toLowerCase();
-
-  return [
-    'flemming',
-    'flemming bach',
-    'jakob',
-    'jakob kjær danielsen',
-    'jakob kjaer danielsen'
-  ].includes(name);
+  return Boolean(session && (session.permissions || []).some(permission => ['approve_tack','approve_final','complete_jobs'].includes(permission)));
 }
 
 
 function canManagePermissions(session) {
-  if (!session) return false;
-
-  const name = String(session.name || session.user || session.username || '')
-    .trim()
-    .toLowerCase();
-
-  return ['flemming', 'flemming bach', 'jakob', 'jakob kjær danielsen', 'jakob kjaer danielsen'].includes(name);
+  return Boolean(session && ['Owner','Co-Owner'].includes(session.role));
 }
 
 function requirePermissionManager(session) {
@@ -398,6 +365,7 @@ function AppShell({ session, onLogout, users, setUsers }) {
   useEffect(() => {
     let cancelled = false;
     async function applyGoLiveCleanup() {
+      if (!canManagePermissions(session)) return;
       try {
         const markerResponse = await fetch('/api/state?key=fsq-v1-rc2-go-live-applied', { cache: 'no-store' });
         const markerData = markerResponse.ok ? await markerResponse.json() : { value: null };
@@ -435,7 +403,7 @@ function AppShell({ session, onLogout, users, setUsers }) {
     }
     const timer = setTimeout(applyGoLiveCleanup, 800);
     return () => { cancelled = true; clearTimeout(timer); };
-  }, []);
+  }, [session]);
   const [chat, setChat] = useState([{ from: 'ai', text: `${getGreeting(session.name)} How can I assist you today?` }]);
   const [voice, setVoice] = useState(session.voice);
   const [voiceMessage,setVoiceMessage] = useState('');
@@ -2024,7 +1992,7 @@ function SystemHealth({session,users,projects,documents,knowledgeDocuments=[],kn
 }
 
 function Admin({session,users,setUsers,people,setPeople,machines,setMachines,materials,setMaterials}) {
-  const [newUser,setNewUser]=useState({name:'',role:'Technician',password:'fsq2027'});
+  const [newUser,setNewUser]=useState({name:'',role:'Technician',password:''});
   const [message,setMessage]=useState('');
   const [passwordDrafts,setPasswordDrafts]=useState({});
   const [visiblePasswords,setVisiblePasswords]=useState({});
@@ -2053,8 +2021,9 @@ function Admin({session,users,setUsers,people,setPeople,machines,setMachines,mat
     if(!name){setMessage('Enter a user name.');return;}
     if(users.some(user=>user.name.toLowerCase()===name.toLowerCase())){setMessage('This user already exists.');return;}
     const role=newUser.role;
-    setUsers([...users,{id:Date.now(),name,role,password:newUser.password||'fsq2027',active:true,permissions:[...(ROLE_DEFINITIONS[role]||[])]}]);
-    setNewUser({name:'',role:'Technician',password:'fsq2027'});
+    if(newUser.password.length<12){setMessage('Password must contain at least 12 characters.');return;}
+    setUsers([...users,{id:Date.now(),name,role,password:newUser.password,active:true,permissions:[...(ROLE_DEFINITIONS[role]||[])],folderAccess:{...DEFAULT_FOLDER_ACCESS}}]);
+    setNewUser({name:'',role:'Technician',password:''});
     setMessage('User created.');
   }
   function changeFolderAccess(id,folder,level){
@@ -2065,7 +2034,7 @@ function Admin({session,users,setUsers,people,setPeople,machines,setMachines,mat
   function setUserPassword(id){
     if(!owner){setMessage('Only Flemming or Jakob can assign passwords.');return;}
     const password=String(passwordDrafts[id]||'');
-    if(password.length<6){setMessage('Password must contain at least 6 characters.');return;}
+    if(password.length<12){setMessage('Password must contain at least 12 characters.');return;}
     const target=users.find(user=>user.id===id);
     setUsers(users.map(user=>user.id===id?{...user,password}:user));
     setPasswordDrafts(current=>({...current,[id]:''}));
@@ -2073,8 +2042,9 @@ function Admin({session,users,setUsers,people,setPeople,machines,setMachines,mat
   }
   function generatePassword(id){
     const chars='ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#';
+    const values=new Uint32Array(16);crypto.getRandomValues(values);
     let password='';
-    for(let i=0;i<12;i+=1) password+=chars[Math.floor(Math.random()*chars.length)];
+    for(let i=0;i<values.length;i+=1) password+=chars[values[i]%chars.length];
     setPasswordDrafts(current=>({...current,[id]:password}));
     setVisiblePasswords(current=>({...current,[id]:true}));
   }
@@ -2199,8 +2169,9 @@ function KnowledgeBase({session,users,folders,setFolders,machines,setMachines,do
         const form=new FormData();
         form.append('file',file);
         form.append('folder',targetFolder?.name||'Knowledge');
+        form.append('folderId',String(targetFolderId));
+        form.append('accessFolder',targetFolder?.accessFolder||'Workshop');
         form.append('machine',targetMachine?.name||'General');
-        form.append('uploadedBy',session.name);
         const response=await fetch('/api/knowledge',{method:'POST',body:form});
         const data=await response.json();
         if(!response.ok)throw new Error(data.error||'Upload failed');
@@ -2382,6 +2353,6 @@ export default function Page(){
   }
   async function logout(){try{await fetch('/api/auth/logout',{method:'POST'})}catch{}setSession(null);loadUsers(false)}
   if(loadingUsers)return <main className="loginShell"><section className="loginPanel"><h1>FSQ COMMAND</h1><p>Connecting to Azure SQL…</p></section></main>;
-  if(startupError && !session)return <main className="loginShell"><section className="loginPanel"><h1>FSQ COMMAND</h1><div className="error">Azure SQL connection failed: {startupError}</div><p className="muted">Open /api/diagnostics/database for technical details.</p><button className="primaryBtn" onClick={()=>{setLoadingUsers(true);loadUsers(false)}}>TRY AGAIN</button></section></main>;
+  if(startupError && !session)return <main className="loginShell"><section className="loginPanel"><h1>FSQ COMMAND</h1><div className="error">Startup failed: {startupError}</div><p className="muted">Kontrollér App Service-indstillingerne og serverloggen.</p><button className="primaryBtn" onClick={()=>{setLoadingUsers(true);loadUsers(false)}}>TRY AGAIN</button></section></main>;
   return session?<AppShell session={session} onLogout={logout} users={users} setUsers={setUsers}/>:<Login onLogin={setSession} users={users}/>;
 }

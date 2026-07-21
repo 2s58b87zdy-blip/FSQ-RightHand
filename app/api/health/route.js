@@ -1,49 +1,26 @@
 import { NextResponse } from 'next/server';
-import { databaseInfo, resetPool } from '../../../lib/db';
-import { withRetry } from '../../../lib/retry';
+import { readSession, canManage } from '../../../lib/auth';
+import { databaseInfo } from '../../../lib/db';
 
 export const dynamic = 'force-dynamic';
-export const runtime = 'nodejs';
 
 export async function GET() {
-  const startedAt = Date.now();
-  const checks = {
-    authSecret: Boolean(String(process.env.AUTH_SECRET || '').trim()),
-    sqlConfiguration: Boolean(process.env.SQL_SERVER || process.env.DATABASE_URL),
-    blobConfiguration: Boolean(process.env.AZURE_STORAGE_ACCOUNT || process.env.AZURE_STORAGE_CONNECTION_STRING)
-  };
-
+  const session = await readSession();
+  if (!canManage(session)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   try {
-    const info = await withRetry(async attempt => {
-      if (attempt > 1) resetPool();
-      return databaseInfo();
-    }, { attempts: 2, baseDelayMs: 250 });
-
+    const info = await databaseInfo();
     return NextResponse.json({
-      ok: true,
-      status: 'ready',
-      version: '1.0.0-rc2-hotfix1',
-      elapsedMs: Date.now() - startedAt,
-      authenticationMode: process.env.SQL_USER && process.env.SQL_PASSWORD ? 'SQL credentials' : 'Managed Identity',
-      checks,
-      database: {
-        connected: true,
-        name: info.DatabaseName,
-        activeUsers: info.ActiveUsers,
-        auditEntries: info.AuditEntries,
-        sharedStateKeys: info.SharedStateKeys
-      }
-    }, { headers: { 'Cache-Control': 'no-store' } });
+      database: 'Connected',
+      authentication: process.env.SQL_USER ? 'SQL credentials' : 'Managed Identity',
+      server: process.env.SQL_SERVER,
+      databaseName: info.DatabaseName,
+      activeUsers: info.ActiveUsers,
+      auditEntries: info.AuditEntries,
+      sharedStateKeys: info.SharedStateKeys,
+      version: '1.0-rc2-secure'
+    });
   } catch (error) {
-    console.error('[FSQ health]', { code: error?.code, message: error?.message });
-    return NextResponse.json({
-      ok: false,
-      status: 'degraded',
-      version: '1.0.0-rc2-hotfix1',
-      elapsedMs: Date.now() - startedAt,
-      checks,
-      database: { connected: false },
-      error: { code: error?.code || null, message: error?.message || 'Database unavailable' }
-    }, { status: 503, headers: { 'Cache-Control': 'no-store' } });
+    console.error('Health check failed', error);
+    return NextResponse.json({ database: 'Offline', error: 'Databaseforbindelsen fejlede. Se serverloggen.', version: '1.0-rc2-secure' }, { status: 503 });
   }
 }

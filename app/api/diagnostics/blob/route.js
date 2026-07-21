@@ -1,4 +1,4 @@
-import { readSession } from '../../../../lib/auth';
+import { readSession, canManage } from '../../../../lib/auth';
 import { getBlobConfiguration, getBlobContainerClient, getBlobDiagnosticSummary } from '../../../../lib/blob';
 
 export const runtime = 'nodejs';
@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
 
 export async function GET() {
   const session = await readSession();
-  if (!session) return Response.json({ error: 'Not authenticated' }, { status: 401 });
+  if (!canManage(session)) return Response.json({ error: 'Forbidden' }, { status: 403 });
 
   const diagnostics = getBlobDiagnosticSummary();
   try {
@@ -27,7 +27,7 @@ export async function GET() {
     console.error('Blob diagnostics failed', error);
     return Response.json({
       ok: false,
-      error: error?.message || String(error),
+      error: 'Blob Storage-forbindelsen fejlede. Se serverloggen.',
       diagnostics,
       guidance: diagnostics.connectionSettingPresent
         ? 'The setting exists, but its value is not usable. Copy the entire Connection string from the Storage account Access keys page, including DefaultEndpointsProtocol, AccountName, AccountKey and EndpointSuffix.'
