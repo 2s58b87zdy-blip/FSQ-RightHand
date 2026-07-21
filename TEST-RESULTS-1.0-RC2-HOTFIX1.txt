@@ -1,0 +1,26 @@
+FSQ Command v1.0 RC2 Hotfix 1 - Test Results
+Date: 2026-07-21
+
+PASS
+- ZIP source extracted successfully.
+- npm ci completed successfully.
+- Next.js production compilation completed successfully.
+- Authentication route compiled successfully.
+- JWT/session module compiled successfully.
+- Health endpoint compiled successfully.
+- Azure SQL retry helper compiled successfully.
+
+WARNINGS
+- Existing CSS autoprefixer warnings remain. They are unrelated to login.
+- Build reached "Collecting page data" but could not finish in the isolated test environment because the project expects access to the live Azure services/Managed Identity.
+- Next.js 14.2.31 reports an upstream security advisory and should be upgraded separately after Go Live testing; this hotfix intentionally avoids a framework upgrade to reduce deployment risk.
+
+AZURE SETTINGS REQUIRED
+- AUTH_SECRET: long stable random value
+- INITIAL_OWNER_PASSWORD: Flemming recovery password
+- INITIAL_COOWNER_PASSWORD: Jakob recovery password
+- SQL_SERVER=atlas-command-sql.database.windows.net
+- SQL_DATABASE=fsq-command
+
+IMPORTANT
+The recovery passwords only repair a broken/mismatched password hash when the configured password is entered. Existing working passwords remain unchanged.

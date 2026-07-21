@@ -1,0 +1,20 @@
+FSQ Command v1.0 RC2 Hotfix 1 - Login Stability
+
+Changes:
+- Restored case-insensitive login.
+- Added compatibility migration for legacy plain-text passwords.
+- Added Azure-controlled password recovery/repair for Flemming and Jakob.
+- Added retry and pool reset for temporary Azure SQL/Managed Identity failures.
+- Login no longer fails because audit logging fails after successful authentication.
+- Added stable JWT issuer/audience validation and improved cookie configuration.
+- Added public /api/health readiness check with sanitized configuration status.
+- Added request IDs and safer server-side diagnostics.
+
+Required Azure App Service settings:
+- AUTH_SECRET: a long, stable random value. Do not change it after deployment unless all sessions should be invalidated.
+- INITIAL_OWNER_PASSWORD: recovery password for Flemming.
+- INITIAL_COOWNER_PASSWORD: recovery password for Jakob.
+- SQL_SERVER=atlas-command-sql.database.windows.net
+- SQL_DATABASE=fsq-command
+
+The recovery settings do not overwrite working passwords. They only repair the database hash when that configured password is entered successfully.
