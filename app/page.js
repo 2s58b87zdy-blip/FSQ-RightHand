@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { assignmentLabel, isTaskAssignedTo, taskAssignees } from '../lib/taskAssignments';
+import { syncProjectCrewEntries } from '../lib/plannerSync';
 
 const ROLE_DEFINITIONS = {
   Owner: ['manage_users','manage_permissions','manage_folder_access','view_all_projects','approve_tack','approve_final','complete_jobs','view_finance','system_health'],
@@ -483,6 +484,7 @@ function AppShell({ session, onLogout, users, setUsers }) {
   const [droneInspections, setDroneInspections] = useStoredState('fsq-v40-drone-inspections', DEFAULT_DRONE_INSPECTIONS);
   const [documents, setDocuments] = useStoredState('fsq-v40-documents', DEFAULT_DOCUMENTS);
   const [deletedProjects, setDeletedProjects] = useStoredState('fsq-v40-deleted-projects', []);
+  const [plannerEntries, setPlannerEntries] = useStoredState('fsq-v71-planner', []);
   const [knowledgeFolders, setKnowledgeFolders] = useStoredState('fsq-v72-knowledge-folders', DEFAULT_KNOWLEDGE_FOLDERS);
   const [knowledgeMachines, setKnowledgeMachines] = useStoredState('fsq-v72-knowledge-machines', DEFAULT_KNOWLEDGE_MACHINES);
   const [knowledgeDocuments, setKnowledgeDocuments] = useStoredState('fsq-v72-knowledge-documents', DEFAULT_KNOWLEDGE_DOCUMENTS);
@@ -602,11 +604,11 @@ function AppShell({ session, onLogout, users, setUsers }) {
         {active === 'myjobs' && <MyJobs session={session} tasks={tasks} setTasks={setTasks} projects={projects} />}
         {active === 'approvals' && <JobApprovals session={session} tasks={tasks} setTasks={setTasks} projects={projects} />}
         {active === 'crew' && <CrewManagement people={people} setPeople={setPeople} projects={projects} />}
-        {active === 'projects' && <Projects projects={projects} setProjects={setProjects} deletedProjects={deletedProjects} setDeletedProjects={setDeletedProjects} setActive={setActive} setActiveProjectId={setActiveProjectId} tasks={tasks} setTasks={setTasks} people={people} users={users} />}
-        {active === 'projectHub' && <ProjectHub session={session} users={users} project={projects.find(p=>p.id===activeProjectId)} projects={projects} setProjects={setProjects} people={people} tasks={tasks} setTasks={setTasks} documents={documents} materials={materials} setMaterials={setMaterials} quotes={quotes} reports={reports} setActive={setActive} deletedProjects={deletedProjects} setDeletedProjects={setDeletedProjects} setActiveProjectId={setActiveProjectId} droneInspections={droneInspections} setDroneInspections={setDroneInspections} />}
+        {active === 'projects' && <Projects projects={projects} setProjects={setProjects} deletedProjects={deletedProjects} setDeletedProjects={setDeletedProjects} setActive={setActive} setActiveProjectId={setActiveProjectId} tasks={tasks} setTasks={setTasks} people={people} users={users} setPlannerEntries={setPlannerEntries} />}
+        {active === 'projectHub' && <ProjectHub session={session} users={users} project={projects.find(p=>p.id===activeProjectId)} projects={projects} setProjects={setProjects} people={people} tasks={tasks} setTasks={setTasks} documents={documents} materials={materials} setMaterials={setMaterials} quotes={quotes} reports={reports} setActive={setActive} deletedProjects={deletedProjects} setDeletedProjects={setDeletedProjects} setActiveProjectId={setActiveProjectId} droneInspections={droneInspections} setDroneInspections={setDroneInspections} setPlannerEntries={setPlannerEntries} />}
         {active === 'documents' && <ProjectBinder documents={documents} setDocuments={setDocuments} projects={projects} session={session} />}
         {active === 'inventory' && <InventoryCenter session={session} />}
-        {active === 'planner' && <OperationsPlanner people={people} projects={projects} />}
+        {active === 'planner' && <OperationsPlanner people={people} users={users} projects={projects} entries={plannerEntries} setEntries={setPlannerEntries} />}
         {active === 'knowledge' && <KnowledgeBase session={session} users={users} folders={knowledgeFolders} setFolders={setKnowledgeFolders} machines={knowledgeMachines} setMachines={setKnowledgeMachines} documents={knowledgeDocuments} setDocuments={setKnowledgeDocuments} solutions={knowledgeSolutions} setSolutions={setKnowledgeSolutions} />}
         {active === 'health' && <SystemHealth session={session} users={users} projects={projects} documents={documents} knowledgeDocuments={knowledgeDocuments} knowledgeMachines={knowledgeMachines} />}
         {active === 'admin' && <Admin session={session} users={users} setUsers={setUsers} people={people} setPeople={setPeople} machines={knowledgeMachines} setMachines={setKnowledgeMachines} materials={materials} setMaterials={setMaterials} />}
@@ -1237,7 +1239,7 @@ function CrewManagement({ people, setPeople, projects }) {
   </div>
 }
 
-function Projects({projects,setProjects,deletedProjects,setDeletedProjects,setActive,setActiveProjectId,tasks,setTasks,people,users}) {
+function Projects({projects,setProjects,deletedProjects,setDeletedProjects,setActive,setActiveProjectId,tasks,setTasks,people,users,setPlannerEntries}) {
   const today = new Date().toISOString().slice(0,10);
   const [showWizard,setShowWizard]=useState(false);
   const [wizardStep,setWizardStep]=useState(1);
@@ -1374,6 +1376,7 @@ function Projects({projects,setProjects,deletedProjects,setDeletedProjects,setAc
 
     setProjects([...normalizedProjects,project]);
     setTasks([...(tasks||[]),...createdTasks]);
+    setPlannerEntries(current=>syncProjectCrewEntries(current,project,form.crew));
     setShowWizard(false);
     resetWizard();
     setActiveProjectId(project.id);
@@ -1528,7 +1531,7 @@ function Projects({projects,setProjects,deletedProjects,setDeletedProjects,setAc
 }
 
 
-function ProjectHub({session,users,project,projects,setProjects,people,tasks,setTasks,documents,materials,setMaterials,quotes,reports,setActive,deletedProjects,setDeletedProjects,setActiveProjectId,droneInspections,setDroneInspections}) {
+function ProjectHub({session,users,project,projects,setProjects,people,tasks,setTasks,documents,materials,setMaterials,quotes,reports,setActive,deletedProjects,setDeletedProjects,setActiveProjectId,droneInspections,setDroneInspections,setPlannerEntries}) {
   const [tab,setTab]=useState('overview');
   const [newTask,setNewTask]=useState('');
   const [newAssignees,setNewAssignees]=useState([]);
@@ -1555,6 +1558,7 @@ function ProjectHub({session,users,project,projects,setProjects,people,tasks,set
   function toggleProjectCrew(name){
     const next=projectCrewNames.includes(name)?projectCrewNames.filter(item=>item!==name):[...projectCrewNames,name];
     update('crew',next);
+    setPlannerEntries(current=>syncProjectCrewEntries(current,{...project,crew:next},next));
     setNewAssignees(current=>current.filter(item=>next.includes(item)));
   }
   function toggleNewAssignee(name){
@@ -2088,12 +2092,11 @@ function monthStart(date){return new Date(date.getFullYear(),date.getMonth(),1);
 function monthEnd(date){return new Date(date.getFullYear(),date.getMonth()+1,0);}
 function dateKey(date){return date.toISOString().slice(0,10);}
 
-function OperationsPlanner({people,projects}){
+function OperationsPlanner({people,users,projects,entries,setEntries}){
   const [view,setView]=useState('planner');
   const [weeks,setWeeks]=useState(4);
   const [offset,setOffset]=useState(0);
   const [monthOffset,setMonthOffset]=useState(0);
-  const [entries,setEntries]=useStoredState('fsq-v71-planner',[]);
   const [selectedPerson,setSelectedPerson]=useState('All');
   const [filterType,setFilterType]=useState('All');
   const start=addDays(mondayOf(new Date()),offset*7);
@@ -2119,7 +2122,11 @@ function OperationsPlanner({people,projects}){
     setEntries([...entries.filter(e=>e.key!==key),next]);
   }
 
-  const visiblePeople=selectedPerson==='All'?people:people.filter(p=>p.name===selectedPerson);
+  const plannerPeople=[...people];
+  for(const user of normalizeUserRegistry(users).filter(user=>user.active!==false)){
+    if(!plannerPeople.some(person=>person.name===user.name))plannerPeople.push({id:`planner-${user.id}`,name:user.name,location:'Office'});
+  }
+  const visiblePeople=selectedPerson==='All'?plannerPeople:plannerPeople.filter(p=>p.name===selectedPerson);
   const visibleEntries=entries.filter(e=>filterType==='All'||e.type===filterType);
 
   const currentMonth=new Date(new Date().getFullYear(),new Date().getMonth()+monthOffset,1);
@@ -2137,7 +2144,7 @@ function OperationsPlanner({people,projects}){
     </div>
 
     <div className="plannerFilterBar">
-      <label>Medarbejder<select value={selectedPerson} onChange={e=>setSelectedPerson(e.target.value)}><option>All</option>{people.map(p=><option key={p.id}>{p.name}</option>)}</select></label>
+      <label>Medarbejder<select value={selectedPerson} onChange={e=>setSelectedPerson(e.target.value)}><option>All</option>{plannerPeople.map(p=><option key={p.id}>{p.name}</option>)}</select></label>
       <label>Type<select value={filterType} onChange={e=>setFilterType(e.target.value)}><option>All</option>{Object.keys(typeColors).map(t=><option key={t}>{t}</option>)}</select></label>
       <div className="plannerLegend compact"><span className="legendMarine">Marine</span><span className="legendWorkshop">Workshop</span><span className="legendTravel">Rejse</span><span className="legendHoliday">Ferie</span><span className="legendCourse">Kursus</span></div>
     </div>
@@ -2148,7 +2155,7 @@ function OperationsPlanner({people,projects}){
       <div className="plannerLegend"><span>Alle uger viser mandag-søndag</span><span>{projects.length} projekter tilgængelige</span><span>Klik på en celle for at planlægge</span></div>
     </>:<>
       <div className="calendarToolbar"><button onClick={()=>setMonthOffset(monthOffset-1)}>←</button><button onClick={()=>setMonthOffset(0)}>Denne måned</button><h2>{monthLabel}</h2><button onClick={()=>setMonthOffset(monthOffset+1)}>→</button></div>
-      <div className="monthCalendar"><div className="monthWeekdays">{dayNames.map(n=><div key={n}>{n}</div>)}</div><div className="monthGrid">{monthDays.map(d=>{const inMonth=d.getMonth()===currentMonth.getMonth();const dayEntries=visibleEntries.filter(e=>e.date===dateKey(d)&&(selectedPerson==='All'||e.person===selectedPerson));return <div className={`monthDay ${!inMonth?'outside':''} ${[0,6].includes(d.getDay())?'weekend':''}`} key={dateKey(d)}><header><b>{d.getDate()}</b><span>Uge {getIsoWeek(d)}</span></header><div className="monthEvents">{dayEntries.slice(0,6).map(e=><button key={e.key} className={`monthEvent ${typeColors[e.type]||'workshop'}`} onClick={()=>saveEntry(e.person,d,e)} title={`${e.person}: ${e.text}`}><strong>{e.person}</strong><span>{e.text}</span></button>)}{dayEntries.length>6&&<small>+{dayEntries.length-6} flere</small>}</div><button className="monthAdd" onClick={()=>{const person=selectedPerson==='All'?(window.prompt('Medarbejder',people[0]?.name||'')||''):selectedPerson;if(person)saveEntry(person,d,null)}}>+</button></div>})}</div></div>
+      <div className="monthCalendar"><div className="monthWeekdays">{dayNames.map(n=><div key={n}>{n}</div>)}</div><div className="monthGrid">{monthDays.map(d=>{const inMonth=d.getMonth()===currentMonth.getMonth();const dayEntries=visibleEntries.filter(e=>e.date===dateKey(d)&&(selectedPerson==='All'||e.person===selectedPerson));return <div className={`monthDay ${!inMonth?'outside':''} ${[0,6].includes(d.getDay())?'weekend':''}`} key={dateKey(d)}><header><b>{d.getDate()}</b><span>Uge {getIsoWeek(d)}</span></header><div className="monthEvents">{dayEntries.slice(0,6).map(e=><button key={e.key} className={`monthEvent ${typeColors[e.type]||'workshop'}`} onClick={()=>saveEntry(e.person,d,e)} title={`${e.person}: ${e.text}`}><strong>{e.person}</strong><span>{e.text}</span></button>)}{dayEntries.length>6&&<small>+{dayEntries.length-6} flere</small>}</div><button className="monthAdd" onClick={()=>{const person=selectedPerson==='All'?(window.prompt('Medarbejder',plannerPeople[0]?.name||'')||''):selectedPerson;if(person)saveEntry(person,d,null)}}>+</button></div>})}</div></div>
       <div className="plannerLegend"><span>Klik på + for at tilføje</span><span>Klik på en aktivitet for at redigere eller slette</span><span>Kalenderen bruger samme data som ressourceplanen</span></div>
     </>}
   </div>

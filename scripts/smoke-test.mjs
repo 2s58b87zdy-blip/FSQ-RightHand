@@ -3,6 +3,7 @@ import ExcelJS from 'exceljs';
 import { extractDocumentText } from '../lib/documentText.js';
 import { detectImageMime, downloadHeaders, isAllowedDocument, safeSegment } from '../lib/files.js';
 import { assignmentLabel, isTaskAssignedTo, taskAssignees } from '../lib/taskAssignments.js';
+import { projectPlannerEntries, syncProjectCrewEntries } from '../lib/plannerSync.js';
 import fs from 'node:fs';
 
 const workbook = new ExcelJS.Workbook();
@@ -34,6 +35,16 @@ assert.equal(isTaskAssignedTo(sharedTask, 'jakob'), true);
 assert.equal(isTaskAssignedTo(sharedTask, 'Flemming'), false);
 assert.equal(assignmentLabel(sharedTask), 'Tommy, Jakob');
 assert.equal(isTaskAssignedTo({ person: 'Tommy' }, 'Tommy'), true);
+
+const plannedProject = { id: 42, name: 'Wind Test', type: 'Vessel', startDate: '2026-07-20', deadline: '2026-07-22' };
+const automaticPlan = projectPlannerEntries(plannedProject, ['Tommy', 'Jakob']);
+assert.equal(automaticPlan.length, 6);
+assert.equal(automaticPlan[0].source, 'project');
+assert.equal(automaticPlan[0].type, 'Marine');
+const manualEntry = { key: 'Tommy|2026-07-21', person: 'Tommy', date: '2026-07-21', text: 'Kursus', type: 'Course' };
+const syncedPlan = syncProjectCrewEntries([manualEntry], plannedProject, ['Tommy']);
+assert.equal(syncedPlan.filter(entry => entry.source === 'project').length, 2);
+assert.equal(syncedPlan.find(entry => entry.key === manualEntry.key)?.text, 'Kursus');
 
 const manifest = JSON.parse(fs.readFileSync('public/manifest.webmanifest', 'utf8'));
 assert.equal(manifest.display, 'standalone');
