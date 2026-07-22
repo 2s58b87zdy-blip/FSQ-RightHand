@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { readSession, canManage } from '../../../lib/auth';
 import { ensureSchema, sql } from '../../../lib/db';
 import { canReadFolder, getAllowedProjectNames, getStateValue, hasPermission } from '../../../lib/access';
+import { isTaskAssignedTo } from '../../../lib/taskAssignments';
 
 const STATE_KEYS = new Set([
   'fsq-v1-rc2-go-live-applied',
@@ -26,7 +27,7 @@ async function filterForSession(key, value, session) {
   if (canManage(session) || hasPermission(session, 'view_all_projects')) return value;
   if (!Array.isArray(value)) return value;
   const userName = String(session.name || '').trim().toLowerCase();
-  if (key === 'fsq-v40-tasks') return value.filter(item => String(item?.person || '').trim().toLowerCase() === userName);
+  if (key === 'fsq-v40-tasks') return value.filter(item => isTaskAssignedTo(item, userName));
   if (key === 'fsq-v40-people') return value.filter(item => String(item?.name || '').trim().toLowerCase() === userName);
   if (key === 'fsq-v71-planner') return value.filter(item => String(item?.person || '').trim().toLowerCase() === userName);
   if (key === 'fsq-v72-knowledge-folders') return value.filter(folder => canReadFolder(session, folder?.accessFolder || 'Workshop'));
@@ -56,9 +57,9 @@ async function mergeScopedValue(key, incoming, session) {
   const userName = String(session.name || '').trim().toLowerCase();
 
   if (key === 'fsq-v40-tasks') {
-    const owned = existing.filter(item => String(item?.person || '').trim().toLowerCase() === userName);
+    const owned = existing.filter(item => isTaskAssignedTo(item, userName));
     const ownedIds = new Set(owned.map(item => String(item.id)));
-    if (incoming.some(item => !ownedIds.has(String(item?.id)) || String(item?.person || '').trim().toLowerCase() !== userName)) {
+    if (incoming.some(item => !ownedIds.has(String(item?.id)) || !isTaskAssignedTo(item, userName))) {
       throw Object.assign(new Error('Du kan kun opdatere opgaver, der er tildelt dig.'), { status: 403 });
     }
     const replacements = new Map(incoming.map(item => [String(item.id), item]));

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { assignmentLabel, isTaskAssignedTo, taskAssignees } from '../lib/taskAssignments';
 
 const ROLE_DEFINITIONS = {
   Owner: ['manage_users','manage_permissions','manage_folder_access','view_all_projects','approve_tack','approve_final','complete_jobs','view_finance','system_health'],
@@ -297,12 +298,62 @@ function useStoredState(key, initialValue) {
   return [value, setValue];
 }
 
+function useMobileInstall() {
+  const [installPrompt, setInstallPrompt] = useState(null);
+  const [installed, setInstalled] = useState(false);
+  const [help, setHelp] = useState('');
+
+  useEffect(() => {
+    const standalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+    setInstalled(standalone);
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(error => console.warn('Service worker kunne ikke registreres', error));
+    }
+    const capturePrompt = event => {
+      event.preventDefault();
+      setInstallPrompt(event);
+    };
+    const markInstalled = () => {
+      setInstalled(true);
+      setInstallPrompt(null);
+      setHelp('FSQ Command er installeret og ligger nu på din hjemmeskærm.');
+    };
+    window.addEventListener('beforeinstallprompt', capturePrompt);
+    window.addEventListener('appinstalled', markInstalled);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', capturePrompt);
+      window.removeEventListener('appinstalled', markInstalled);
+    };
+  }, []);
+
+  async function install() {
+    if (installed) {
+      setHelp('Appen er allerede installeret på denne enhed.');
+      return;
+    }
+    if (installPrompt) {
+      await installPrompt.prompt();
+      const choice = await installPrompt.userChoice;
+      if (choice.outcome === 'accepted') setHelp('Installationen er startet.');
+      setInstallPrompt(null);
+      return;
+    }
+    const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    setHelp(isIos
+      ? 'På iPhone: Tryk på Del-ikonet i Safari og vælg “Føj til hjemmeskærm”.'
+      : 'Åbn siden i Chrome eller Edge, åbn browsermenuen og vælg “Installer app”.');
+  }
+
+  return { install, installed, help };
+}
+
 function Login({ onLogin, users }) {
   const [user, setUser] = useState(users[0]?.name || 'Flemming');
   const [password, setPassword] = useState('');
   const [voice, setVoice] = useState(true);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const mobileInstall = useMobileInstall();
 
   useEffect(() => { if (!users.some(item => item.name === user) && users[0]) setUser(users[0].name); }, [users, user]);
 
@@ -336,6 +387,17 @@ function Login({ onLogin, users }) {
           {error && <div className="error">{error}</div>}
           <button className="primaryBtn" disabled={busy}>{busy ? 'CONNECTING…' : 'INITIALIZE SYSTEM'}</button>
         </form>
+        <aside className="mobileInstallCard" aria-label="Installér FSQ Command som mobilapp">
+          <div className="mobileInstallIcon" aria-hidden="true">FSQ</div>
+          <div className="mobileInstallCopy">
+            <strong>FSQ COMMAND PÅ MOBILEN</strong>
+            <span>Hurtig adgang fra hjemmeskærmen · samme sikre login</span>
+          </div>
+          <button type="button" className="installAppBtn" onClick={mobileInstall.install} disabled={mobileInstall.installed}>
+            {mobileInstall.installed ? '✓ INSTALLERET' : '↓ INSTALLÉR APP'}
+          </button>
+          {mobileInstall.help && <p className="installHelp" role="status">{mobileInstall.help}</p>}
+        </aside>
         <div className="systemLine"><span/> Azure SQL secured <span/> Workshop control active <span/> v8.0</div>
       </section>
     </main>
@@ -434,7 +496,7 @@ function AppShell({ session, onLogout, users, setUsers }) {
   });
 
   const isTechnician = session.role === 'Technician';
-  const visibleTasks = isTechnician ? tasks.filter(task => task.person === session.name) : tasks;
+  const visibleTasks = isTechnician ? tasks.filter(task => isTaskAssignedTo(task, session.name)) : tasks;
   const assignedProjectNames = new Set(visibleTasks.map(task => task.project));
   const visibleProjects = isTechnician ? projects.filter(project => assignedProjectNames.has(project.name)) : projects;
   const visibleNav = isTechnician
@@ -488,7 +550,7 @@ function MyJobs({ session, tasks, setTasks, projects }) {
   const [selectedId,setSelectedId]=useState(null);
   const [message,setMessage]=useState('');
   const [uploading,setUploading]=useState(false);
-  const assigned=tasks.filter(task=>task.person===session.name);
+  const assigned=tasks.filter(task=>isTaskAssignedTo(task,session.name));
   const selected=assigned.find(task=>task.id===selectedId) || assigned[0] || null;
   const project=projects.find(p=>p.name===selected?.project);
   const workshop=isWorkshopProject(project);
@@ -1221,11 +1283,13 @@ function Projects({projects,setProjects,deletedProjects,setDeletedProjects,setAc
     };
 
     const standardTaskNames=isWorkshop?workshopTasks:marineTasks;
-    const assignee=form.crew[0] || form.lead;
+    const assignees=form.crew.length ? form.crew : [form.lead];
+    const assignee=assignees[0];
     const createdTasks=standardTaskNames.map((title,index)=>({
       id:Date.now()+index+1,
       title,
       person:assignee,
+      assignees,
       priority:index===0?'High':'Normal',
       status:'Planned',
       jobStatus:'Pending',
@@ -1396,12 +1460,19 @@ function Projects({projects,setProjects,deletedProjects,setDeletedProjects,setAc
 function ProjectHub({session,users,project,projects,setProjects,people,tasks,setTasks,documents,materials,setMaterials,quotes,reports,setActive,deletedProjects,setDeletedProjects,setActiveProjectId,droneInspections,setDroneInspections}) {
   const [tab,setTab]=useState('overview');
   const [newTask,setNewTask]=useState('');
-  const [newAssignee,setNewAssignee]=useState('Tommy');
+  const [newAssignees,setNewAssignees]=useState([]);
   const [materialForm,setMaterialForm]=useState({name:'',quantity:1,unit:'pcs',supplier:'',price:'',notes:''});
 
   if(!project)return <div className="content"><button onClick={()=>setActive('projects')}>Back to projects</button></div>;
 
-  const crew=people.filter(p=>p.project===project.name||p.task?.includes(project.name)||p.detail?.includes(project.name));
+  const activeTechnicians=getActiveTechnicians(users);
+  const candidatePeople=activeTechnicians.map(user=>people.find(person=>person.name===user.name) || {
+    id:`user-${user.id}`,name:user.name,location:'Workshop',status:'Available',task:'No task assigned'
+  });
+  const projectCrewNames=Array.isArray(project.crew)?project.crew:[];
+  const crew=projectCrewNames.map(name=>candidatePeople.find(person=>person.name===name) || people.find(person=>person.name===name) || {
+    id:`crew-${name}`,name,location:'Workshop',status:'Available',task:'No task assigned'
+  });
   const projectTasks=tasks.filter(t=>t.project===project.name);
   const projectDocs=documents.filter(d=>d.project===project.name);
   const projectQuotes=quotes.filter(q=>q.title?.includes(project.name)||q.customer===project.customer);
@@ -1410,10 +1481,29 @@ function ProjectHub({session,users,project,projects,setProjects,people,tasks,set
   const projectMaterials=materials.filter(m=>m.project===project.name);
 
   function update(field,value){setProjects(projects.map(p=>p.id===project.id?{...p,[field]:value}:p))}
+  function toggleProjectCrew(name){
+    const next=projectCrewNames.includes(name)?projectCrewNames.filter(item=>item!==name):[...projectCrewNames,name];
+    update('crew',next);
+    setNewAssignees(current=>current.filter(item=>next.includes(item)));
+  }
+  function toggleNewAssignee(name){
+    setNewAssignees(current=>current.includes(name)?current.filter(item=>item!==name):[...current,name]);
+  }
   function addTask(){
     if(!newTask.trim())return;
-    setTasks([...tasks,{id:Date.now(),title:newTask.trim(),person:newAssignee,priority:'Normal',status:'Planned',jobStatus:'Pending',photos:[],due:'This week',project:project.name}]);
+    if(!newAssignees.length){alert('Vælg mindst én medarbejder til jobbet.');return;}
+    setTasks([...tasks,{id:Date.now(),title:newTask.trim(),person:newAssignees[0],assignees:newAssignees,priority:'Normal',status:'Planned',jobStatus:'Pending',photos:[],due:'This week',project:project.name}]);
     setNewTask('');
+    setNewAssignees([]);
+  }
+  function toggleTaskAssignee(taskId,name){
+    setTasks(tasks.map(task=>{
+      if(task.id!==taskId)return task;
+      const current=taskAssignees(task);
+      if(current.length===1 && current.includes(name))return task;
+      const next=current.includes(name)?current.filter(item=>item!==name):[...current,name];
+      return {...task,person:next[0]||'',assignees:next};
+    }));
   }
   function moveTask(id){
     const order=['Planned','In progress','Waiting','Completed'];
@@ -1495,10 +1585,19 @@ function ProjectHub({session,users,project,projects,setProjects,people,tasks,set
       <div className="panel"><h3>Next actions</h3>{projectTasks.filter(t=>t.status!=='Completed').slice(0,5).map(t=><div className="taskMini" key={t.id}><span className={t.priority==='High'?'dot danger':'dot'}/><div><b>{t.title}</b><small>{t.person} · {t.status}</small></div></div>)}</div>
     </section>}
 
-    {tab==='crew'&&<section className="panel"><div className="peopleCards">{crew.length?crew.map(p=><article key={p.id}><div className="personHead"><div className="avatar">{p.name[0]}</div><div><h3>{p.name}</h3><small>{p.location} · {p.status}</small></div></div><p>{p.task}</p></article>):<div className="empty">Assign crew in People.</div>}</div></section>}
+    {tab==='crew'&&<section className="panel projectCrewPanel">
+      <div className="panelHead"><div><h3>Vælg crew</h3><small>Ét klik tilføjer eller fjerner en medarbejder fra projektet</small></div><span>{crew.length} valgt</span></div>
+      <div className="quickCrewPicker">{candidatePeople.map(person=><button key={person.id} className={projectCrewNames.includes(person.name)?'active':''} onClick={()=>toggleProjectCrew(person.name)}><span className="avatar mini">{person.name[0]}</span><b>{person.name}</b><em>{projectCrewNames.includes(person.name)?'✓ Valgt':'＋ Tilføj'}</em></button>)}</div>
+      {!candidatePeople.length&&<div className="empty">Opret og aktivér først medarbejdere med rollen Technician under Settings.</div>}
+      <div className="peopleCards">{crew.map(p=><article key={p.id}><div className="personHead"><div className="avatar">{p.name[0]}</div><div><h3>{p.name}</h3><small>{p.location} · {p.status}</small></div></div><p>{p.task}</p></article>)}</div>
+    </section>}
     {tab==='documents'&&<section className="panel"><div className="panelHead"><h3>Project documents</h3><button onClick={()=>setActive('documents')}>Open Document Center</button></div>{projectDocs.length?projectDocs.map(d=><div className="documentRow hubDoc" key={d.id}><div><b>{d.name}</b><small>{d.category} · V{d.version}</small></div><span>{d.date}</span></div>):<div className="empty">No documents uploaded.</div>}</section>}
     {tab==='drone'&&<DroneInspectionPanel project={project} inspections={projectDrone} allInspections={droneInspections||[]} setInspections={setDroneInspections}/>}
-    {tab==='tasks'&&<section className="panel"><div className="hubTaskAdd taskAssignBar"><input placeholder="New project task" value={newTask} onChange={e=>setNewTask(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addTask()}/><select value={newAssignee} onChange={e=>setNewAssignee(e.target.value)}>{people.filter(person=>getActiveTechnicians(users).some(user=>user.name===person.name)).map(p=><option key={p.id}>{p.name}</option>)}</select><button onClick={addTask}>Assign task</button></div><div className="projectJobTable">{projectTasks.map(t=><div key={t.id}><div><b>{t.title}</b><small>{t.person} · {isWorkshopProject(project)?`${(t.photos||[]).length}/4 QC photos`:`${(t.photos||[]).length} photos`}</small></div><span className={`jobState ${(t.jobStatus||'Pending').toLowerCase().replaceAll(' ','-')}`}>{t.jobStatus||'Pending'}</span></div>)}</div></section>}
+    {tab==='tasks'&&<section className="panel projectTaskPanel">
+      <div className="hubTaskAdd taskAssignBar multiAssignBar"><input placeholder="Nyt job" value={newTask} onChange={e=>setNewTask(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addTask()}/><div className="taskCrewPicker">{crew.map(person=><button key={person.id} className={newAssignees.includes(person.name)?'active':''} onClick={()=>toggleNewAssignee(person.name)}>{newAssignees.includes(person.name)?'✓':'＋'} {person.name}</button>)}</div><button onClick={addTask}>Opret job</button></div>
+      {!crew.length&&<div className="crewHint">Vælg først medarbejdere under fanen Crew.</div>}
+      <div className="projectJobTable multiCrewJobs">{projectTasks.map(t=><div key={t.id}><div><b>{t.title}</b><small>{assignmentLabel(t)} · {isWorkshopProject(project)?`${(t.photos||[]).length}/4 QC photos`:`${(t.photos||[]).length} photos`}</small><div className="taskCrewPicker compact">{crew.map(person=><button key={person.id} className={taskAssignees(t).includes(person.name)?'active':''} onClick={()=>toggleTaskAssignee(t.id,person.name)}>{taskAssignees(t).includes(person.name)?'✓':'＋'} {person.name}</button>)}</div></div><span className={`jobState ${(t.jobStatus||'Pending').toLowerCase().replaceAll(' ','-')}`}>{t.jobStatus||'Pending'}</span></div>)}</div>
+    </section>}
     {tab==='materials'&&<section className="materialsHub">
       <div className="panel addMaterialPanel">
         <div className="panelHead"><h3>Add Material</h3><span>{project.name}</span></div>

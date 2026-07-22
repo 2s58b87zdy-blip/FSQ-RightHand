@@ -2,6 +2,15 @@
 
 Production-hardened Next.js application for FSQ operations, Azure SQL, Azure Blob Storage and ATLAS.
 
+## Hurtig Crew- og jobtildeling
+
+- Åbn et projekt og vælg fanen **Crew**. Ét klik på en medarbejder tilføjer eller fjerner personen fra projektet.
+- Åbn fanen **Tasks**. Skriv jobbet, vælg én eller flere medarbejdere som knapper, og tryk **Opret job**.
+- På eksisterende jobs kan medarbejdere tilføjes eller fjernes direkte på joblinjen.
+- En Technician ser jobbet under **My Jobs**, når personens navn er blandt de valgte medarbejdere.
+
+Projektets Crew og jobtildelinger gemmes i den fælles Azure SQL-tilstand.
+
 ## Required Azure App Service settings
 
 Create these environment variables before the first start:
@@ -43,4 +52,3 @@ After deployment:
 2. Assign unique passwords and permissions to every required user.
 3. Verify `/api/diagnostics/database` and `/api/diagnostics/blob` while signed in as Owner or Co-Owner.
 4. Test a small PDF in Project Binder and a permitted image in My Jobs.
-
