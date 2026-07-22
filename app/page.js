@@ -224,43 +224,108 @@ function speak(text, enabled) {
   window.speechSynthesis.speak(utterance);
 }
 
+function speechErrorMessage(error) {
+  if (error === 'not-supported') return 'Talegenkendelse understøttes ikke. Brug Microsoft Edge eller Chrome.';
+  if (error === 'not-allowed' || error === 'service-not-allowed') return 'Mikrofonen er blokeret. Tillad mikrofon for denne side i browserens adresselinje.';
+  if (error === 'audio-capture') return 'Der blev ikke fundet en mikrofon. Kontrollér telefonens eller computerens mikrofon.';
+  if (error === 'no-speech' || error === 'timeout') return 'Ingen tale blev registreret. Tryk på mikrofonen og prøv igen.';
+  if (error === 'network') return 'Browserens taletjeneste kunne ikke kontaktes. Kontrollér internetforbindelsen.';
+  return 'Mikrofonen kunne ikke startes. Genindlæs siden og kontrollér mikrofontilladelsen.';
+}
+
 function useSpeechRecognition({ onResult, onError }) {
   const recognitionRef = useRef(null);
+  const resultHandlerRef = useRef(onResult);
+  const errorHandlerRef = useRef(onError);
+  const timeoutRef = useRef(null);
+  const startingRef = useRef(false);
+  const resultDeliveredRef = useRef(false);
   const [listening, setListening] = useState(false);
+  const [supported, setSupported] = useState(false);
+
+  useEffect(() => {
+    resultHandlerRef.current = onResult;
+    errorHandlerRef.current = onError;
+  }, [onResult, onError]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!Recognition) return;
+    setSupported(true);
+    let mounted = true;
     const recognition = new Recognition();
-    recognition.lang = 'en-GB';
+    recognition.lang = 'da-DK';
     recognition.continuous = false;
     recognition.interimResults = false;
-    recognition.onstart = () => setListening(true);
-    recognition.onend = () => setListening(false);
+    recognition.maxAlternatives = 1;
+    const finish = () => {
+      startingRef.current = false;
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+      if (mounted) setListening(false);
+    };
+    recognition.onstart = () => {
+      startingRef.current = false;
+      resultDeliveredRef.current = false;
+      if (mounted) setListening(true);
+      timeoutRef.current = setTimeout(() => {
+        try { recognition.stop(); } catch {}
+        errorHandlerRef.current?.('timeout');
+      }, 15000);
+    };
+    recognition.onend = finish;
     recognition.onerror = event => {
-      setListening(false);
-      onError?.(event.error || 'microphone-error');
+      finish();
+      if (event.error !== 'aborted') errorHandlerRef.current?.(event.error || 'microphone-error');
     };
     recognition.onresult = event => {
-      const transcript = event.results?.[0]?.[0]?.transcript || '';
-      if (transcript) onResult?.(transcript);
+      if (resultDeliveredRef.current) return;
+      const result = event.results?.[event.resultIndex ?? 0] || event.results?.[0];
+      const transcript = result?.[0]?.transcript?.trim() || '';
+      if (transcript) {
+        resultDeliveredRef.current = true;
+        resultHandlerRef.current?.(transcript);
+      }
     };
     recognitionRef.current = recognition;
-    return () => recognition.abort();
-  }, [onResult, onError]);
+    return () => {
+      mounted = false;
+      finish();
+      recognition.onstart = null;
+      recognition.onend = null;
+      recognition.onerror = null;
+      recognition.onresult = null;
+      try { recognition.abort(); } catch {}
+      recognitionRef.current = null;
+    };
+  }, []);
 
   function toggleListening() {
     const recognition = recognitionRef.current;
     if (!recognition) {
-      onError?.('not-supported');
+      errorHandlerRef.current?.('not-supported');
       return;
     }
-    if (listening) recognition.stop();
-    else recognition.start();
+    if (listening || startingRef.current) {
+      try { recognition.stop(); } catch {}
+      startingRef.current = false;
+      return;
+    }
+    try {
+      window.speechSynthesis?.cancel();
+      startingRef.current = true;
+      resultDeliveredRef.current = false;
+      setListening(true);
+      recognition.start();
+    } catch {
+      startingRef.current = false;
+      setListening(false);
+      errorHandlerRef.current?.('start-failed');
+    }
   }
 
-  return { listening, toggleListening, supported: typeof window !== 'undefined' && !!(window.SpeechRecognition || window.webkitSpeechRecognition) };
+  return { listening, toggleListening, supported };
 }
 
 function useStoredState(key, initialValue) {
@@ -406,6 +471,7 @@ function Login({ onLogin, users }) {
 
 function AppShell({ session, onLogout, users, setUsers }) {
   const [active, setActive] = useState(session.role === 'Technician' ? 'myjobs' : 'dashboard');
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [activeProjectId, setActiveProjectId] = useState(null);
   const [projects, setProjects] = useStoredState('fsq-v40-projects', DEFAULT_PROJECTS);
   const [tasks, setTasks] = useStoredState('fsq-v40-tasks', DEFAULT_TASKS);
@@ -492,7 +558,7 @@ function AppShell({ session, onLogout, users, setUsers }) {
 
   const globalSpeech = useSpeechRecognition({
     onResult: handleGlobalVoiceCommand,
-    onError: error => setVoiceMessage(error==='not-supported'?'Talegenkendelse understøttes ikke i denne browser. Brug Microsoft Edge eller Chrome.':'Mikrofonen kunne ikke startes. Kontrollér browserens mikrofontilladelse.')
+    onError: error => setVoiceMessage(speechErrorMessage(error))
   });
 
   const isTechnician = session.role === 'Technician';
@@ -502,6 +568,8 @@ function AppShell({ session, onLogout, users, setUsers }) {
   const visibleNav = isTechnician
     ? NAV.filter(item => ['myjobs','inventory','knowledge','ai'].includes(item[0]))
     : NAV;
+
+  useEffect(() => { setMobileNavOpen(false); }, [active]);
 
   const stats = useMemo(() => ({
     projects: visibleProjects.filter(p => p.status !== 'Completed').length,
@@ -514,7 +582,9 @@ function AppShell({ session, onLogout, users, setUsers }) {
 
   return (
     <div className="appShell">
-      <aside className="sidebar">
+      {mobileNavOpen&&<button className="mobileNavBackdrop" aria-label="Luk menu" onClick={()=>setMobileNavOpen(false)} />}
+      <aside className={`sidebar ${mobileNavOpen?'mobileOpen':''}`}>
+        <div className="mobileSidebarHead"><b>FSQ COMMAND</b><button aria-label="Luk menu" onClick={()=>setMobileNavOpen(false)}>×</button></div>
         <div className="logo atlasBrand"><div className="sidebarLogoGlow"><img src="/fsq-logo.jpg" alt="FSQ" /></div><b>FSQ COMMAND</b><span>POWERED BY ATLAS</span><small>v{APP_VERSION}</small></div>
         <div className="online"><i/> ALL SYSTEMS OPERATIONAL</div>
         <nav>{visibleNav.map(([id, label, icon]) => <button key={id} onClick={() => setActive(id)} className={active === id ? 'active' : ''}><span>{icon}</span>{label}</button>)}</nav>
@@ -522,8 +592,9 @@ function AppShell({ session, onLogout, users, setUsers }) {
       </aside>
       <main className="workspace">
         <header className="topbar">
+          <button className="mobileMenuBtn" aria-label="Åbn menu" aria-expanded={mobileNavOpen} onClick={()=>setMobileNavOpen(true)}>☰</button>
           <div><p className="eyebrow">FSQ OPERATIONS CONTROL</p><h2>{visibleNav.find(n => n[0] === active)?.[1] || 'FSQ Command'}</h2></div>
-          <div className="topActions"><button className={`voiceCommand ${globalSpeech.listening?'listening':''}`} onClick={globalSpeech.toggleListening} title="Talk to ATLAS">{globalSpeech.listening?'● Listening...':'🎙 Talk to ATLAS'}</button><label><input type="checkbox" checked={voice} onChange={e => setVoice(e.target.checked)} /> Voice</label><span className="clock">{new Date().toLocaleDateString('da-DK')}</span></div>
+          <div className="topActions"><button className={`voiceCommand ${globalSpeech.listening?'listening':''}`} onClick={globalSpeech.toggleListening} disabled={!globalSpeech.supported} title="Talk to ATLAS">{globalSpeech.listening?'● Listening...':'🎙 Talk to ATLAS'}</button><label><input type="checkbox" checked={voice} onChange={e => setVoice(e.target.checked)} /> Voice</label><span className="clock">{new Date().toLocaleDateString('da-DK')}</span></div>
         </header>
         {voiceMessage&&<div className="voiceStatus">{voiceMessage}</div>}
 
@@ -2395,11 +2466,11 @@ function AI({session,chat,setChat,voice,stats,context}) {
 
   const speech=useSpeechRecognition({
     onResult: transcript=>{setText(transcript);setSpeechError('');send(transcript)},
-    onError: error=>setSpeechError(error==='not-supported'?'Talegenkendelse understøttes ikke. Brug Microsoft Edge eller Chrome.':'Kontrollér, at browseren har adgang til mikrofonen.')
+    onError: error=>setSpeechError(speechErrorMessage(error))
   });
 
   return <div className="content aiLayout atlasBrainPage">
-    <div className="sectionIntro"><div><p className="eyebrow">FSQ INTELLIGENCE LAYER</p><h1>ATLAS BRAIN</h1><p>FSQ Knowledge først · officiel online research som supplement · alle svar logges.</p></div><button className={`atlasMic ${speech.listening?'listening':''}`} onClick={speech.toggleListening}>{speech.listening?'● ATLAS lytter...':'🎙 Tal til ATLAS'}</button></div>
+    <div className="sectionIntro"><div><p className="eyebrow">FSQ INTELLIGENCE LAYER</p><h1>ATLAS BRAIN</h1><p>FSQ Knowledge først · officiel online research som supplement · alle svar logges.</p></div><button className={`atlasMic ${speech.listening?'listening':''}`} onClick={speech.toggleListening} disabled={!speech.supported}>{speech.listening?'● ATLAS lytter...':'🎙 Tal til ATLAS'}</button></div>
     <div className="atlasBrainToolbar">
       <div className="atlasModes">
         <button className={mode==='assistant'?'active':''} onClick={()=>setMode('assistant')}>Assistant</button>
@@ -2415,7 +2486,7 @@ function AI({session,chat,setChat,voice,stats,context}) {
       <div className="chatPanel atlasChat">
         {chat.map((m,i)=><div key={i} className={`bubble ${m.from}`}>{m.text}</div>)}
         {busy&&<div className="bubble ai atlasThinking">ATLAS undersøger FSQ-viden{useWeb||mode==='research'?' og online kilder':''}…</div>}
-        <div className="chatInput"><textarea rows="2" value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}}} placeholder={mode==='developer'?'Beskriv den funktion eller fejl, ATLAS skal analysere…':'Spørg ATLAS om projekter, teknik, dokumenter eller online research…'}/><button className="micMini" onClick={speech.toggleListening}>{speech.listening?'●':'🎙'}</button><button disabled={busy} onClick={()=>send()}>{busy?'Arbejder…':'Send'}</button></div>
+        <div className="chatInput"><textarea rows="2" value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}}} placeholder={mode==='developer'?'Beskriv den funktion eller fejl, ATLAS skal analysere…':'Spørg ATLAS om projekter, teknik, dokumenter eller online research…'}/><button className="micMini" onClick={speech.toggleListening} disabled={!speech.supported}>{speech.listening?'●':'🎙'}</button><button disabled={busy} onClick={()=>send()}>{busy?'Arbejder…':'Send'}</button></div>
       </div>
       <aside className="atlasSourcePanel panel"><div className="panelHead"><h3>Kilder</h3><span>{sources.length}</span></div>{sources.length?sources.map((source,i)=><article key={i}><span>{source.type==='Online'?'🌐':'▤'}</span><div><b>{source.type}</b>{source.url?<a href={source.url} target="_blank" rel="noreferrer">{source.title}</a>:<small>{source.title}</small>}</div></article>):<div className="empty">Kilder vises efter næste svar.</div>}<hr/><small>Prioritet: FSQ approved knowledge → producent/klasse → øvrige pålidelige online kilder.</small></aside>
     </div>
