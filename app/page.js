@@ -573,6 +573,76 @@ function AppShell({ session, onLogout, users, setUsers }) {
 
   useEffect(() => { setMobileNavOpen(false); }, [active]);
 
+  function executeAtlasActions(actions=[]) {
+    const results=[];
+    const activeNames=normalizeUserRegistry(users).filter(user=>user.active!==false).map(user=>user.name);
+    const validName=name=>activeNames.find(item=>item.toLowerCase()===String(name||'').trim().toLowerCase());
+    let nextProjects=projects;
+    let nextTasks=tasks;
+    let nextPlannerEntries=plannerEntries;
+    let projectsChanged=false;
+    let tasksChanged=false;
+    let plannerChanged=false;
+    const canEditProjects=canManagePermissions(session)||session.role==='Project Manager';
+    const canCreateTasks=canEditProjects||session.role==='Supervisor';
+
+    function findProject(name){
+      const requested=String(name||'').trim().toLowerCase();
+      if(!requested)return nextProjects.find(item=>item.id===activeProjectId)||null;
+      const exact=nextProjects.find(item=>String(item.name||'').toLowerCase()===requested);
+      if(exact)return exact;
+      const matches=nextProjects.filter(item=>String(item.name||'').toLowerCase().includes(requested));
+      return matches.length===1?matches[0]:null;
+    }
+
+    for(const [index,action] of (Array.isArray(actions)?actions:[]).slice(0,4).entries()){
+      if(action.type==='navigate'){
+        const target=String(action.target||'');
+        if(visibleNav.some(item=>item[0]===target)){setActive(target);results.push(`Åbnede ${visibleNav.find(item=>item[0]===target)?.[1]||target}.`)}
+        else results.push('Kunne ikke åbne det ønskede modul med din adgang.');
+        continue;
+      }
+      const project=findProject(action.project);
+      if(!project){results.push(`Projektet “${action.project||'ukendt'}” blev ikke fundet entydigt.`);continue;}
+      const people=(action.people||[]).map(validName).filter(Boolean);
+
+      if(action.type==='assign_project_crew'){
+        if(!canEditProjects){results.push('Din rolle må ikke ændre projektets crew.');continue;}
+        if(!people.length){results.push('Ingen aktive medarbejdere kunne matches til crew.');continue;}
+        const crew=[...new Set([...(Array.isArray(project.crew)?project.crew:[]),...people])];
+        const updated={...project,crew};
+        nextProjects=nextProjects.map(item=>item.id===project.id?updated:item);
+        nextPlannerEntries=syncProjectCrewEntries(nextPlannerEntries,updated,crew);
+        projectsChanged=true;plannerChanged=true;
+        results.push(`${people.join(', ')} blev tilføjet til ${project.name} og Operations Planner.`);
+        continue;
+      }
+      if(action.type==='create_task'){
+        if(!canCreateTasks){results.push('Din rolle må ikke oprette jobs.');continue;}
+        const assignees=people.length?people:(Array.isArray(project.crew)?project.crew:[]);
+        if(!String(action.title||'').trim()||!assignees.length){results.push(`Jobbet på ${project.name} mangler titel eller medarbejder.`);continue;}
+        nextTasks=[...nextTasks,{id:Date.now()+index,title:String(action.title).trim(),person:assignees[0],assignees,priority:'Normal',status:'Planned',jobStatus:'Pending',photos:[],due:project.deadline||'This week',project:project.name}];
+        tasksChanged=true;
+        results.push(`Jobbet “${action.title}” blev oprettet på ${project.name} til ${assignees.join(', ')}.`);
+        continue;
+      }
+      if(action.type==='update_project'){
+        if(!canEditProjects){results.push('Din rolle må ikke ændre projektstatus.');continue;}
+        const allowedStatuses=['Planning','Fabrication','Inspection','Mobilisation','Completed'];
+        const status=allowedStatuses.find(item=>item.toLowerCase()===String(action.status||'').toLowerCase());
+        const progress=action.progress===null||action.progress===undefined?null:Math.max(0,Math.min(100,Number(action.progress)));
+        if(!status&&progress===null){results.push(`Ingen gyldig ændring blev fundet til ${project.name}.`);continue;}
+        nextProjects=nextProjects.map(item=>item.id===project.id?{...item,...(status?{status}:{}),...(Number.isFinite(progress)?{progress}:{})}:item);
+        projectsChanged=true;
+        results.push(`${project.name} blev opdateret${status?` til ${status}`:''}${Number.isFinite(progress)?` · ${progress}%`:''}.`);
+      }
+    }
+    if(projectsChanged)setProjects(nextProjects);
+    if(tasksChanged)setTasks(nextTasks);
+    if(plannerChanged)setPlannerEntries(nextPlannerEntries);
+    return results;
+  }
+
   const stats = useMemo(() => ({
     projects: visibleProjects.filter(p => p.status !== 'Completed').length,
     openTasks: visibleTasks.filter(t => t.status !== 'Completed').length,
@@ -612,7 +682,7 @@ function AppShell({ session, onLogout, users, setUsers }) {
         {active === 'knowledge' && <KnowledgeBase session={session} users={users} folders={knowledgeFolders} setFolders={setKnowledgeFolders} machines={knowledgeMachines} setMachines={setKnowledgeMachines} documents={knowledgeDocuments} setDocuments={setKnowledgeDocuments} solutions={knowledgeSolutions} setSolutions={setKnowledgeSolutions} />}
         {active === 'health' && <SystemHealth session={session} users={users} projects={projects} documents={documents} knowledgeDocuments={knowledgeDocuments} knowledgeMachines={knowledgeMachines} />}
         {active === 'admin' && <Admin session={session} users={users} setUsers={setUsers} people={people} setPeople={setPeople} machines={knowledgeMachines} setMachines={setKnowledgeMachines} materials={materials} setMaterials={setMaterials} />}
-        {active === 'ai' && <AI session={session} chat={chat} setChat={setChat} voice={voice} stats={stats} context={{projects:visibleProjects,tasks:visibleTasks,people,machines:knowledgeMachines,materials,documents,knowledgeDocuments,knowledgeMachines,knowledgeSolutions}} />}
+        {active === 'ai' && <AI session={session} chat={chat} setChat={setChat} voice={voice} stats={stats} context={{projects:visibleProjects,tasks:visibleTasks,people,users,machines:knowledgeMachines,materials,documents,knowledgeDocuments,knowledgeMachines,knowledgeSolutions}} onActions={executeAtlasActions} />}
         {!['dashboard','myjobs','approvals','crew','projects','projectHub','documents','inventory','planner','health','admin','ai'].includes(active) && <ModulePlaceholder title={NAV.find(n=>n[0]===active)?.[1]} />}
       </main>
     </div>
@@ -2442,7 +2512,7 @@ function KnowledgeBase({session,users,folders,setFolders,machines,setMachines,do
   </div>
 }
 
-function AI({session,chat,setChat,voice,stats,context}) {
+function AI({session,chat,setChat,voice,stats,context,onActions}) {
   const [text,setText]=useState('');
   const [speechError,setSpeechError]=useState('');
   const [mode,setMode]=useState('assistant');
@@ -2451,9 +2521,11 @@ function AI({session,chat,setChat,voice,stats,context}) {
   const [error,setError]=useState('');
   const [sources,setSources]=useState([]);
   const [status,setStatus]=useState(null);
+  const messagesEndRef=useRef(null);
   const developerAllowed=String(session?.name||'').trim().toLowerCase()==='flemming' && session?.role==='Owner';
 
   useEffect(()=>{fetch('/api/atlas/status',{cache:'no-store'}).then(r=>r.json()).then(setStatus).catch(()=>{})},[]);
+  useEffect(()=>{messagesEndRef.current?.scrollIntoView({behavior:'smooth',block:'end'})},[chat,busy]);
 
   async function send(value=text){
     const q=value.trim();
@@ -2461,12 +2533,15 @@ function AI({session,chat,setChat,voice,stats,context}) {
     setChat(c=>[...c,{from:'user',text:q}]);
     setText('');setBusy(true);setError('');setSources([]);
     try{
-      const response=await fetch('/api/atlas/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:q,mode,useWeb:useWeb||mode==='research',context:{stats,...context}})});
+      const history=chat.slice(-8).map(message=>({role:message.from==='ai'?'assistant':'user',content:message.text}));
+      const response=await fetch('/api/atlas/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:q,mode,useWeb:useWeb||mode==='research',history,context:{stats,...context}})});
       const data=await response.json().catch(()=>({}));
       if(!response.ok)throw new Error(data.detail||data.error||`HTTP ${response.status}`);
-      setChat(c=>[...c,{from:'ai',text:data.answer}]);
+      const actionResults=onActions?.(data.actions||[])||[];
+      const deliveredAnswer=[data.answer,actionResults.length?`Udført:\n${actionResults.map(item=>`• ${item}`).join('\n')}`:''].filter(Boolean).join('\n\n');
+      setChat(c=>[...c,{from:'ai',text:deliveredAnswer}]);
       setSources(data.sources||[]);
-      speak(data.answer,voice);
+      speak(deliveredAnswer,voice);
     }catch(err){const message=`ATLAS fejl: ${err.message}`;setError(message);setChat(c=>[...c,{from:'ai',text:message}]);}
     finally{setBusy(false)}
   }
@@ -2491,8 +2566,11 @@ function AI({session,chat,setChat,voice,stats,context}) {
     {speechError&&<div className="error">{speechError}</div>}{error&&<div className="error">{error}</div>}
     <div className="atlasBrainGrid">
       <div className="chatPanel atlasChat">
-        {chat.map((m,i)=><div key={i} className={`bubble ${m.from}`}>{m.text}</div>)}
-        {busy&&<div className="bubble ai atlasThinking">ATLAS undersøger FSQ-viden{useWeb||mode==='research'?' og online kilder':''}…</div>}
+        <div className="atlasMessages">
+          {chat.map((m,i)=><div key={i} className={`bubble ${m.from}`}>{m.text}</div>)}
+          {busy&&<div className="bubble ai atlasThinking">ATLAS undersøger FSQ-viden{useWeb||mode==='research'?' og online kilder':''}…</div>}
+          <div ref={messagesEndRef}/>
+        </div>
         <div className="chatInput"><textarea rows="2" value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}}} placeholder={mode==='developer'?'Beskriv den funktion eller fejl, ATLAS skal analysere…':'Spørg ATLAS om projekter, teknik, dokumenter eller online research…'}/><button className="micMini" onClick={speech.toggleListening} disabled={!speech.supported}>{speech.listening?'●':'🎙'}</button><button disabled={busy} onClick={()=>send()}>{busy?'Arbejder…':'Send'}</button></div>
       </div>
       <aside className="atlasSourcePanel panel"><div className="panelHead"><h3>Kilder</h3><span>{sources.length}</span></div>{sources.length?sources.map((source,i)=><article key={i}><span>{source.type==='Online'?'🌐':'▤'}</span><div><b>{source.type}</b>{source.url?<a href={source.url} target="_blank" rel="noreferrer">{source.title}</a>:<small>{source.title}</small>}</div></article>):<div className="empty">Kilder vises efter næste svar.</div>}<hr/><small>Prioritet: FSQ approved knowledge → producent/klasse → øvrige pålidelige online kilder.</small></aside>

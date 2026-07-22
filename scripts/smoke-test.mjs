@@ -4,6 +4,7 @@ import { extractDocumentText } from '../lib/documentText.js';
 import { detectImageMime, downloadHeaders, isAllowedDocument, safeSegment } from '../lib/files.js';
 import { assignmentLabel, isTaskAssignedTo, taskAssignees } from '../lib/taskAssignments.js';
 import { projectPlannerEntries, syncProjectCrewEntries } from '../lib/plannerSync.js';
+import { parseAtlasActionOutput, rankKnowledge } from '../lib/atlas.js';
 import fs from 'node:fs';
 
 const workbook = new ExcelJS.Workbook();
@@ -45,6 +46,14 @@ const manualEntry = { key: 'Tommy|2026-07-21', person: 'Tommy', date: '2026-07-2
 const syncedPlan = syncProjectCrewEntries([manualEntry], plannedProject, ['Tommy']);
 assert.equal(syncedPlan.filter(entry => entry.source === 'project').length, 2);
 assert.equal(syncedPlan.find(entry => entry.key === manualEntry.key)?.text, 'Kursus');
+
+const atlasOutput = parseAtlasActionOutput('Jeg klarer det.\nATLAS_ACTIONS_JSON: {"actions":[{"type":"create_task","project":"Wind Test","title":"Kontrollér svejsning","people":["Tommy","Jakob"]}]}');
+assert.equal(atlasOutput.answer, 'Jeg klarer det.');
+assert.equal(atlasOutput.actions[0].type, 'create_task');
+assert.deepEqual(atlasOutput.actions[0].people, ['Tommy','Jakob']);
+assert.equal(parseAtlasActionOutput('Svar uden handling').actions.length, 0);
+const rankedKnowledge = rankKnowledge([{Title:'Andet',Content:'Generelt'},{Title:'Svejsning',Content:'WPS kontrol'}], 'Hjælp med WPS svejsning', 1);
+assert.equal(rankedKnowledge[0].Title, 'Svejsning');
 
 const manifest = JSON.parse(fs.readFileSync('public/manifest.webmanifest', 'utf8'));
 assert.equal(manifest.display, 'standalone');
