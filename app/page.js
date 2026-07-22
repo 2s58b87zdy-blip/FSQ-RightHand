@@ -693,6 +693,8 @@ function MyJobs({ session, tasks, setTasks, projects }) {
   const [selectedId,setSelectedId]=useState(null);
   const [message,setMessage]=useState('');
   const [uploading,setUploading]=useState(false);
+  const [machineDragActive,setMachineDragActive]=useState(false);
+  const machineDragDepth=useRef(0);
   const assigned=tasks.filter(task=>isTaskAssignedTo(task,session.name));
   const selected=assigned.find(task=>task.id===selectedId) || assigned[0] || null;
   const project=projects.find(p=>p.name===selected?.project);
@@ -2407,7 +2409,8 @@ function KnowledgeBase({session,users,folders,setFolders,machines,setMachines,do
 
   async function uploadKnowledgeFiles(fileList,targetFolderId,targetMachineId=null){
     const files=[...fileList];
-    if(!files.length||!targetFolderId)return;
+    if(!files.length)return;
+    if(!targetFolderId)return setMessage('Vælg først den mappe, som dokumenterne skal gemmes i.');
     const targetFolder=folders.find(f=>String(f.id)===String(targetFolderId));
     const targetMachine=machines.find(m=>String(m.id)===String(targetMachineId));
     setUploading(true);setMessage('');
@@ -2428,6 +2431,28 @@ function KnowledgeBase({session,users,folders,setFolders,machines,setMachines,do
       }catch(error){setMessage(`${file.name}: ${error.message}`)}
     }
     setUploading(false);setMessage(current=>current||'Filer uploadet og klar til ATLAS.');
+  }
+  function machineDragEnter(event){
+    event.preventDefault();event.stopPropagation();
+    if(uploading||!selectedMachineFolder)return;
+    machineDragDepth.current+=1;
+    if(event.dataTransfer?.types?.includes('Files'))setMachineDragActive(true);
+  }
+  function machineDragOver(event){
+    event.preventDefault();event.stopPropagation();
+    if(event.dataTransfer)event.dataTransfer.dropEffect=uploading||!selectedMachineFolder?'none':'copy';
+  }
+  function machineDragLeave(event){
+    event.preventDefault();event.stopPropagation();
+    machineDragDepth.current=Math.max(0,machineDragDepth.current-1);
+    if(machineDragDepth.current===0)setMachineDragActive(false);
+  }
+  function machineDrop(event){
+    event.preventDefault();event.stopPropagation();
+    machineDragDepth.current=0;setMachineDragActive(false);
+    if(uploading)return;
+    if(!selectedMachineFolder)return setMessage('Vælg først en maskine og en undermappe.');
+    uploadKnowledgeFiles(event.dataTransfer?.files||[],selectedMachineFolder,selectedMachine);
   }
   async function deleteDocument(doc){
     if(!canManage)return;
@@ -2486,9 +2511,9 @@ function KnowledgeBase({session,users,folders,setFolders,machines,setMachines,do
           {canManage&&selectedMachine&&<div className="machineFolderCreate"><input value={machineFolderName} onChange={e=>setMachineFolderName(e.target.value)} placeholder="Ny undermappe"/><button onClick={addMachineFolder}>Opret</button></div>}
         </section>
 
-        <section className="panel machineBinderDocuments">
+        <section className={`panel machineBinderDocuments ${machineDragActive?'dragActive':''}`} onDragEnter={machineDragEnter} onDragOver={machineDragOver} onDragLeave={machineDragLeave} onDrop={machineDrop}>
           <div className="panelHead"><div><p className="panelEyebrow">{currentMachine?.name||'MACHINE'} / {currentMachineFolder?.name||'MAPPE'}</p><h3>Dokumenter</h3></div><label className="binderUpload">{uploading?'Uploader...':'+ Upload filer'}<input disabled={uploading||!selectedMachineFolder} type="file" multiple onChange={e=>{uploadKnowledgeFiles(e.target.files,selectedMachineFolder,selectedMachine);e.target.value=''}}/></label></div>
-          <label className={`machineDropZone ${!selectedMachineFolder?'disabled':''}`}><span>☁</span><b>Træk filer hertil eller klik for upload</b><small>Destination: {currentMachine?.name||'—'} / {currentMachineFolder?.name||'vælg mappe'}</small><input disabled={uploading||!selectedMachineFolder} type="file" multiple onChange={e=>{uploadKnowledgeFiles(e.target.files,selectedMachineFolder,selectedMachine);e.target.value=''}}/></label>
+          <label className={`machineDropZone ${!selectedMachineFolder?'disabled':''} ${machineDragActive?'dragActive':''}`}><span>☁</span><b>{machineDragActive?'Slip filerne her for at uploade':uploading?'Uploader dokumenter...':'Træk filer hertil eller klik for upload'}</b><small>Destination: {currentMachine?.name||'—'} / {currentMachineFolder?.name||'vælg mappe'}</small><input disabled={uploading||!selectedMachineFolder} type="file" multiple onChange={e=>{uploadKnowledgeFiles(e.target.files,selectedMachineFolder,selectedMachine);e.target.value=''}}/></label>
           <FileList items={machineDocs}/>
         </section>
 
