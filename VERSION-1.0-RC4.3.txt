@@ -1,0 +1,13 @@
+FSQ COMMAND 1.0 RC4.3
+=====================
+
+Mobilmenu:
+- Menupunkter er forstørret til mindst 56 pixels i højden.
+- Menuen lukker altid efter valg, også ved tryk på den aktive side.
+- Tydeligere ikoner, tekst og aktiv markering.
+- Bedre lodret scrolling og større lukkeknap.
+- Baggrunden låses, mens menuen er åben.
+- Menuen kan lukkes med baggrunden, krydset eller Escape.
+- Tilpasset safe-area på telefoner.
+
+Alle tidligere RC4.2-funktioner er bevaret.

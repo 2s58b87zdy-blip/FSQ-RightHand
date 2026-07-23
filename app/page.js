@@ -18,7 +18,7 @@ const FOLDER_ACCESS_LEVELS = ['No Access','Read','Edit','Full Control'];
 const MANAGED_FOLDERS = ['Projects','Workshop','Marine','Drawings','Procedures','QA / QC','Reports','Drone','Certificates','Templates','Finance','HR','Management','Contracts','Customers'];
 const DEFAULT_FOLDER_ACCESS = Object.fromEntries(MANAGED_FOLDERS.map(folder=>[folder,'No Access']));
 
-const APP_VERSION = '1.0 RC4.2';
+const APP_VERSION = '1.0 RC4.3';
 
 const USER_REGISTRY_DEFAULTS = [];
 
@@ -608,6 +608,17 @@ function AppShell({ session, onLogout, users, setUsers }) {
     : roleNav;
 
   useEffect(() => { setMobileNavOpen(false); }, [active]);
+  useEffect(() => {
+    if (!mobileNavOpen) return;
+    const previousOverflow=document.body.style.overflow;
+    const closeOnEscape=event=>{if(event.key==='Escape')setMobileNavOpen(false)};
+    document.body.style.overflow='hidden';
+    window.addEventListener('keydown',closeOnEscape);
+    return ()=>{
+      document.body.style.overflow=previousOverflow;
+      window.removeEventListener('keydown',closeOnEscape);
+    };
+  }, [mobileNavOpen]);
 
   function executeAtlasActions(actions=[]) {
     const results=[];
@@ -695,7 +706,7 @@ function AppShell({ session, onLogout, users, setUsers }) {
         <div className="mobileSidebarHead"><b>FSQ COMMAND</b><button aria-label="Luk menu" onClick={()=>setMobileNavOpen(false)}>×</button></div>
         <div className="logo atlasBrand"><div className="sidebarLogoGlow"><img src="/fsq-logo-clean.webp" alt="FSQ" /></div><b>FSQ COMMAND</b><span>POWERED BY ATLAS</span><small>v{APP_VERSION}</small></div>
         <div className="online"><i/> ALL SYSTEMS OPERATIONAL</div>
-        <nav>{visibleNav.map(([id, label, icon]) => <button key={id} onClick={() => setActive(id)} className={active === id ? 'active' : ''}><span>{icon}</span>{label}</button>)}</nav>
+        <nav aria-label="Hovedmenu">{visibleNav.map(([id, label, icon]) => <button key={id} onClick={() => {setActive(id);setMobileNavOpen(false)}} className={active === id ? 'active' : ''} aria-current={active===id?'page':undefined}><span>{icon}</span><b>{label}</b></button>)}</nav>
         <div className="userCard"><div className="avatar">{session.name[0]}</div><div><b>{session.name}</b><small>{session.role}</small></div><button onClick={onLogout}>↗</button></div>
       </aside>
       <main className="workspace">
