@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import ExcelJS from 'exceljs';
 import { extractDocumentText } from '../lib/documentText.js';
 import { detectImageMime, downloadHeaders, isAllowedDocument, safeSegment } from '../lib/files.js';
-import { assignmentLabel, isTaskAssignedTo, taskAssignees, taskHasActiveProject } from '../lib/taskAssignments.js';
-import { projectPlannerEntries, syncProjectCrewEntries } from '../lib/plannerSync.js';
+import { assignmentLabel, clearEmployeeProjectAssignments, isTaskAssignedTo, removeProjectTasks, taskAssignees, taskHasActiveProject } from '../lib/taskAssignments.js';
+import { projectPlannerEntries, removeProjectPlannerEntries, syncProjectCrewEntries } from '../lib/plannerSync.js';
 import { parseAtlasActionOutput, rankKnowledge } from '../lib/atlas.js';
 import fs from 'node:fs';
 
@@ -39,6 +39,8 @@ assert.equal(isTaskAssignedTo({ person: 'Tommy' }, 'Tommy'), true);
 assert.equal(taskHasActiveProject({ project: 'Wind Test' }, [{ name: 'Wind Test' }]), true);
 assert.equal(taskHasActiveProject({ project: 'Wind Test' }, []), false);
 assert.equal(taskHasActiveProject({ project: 'General' }, []), true);
+assert.deepEqual(removeProjectTasks([{id:1,project:'Wind Test'},{id:2,project:'General'}], 'wind test').map(task=>task.id), [2]);
+assert.deepEqual(clearEmployeeProjectAssignments([{name:'Tommy',project:'Wind Test',task:'Svejsning',progress:50}], 'Wind Test')[0], {name:'Tommy',project:'',task:'No task assigned',progress:0});
 
 const plannedProject = { id: 42, name: 'Wind Test', type: 'Vessel', startDate: '2026-07-20', deadline: '2026-07-22' };
 const automaticPlan = projectPlannerEntries(plannedProject, ['Tommy', 'Jakob']);
@@ -49,6 +51,7 @@ const manualEntry = { key: 'Tommy|2026-07-21', person: 'Tommy', date: '2026-07-2
 const syncedPlan = syncProjectCrewEntries([manualEntry], plannedProject, ['Tommy']);
 assert.equal(syncedPlan.filter(entry => entry.source === 'project').length, 2);
 assert.equal(syncedPlan.find(entry => entry.key === manualEntry.key)?.text, 'Kursus');
+assert.equal(removeProjectPlannerEntries([...automaticPlan,manualEntry], plannedProject.id).length, 1);
 
 const atlasOutput = parseAtlasActionOutput('Jeg klarer det.\nATLAS_ACTIONS_JSON: {"actions":[{"type":"create_task","project":"Wind Test","title":"Kontrollér svejsning","people":["Tommy","Jakob"]}]}');
 assert.equal(atlasOutput.answer, 'Jeg klarer det.');

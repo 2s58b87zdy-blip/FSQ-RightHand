@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { assignmentLabel, isTaskAssignedTo, taskAssignees, taskHasActiveProject } from '../lib/taskAssignments';
-import { syncProjectCrewEntries } from '../lib/plannerSync';
+import { assignmentLabel, clearEmployeeProjectAssignments, isTaskAssignedTo, removeProjectTasks, taskAssignees, taskHasActiveProject } from '../lib/taskAssignments';
+import { removeProjectPlannerEntries, syncProjectCrewEntries } from '../lib/plannerSync';
 
 const ROLE_DEFINITIONS = {
   Owner: ['manage_users','manage_permissions','manage_folder_access','view_all_projects','approve_tack','approve_final','complete_jobs','view_finance','system_health'],
@@ -564,7 +564,8 @@ function AppShell({ session, onLogout, users, setUsers }) {
   });
 
   const isTechnician = session.role === 'Technician';
-  const visibleTasks = isTechnician ? tasks.filter(task => isTaskAssignedTo(task, session.name)) : tasks;
+  const activeProjectTasks = tasks.filter(task => taskHasActiveProject(task, projects));
+  const visibleTasks = isTechnician ? activeProjectTasks.filter(task => isTaskAssignedTo(task, session.name)) : activeProjectTasks;
   const assignedProjectNames = new Set(visibleTasks.map(task => task.project));
   const visibleProjects = isTechnician ? projects.filter(project => assignedProjectNames.has(project.name)) : projects;
   const visibleNav = isTechnician
@@ -671,11 +672,11 @@ function AppShell({ session, onLogout, users, setUsers }) {
         {voiceMessage&&<div className="voiceStatus">{voiceMessage}</div>}
 
         {active === 'dashboard' && <Dashboard session={session} stats={stats} projects={visibleProjects} tasks={visibleTasks} people={people} machines={knowledgeMachines} materials={materials} quotes={quotes} droneInspections={droneInspections} setActive={setActive} />}
-        {active === 'myjobs' && <MyJobs session={session} tasks={tasks} setTasks={setTasks} projects={projects} />}
-        {active === 'approvals' && <JobApprovals session={session} tasks={tasks} setTasks={setTasks} projects={projects} />}
+        {active === 'myjobs' && <MyJobs session={session} tasks={activeProjectTasks} setTasks={setTasks} projects={projects} />}
+        {active === 'approvals' && <JobApprovals session={session} tasks={activeProjectTasks} setTasks={setTasks} projects={projects} />}
         {active === 'crew' && <CrewManagement people={people} setPeople={setPeople} projects={projects} />}
-        {active === 'projects' && <Projects projects={projects} setProjects={setProjects} deletedProjects={deletedProjects} setDeletedProjects={setDeletedProjects} setActive={setActive} setActiveProjectId={setActiveProjectId} tasks={tasks} setTasks={setTasks} people={people} users={users} setPlannerEntries={setPlannerEntries} />}
-        {active === 'projectHub' && <ProjectHub session={session} users={users} project={projects.find(p=>p.id===activeProjectId)} projects={projects} setProjects={setProjects} people={people} tasks={tasks} setTasks={setTasks} documents={documents} materials={materials} setMaterials={setMaterials} quotes={quotes} reports={reports} setActive={setActive} deletedProjects={deletedProjects} setDeletedProjects={setDeletedProjects} setActiveProjectId={setActiveProjectId} droneInspections={droneInspections} setDroneInspections={setDroneInspections} setPlannerEntries={setPlannerEntries} />}
+        {active === 'projects' && <Projects projects={projects} setProjects={setProjects} deletedProjects={deletedProjects} setDeletedProjects={setDeletedProjects} setActive={setActive} setActiveProjectId={setActiveProjectId} tasks={activeProjectTasks} setTasks={setTasks} people={people} users={users} setPlannerEntries={setPlannerEntries} />}
+        {active === 'projectHub' && <ProjectHub session={session} users={users} project={projects.find(p=>p.id===activeProjectId)} projects={projects} setProjects={setProjects} people={people} setPeople={setPeople} tasks={activeProjectTasks} setTasks={setTasks} documents={documents} materials={materials} setMaterials={setMaterials} quotes={quotes} reports={reports} setActive={setActive} deletedProjects={deletedProjects} setDeletedProjects={setDeletedProjects} setActiveProjectId={setActiveProjectId} droneInspections={droneInspections} setDroneInspections={setDroneInspections} setPlannerEntries={setPlannerEntries} />}
         {active === 'documents' && <ProjectBinder documents={documents} setDocuments={setDocuments} projects={projects} session={session} />}
         {active === 'inventory' && <InventoryCenter session={session} />}
         {active === 'planner' && <OperationsPlanner people={people} users={users} projects={projects} entries={plannerEntries} setEntries={setPlannerEntries} />}
@@ -1217,6 +1218,8 @@ function CrewManagement({ people, setPeople, projects }) {
   }
 
   const current = people.find(p => p.id === selected);
+  const profileHasActiveProject = person => !person?.project || projects.some(project => String(project.name).toLowerCase() === String(person.project).toLowerCase());
+  const currentProjectActive = profileHasActiveProject(current);
 
   return <div className="content">
     <div className="sectionIntro crewIntro">
@@ -1243,7 +1246,7 @@ function CrewManagement({ people, setPeople, projects }) {
           <div>
             <b>{p.name}</b>
             <small>{p.location} · {p.status}</small>
-            <small>{p.task}</small>
+            <small>{profileHasActiveProject(p)?p.task:'No task assigned'}</small>
           </div>
           <span>{p.progress || 0}%</span>
         </button>)}
@@ -1264,14 +1267,14 @@ function CrewManagement({ people, setPeople, projects }) {
           </div>
 
           <label>Role / detail<input value={current.detail || ''} onChange={e => updatePerson(current.id, 'detail', e.target.value)} /></label>
-          <label>Current task<input value={current.task || ''} onChange={e => updatePerson(current.id, 'task', e.target.value)} /></label>
-          <label>Assigned project<select value={current.project || ''} onChange={e => updatePerson(current.id, 'project', e.target.value)}>
+          <label>Current task<input value={currentProjectActive?(current.task || ''):''} placeholder="No task assigned" onChange={e => updatePerson(current.id, 'task', e.target.value)} /></label>
+          <label>Assigned project<select value={currentProjectActive?(current.project || ''):''} onChange={e => updatePerson(current.id, 'project', e.target.value)}>
             <option value="">No project assigned</option>
             {projects.map(p => <option key={p.id}>{p.name}</option>)}
           </select></label>
 
-          <label>Progress: {current.progress || 0}%
-            <input type="range" min="0" max="100" value={current.progress || 0} onChange={e => updatePerson(current.id, 'progress', Number(e.target.value))} />
+          <label>Progress: {currentProjectActive?(current.progress || 0):0}%
+            <input type="range" min="0" max="100" value={currentProjectActive?(current.progress || 0):0} onChange={e => updatePerson(current.id, 'progress', Number(e.target.value))} />
           </label>
 
           <div className="crewInfoGrid">
@@ -1293,7 +1296,7 @@ function CrewManagement({ people, setPeople, projects }) {
         <div className="panelHead"><h3>{location}</h3><span>{people.filter(p => p.location === location).length}</span></div>
         {people.filter(p => p.location === location).map(p => <div className="groupPerson" key={p.id}>
           <div className="avatar mini">{p.name[0]}</div>
-          <div><b>{p.name}</b><small>{p.task}</small></div>
+          <div><b>{p.name}</b><small>{profileHasActiveProject(p)?p.task:'No task assigned'}</small></div>
         </div>)}
       </div>)}
     </section>
@@ -1592,7 +1595,7 @@ function Projects({projects,setProjects,deletedProjects,setDeletedProjects,setAc
 }
 
 
-function ProjectHub({session,users,project,projects,setProjects,people,tasks,setTasks,documents,materials,setMaterials,quotes,reports,setActive,deletedProjects,setDeletedProjects,setActiveProjectId,droneInspections,setDroneInspections,setPlannerEntries}) {
+function ProjectHub({session,users,project,projects,setProjects,people,setPeople,tasks,setTasks,documents,materials,setMaterials,quotes,reports,setActive,deletedProjects,setDeletedProjects,setActiveProjectId,droneInspections,setDroneInspections,setPlannerEntries}) {
   const [tab,setTab]=useState('overview');
   const [newTask,setNewTask]=useState('');
   const [newAssignees,setNewAssignees]=useState([]);
@@ -1670,9 +1673,12 @@ function ProjectHub({session,users,project,projects,setProjects,people,tasks,set
     setProjects([...projects,copy]);setActiveProjectId(copy.id);
   }
   function moveToTrash(){
-    if(!window.confirm(`Move ${project.name} to trash?`))return;
+    if(!window.confirm(`Move ${project.name} to trash? All assigned jobs, planner entries and employee profile assignments for this project will be removed.`))return;
     setDeletedProjects([...deletedProjects,{...project,deletedAt:new Date().toISOString().slice(0,10)}]);
     setProjects(projects.filter(p=>p.id!==project.id));
+    setTasks(current=>removeProjectTasks(current,project.name));
+    setPlannerEntries(current=>removeProjectPlannerEntries(current,project.id));
+    setPeople(current=>clearEmployeeProjectAssignments(current,project.name));
     setActiveProjectId(null);setActive('projects');
   }
 
