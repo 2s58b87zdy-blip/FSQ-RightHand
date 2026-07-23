@@ -18,7 +18,7 @@ const FOLDER_ACCESS_LEVELS = ['No Access','Read','Edit','Full Control'];
 const MANAGED_FOLDERS = ['Projects','Workshop','Marine','Drawings','Procedures','QA / QC','Reports','Drone','Certificates','Templates','Finance','HR','Management','Contracts','Customers'];
 const DEFAULT_FOLDER_ACCESS = Object.fromEntries(MANAGED_FOLDERS.map(folder=>[folder,'No Access']));
 
-const APP_VERSION = '1.0 RC4';
+const APP_VERSION = '1.0 RC4.2';
 
 const USER_REGISTRY_DEFAULTS = [];
 
@@ -44,6 +44,7 @@ const NAV = [
   ['dashboard', 'Dashboard', '◈'],
   ['myjobs', 'My Jobs', '✓'],
   ['approvals', 'Job Approvals', '✓'],
+  ['jobArchive', 'Job Archive', '▤'],
   ['projects', 'Projects', '◫'],
   ['crew', 'People', '◉'],
   ['documents', 'Project Binder', '▱'],
@@ -182,6 +183,11 @@ function canManagePermissions(session) {
   return Boolean(session && ['Owner','Co-Owner'].includes(session.role));
 }
 
+function canViewJobArchive(session) {
+  const name=String(session?.name||'').trim().toLowerCase();
+  return canManagePermissions(session) || ['flemming','jakob'].includes(name);
+}
+
 function requirePermissionManager(session) {
   if (canManagePermissions(session)) return true;
   alert('Only Flemming or Jakob can assign or change user permissions.');
@@ -211,6 +217,15 @@ function isWorkshopProject(project) {
 
 function workshopStageLabel(task) {
   return task.qaStage || task.jobStatus || 'Pending';
+}
+
+function isArchivedJob(task) {
+  return Boolean(
+    task?.archivedAt ||
+    task?.qaStage === 'QC approved / Released' ||
+    task?.jobStatus === 'QC approved / Released' ||
+    task?.status === 'Completed'
+  );
 }
 
 function speak(text, enabled) {
@@ -329,6 +344,13 @@ function useSpeechRecognition({ onResult, onError }) {
   return { listening, toggleListening, supported };
 }
 
+function normalizeStoredValue(candidate, fallback) {
+  if (Array.isArray(fallback)) {
+    return Array.isArray(candidate) ? candidate.filter(Boolean) : fallback;
+  }
+  return candidate === null || candidate === undefined ? fallback : candidate;
+}
+
 function useStoredState(key, initialValue) {
   const [value, setValue] = useState(initialValue);
   const [isHydrated, setIsHydrated] = useState(false);
@@ -340,7 +362,7 @@ function useStoredState(key, initialValue) {
         const response = await fetch(`/api/state?key=${encodeURIComponent(key)}`, { cache: 'no-store' });
         if (response.ok) {
           const data = await response.json();
-          if (!cancelled && data.value !== null) setValue(data.value);
+          if (!cancelled && data.value !== null) setValue(normalizeStoredValue(data.value, initialValue));
           hydrated.current = true;
           if (!cancelled) setIsHydrated(true);
           return;
@@ -348,7 +370,7 @@ function useStoredState(key, initialValue) {
       } catch {}
       try {
         const saved = localStorage.getItem(key);
-        if (!cancelled && saved) setValue(JSON.parse(saved));
+        if (!cancelled && saved) setValue(normalizeStoredValue(JSON.parse(saved), initialValue));
       } catch {}
       hydrated.current = true;
       if (!cancelled) setIsHydrated(true);
@@ -443,7 +465,7 @@ function Login({ onLogin, users }) {
     <main className="loginShell">
       <div className="gridGlow" />
       <section className="loginPanel">
-        <div className="loginLogoGlow"><img src="/fsq-logo-clean.png" alt="FSQ logo" /></div>
+        <div className="loginLogoGlow"><img src="/fsq-logo-clean.webp" alt="FSQ logo" /></div>
         <div className="brandRow"><span className="brandMark">FSQ</span><span>COMMAND</span></div>
         <p className="poweredBy">POWERED BY ATLAS</p>
         <p className="eyebrow">MARITIME · INDUSTRIAL · WORKSHOP</p>
@@ -467,7 +489,7 @@ function Login({ onLogin, users }) {
           </button>
           {mobileInstall.help && <p className="installHelp" role="status">{mobileInstall.help}</p>}
         </aside>
-        <div className="systemLine"><span/> Azure SQL secured <span/> Workshop control active <span/> v8.0</div>
+        <div className="systemLine"><span/> Azure SQL secured <span/> Workshop control active <span/> v{APP_VERSION}</div>
       </section>
     </main>
   );
@@ -497,7 +519,7 @@ function AppShell({ session, onLogout, users, setUsers }) {
   // stores prevents a slow project load from being mistaken for deleted data.
   useEffect(() => {
     if (!projectsHydrated || !tasksHydrated) return;
-    const cleanedTasks = tasks.filter(task => taskHasActiveProject(task, projects));
+    const cleanedTasks = tasks.filter(task => isArchivedJob(task) || taskHasActiveProject(task, projects));
     if (cleanedTasks.length !== tasks.length) setTasks(cleanedTasks);
   }, [projectsHydrated, tasksHydrated, projects, tasks, setTasks]);
 
@@ -575,13 +597,15 @@ function AppShell({ session, onLogout, users, setUsers }) {
   });
 
   const isTechnician = session.role === 'Technician';
-  const activeProjectTasks = tasks.filter(task => taskHasActiveProject(task, projects));
+  const archivedTasks = tasks.filter(isArchivedJob);
+  const activeProjectTasks = tasks.filter(task => !isArchivedJob(task) && taskHasActiveProject(task, projects));
   const visibleTasks = isTechnician ? activeProjectTasks.filter(task => isTaskAssignedTo(task, session.name)) : activeProjectTasks;
   const assignedProjectNames = new Set(visibleTasks.map(task => task.project));
   const visibleProjects = isTechnician ? projects.filter(project => assignedProjectNames.has(project.name)) : projects;
+  const roleNav = NAV.filter(item => item[0] !== 'jobArchive' || canViewJobArchive(session));
   const visibleNav = isTechnician
     ? NAV.filter(item => ['myjobs','inventory','knowledge','ai'].includes(item[0]))
-    : NAV;
+    : roleNav;
 
   useEffect(() => { setMobileNavOpen(false); }, [active]);
 
@@ -669,7 +693,7 @@ function AppShell({ session, onLogout, users, setUsers }) {
       {mobileNavOpen&&<button className="mobileNavBackdrop" aria-label="Luk menu" onClick={()=>setMobileNavOpen(false)} />}
       <aside className={`sidebar ${mobileNavOpen?'mobileOpen':''}`}>
         <div className="mobileSidebarHead"><b>FSQ COMMAND</b><button aria-label="Luk menu" onClick={()=>setMobileNavOpen(false)}>×</button></div>
-        <div className="logo atlasBrand"><div className="sidebarLogoGlow"><img src="/fsq-logo-clean.png" alt="FSQ" /></div><b>FSQ COMMAND</b><span>POWERED BY ATLAS</span><small>v{APP_VERSION}</small></div>
+        <div className="logo atlasBrand"><div className="sidebarLogoGlow"><img src="/fsq-logo-clean.webp" alt="FSQ" /></div><b>FSQ COMMAND</b><span>POWERED BY ATLAS</span><small>v{APP_VERSION}</small></div>
         <div className="online"><i/> ALL SYSTEMS OPERATIONAL</div>
         <nav>{visibleNav.map(([id, label, icon]) => <button key={id} onClick={() => setActive(id)} className={active === id ? 'active' : ''}><span>{icon}</span>{label}</button>)}</nav>
         <div className="userCard"><div className="avatar">{session.name[0]}</div><div><b>{session.name}</b><small>{session.role}</small></div><button onClick={onLogout}>↗</button></div>
@@ -685,6 +709,7 @@ function AppShell({ session, onLogout, users, setUsers }) {
         {active === 'dashboard' && <Dashboard session={session} stats={stats} projects={visibleProjects} tasks={visibleTasks} people={people} machines={knowledgeMachines} materials={materials} quotes={quotes} droneInspections={droneInspections} setActive={setActive} />}
         {active === 'myjobs' && <MyJobs session={session} tasks={activeProjectTasks} setTasks={setTasks} projects={projects} />}
         {active === 'approvals' && <JobApprovals session={session} tasks={activeProjectTasks} setTasks={setTasks} projects={projects} />}
+        {active === 'jobArchive' && <JobArchive session={session} tasks={archivedTasks} projects={projects} />}
         {active === 'crew' && <CrewManagement people={people} setPeople={setPeople} projects={projects} />}
         {active === 'projects' && <Projects projects={projects} setProjects={setProjects} deletedProjects={deletedProjects} setDeletedProjects={setDeletedProjects} setActive={setActive} setActiveProjectId={setActiveProjectId} tasks={activeProjectTasks} setTasks={setTasks} people={people} users={users} setPlannerEntries={setPlannerEntries} />}
         {active === 'projectHub' && <ProjectHub session={session} users={users} project={projects.find(p=>p.id===activeProjectId)} projects={projects} setProjects={setProjects} people={people} setPeople={setPeople} tasks={activeProjectTasks} setTasks={setTasks} documents={documents} materials={materials} setMaterials={setMaterials} quotes={quotes} reports={reports} setActive={setActive} deletedProjects={deletedProjects} setDeletedProjects={setDeletedProjects} setActiveProjectId={setActiveProjectId} droneInspections={droneInspections} setDroneInspections={setDroneInspections} setPlannerEntries={setPlannerEntries} />}
@@ -695,7 +720,7 @@ function AppShell({ session, onLogout, users, setUsers }) {
         {active === 'health' && <SystemHealth session={session} users={users} projects={projects} documents={documents} knowledgeDocuments={knowledgeDocuments} knowledgeMachines={knowledgeMachines} />}
         {active === 'admin' && <Admin session={session} users={users} setUsers={setUsers} people={people} setPeople={setPeople} machines={knowledgeMachines} setMachines={setKnowledgeMachines} materials={materials} setMaterials={setMaterials} />}
         {active === 'ai' && <AI session={session} chat={chat} setChat={setChat} voice={voice} stats={stats} context={{projects:visibleProjects,tasks:visibleTasks,people,users,machines:knowledgeMachines,materials,documents,knowledgeDocuments,knowledgeMachines,knowledgeSolutions}} onActions={executeAtlasActions} />}
-        {!['dashboard','myjobs','approvals','crew','projects','projectHub','documents','inventory','planner','health','admin','ai'].includes(active) && <ModulePlaceholder title={NAV.find(n=>n[0]===active)?.[1]} />}
+        {!['dashboard','myjobs','approvals','jobArchive','crew','projects','projectHub','documents','inventory','planner','health','admin','ai'].includes(active) && <ModulePlaceholder title={NAV.find(n=>n[0]===active)?.[1]} />}
       </main>
     </div>
   );
@@ -918,6 +943,8 @@ function JobApprovals({session,tasks,setTasks,projects}){
       ...approvalIdentity(session),
       qcApprovedAt:new Date().toISOString(),
       completedAt:new Date().toISOString(),
+      archivedAt:new Date().toISOString(),
+      archiveReason:'Final QC approved',
       rejectionReason:''
     });
   }
@@ -982,19 +1009,19 @@ function JobApprovals({session,tasks,setTasks,projects}){
 
 
 function Dashboard({ session, stats, projects, tasks, people, machines, materials, quotes, droneInspections, setActive }) {
-  const activeProjects=projects.filter(project=>project.status!=='Completed' && project.lifecycle!=='Archived');
-  const workshopProjects=activeProjects.filter(project=>['Workshop','Fabrication'].includes(project.type) || project.location?.toLowerCase().includes('workshop'));
-  const marineProjects=activeProjects.filter(project=>['Marine','Vessel','Inspection'].includes(project.type));
+  const activeProjects=projects.filter(project=>project?.status!=='Completed' && project?.lifecycle!=='Archived');
+  const workshopProjects=activeProjects.filter(project=>['Workshop','Fabrication'].includes(project?.type) || String(project?.location||'').toLowerCase().includes('workshop'));
+  const marineProjects=activeProjects.filter(project=>['Marine','Vessel','Inspection'].includes(project?.type));
   const workshopTaskList=tasks.filter(task=>{
     const project=projects.find(p=>p.name===task.project);
     return isWorkshopProject(project);
   });
   const pendingApprovals=workshopTaskList.filter(task=>['Awaiting tack approval','Awaiting final QC'].includes(task.qaStage)||['Awaiting tack approval','Awaiting final QC'].includes(task.jobStatus));
   const criticalJobs=tasks.filter(task=>(task.priority==='High'||task.priority==='Critical'||task.due==='Overdue') && task.status!=='Completed');
-  const peopleWorking=people.filter(person=>!['Free','Off'].includes(person.status));
-  const materialAlerts=materials.filter(material=>material.quantity<material.minimum);
-  const openDrone=droneInspections.filter(item=>!['Completed','Closed'].includes(item.status));
-  const quoteReplies=quotes.filter(quote=>['Draft','Awaiting approval','Sent','Awaiting reply'].includes(quote.status));
+  const peopleWorking=people.filter(person=>person && !['Free','Off'].includes(person.status));
+  const materialAlerts=materials.filter(material=>material && Number(material.quantity)<Number(material.minimum));
+  const openDrone=droneInspections.filter(item=>item && !['Completed','Closed'].includes(item.status));
+  const quoteReplies=quotes.filter(quote=>quote && ['Draft','Awaiting approval','Sent','Awaiting reply'].includes(quote.status));
   const tackApprovals=workshopTaskList.filter(task=>task.qaStage==='Awaiting tack approval' || task.jobStatus==='Awaiting tack approval');
   const finalApprovals=workshopTaskList.filter(task=>task.qaStage==='Awaiting final QC' || task.jobStatus==='Awaiting final QC');
   const releasedToday=workshopTaskList.filter(task=>task.qaStage==='QC approved / Released' && task.qcApprovedAt && new Date(task.qcApprovedAt).toDateString()===new Date().toDateString());
@@ -1016,7 +1043,7 @@ function Dashboard({ session, stats, projects, tasks, people, machines, material
   return <div className="content phase3Dashboard">
     <section className="atlasCommandDeck">
       <header className="atlasDeckHeader">
-        <img src="/fsq-logo-clean.png" alt="FSQ"/>
+        <img src="/fsq-logo-clean.webp" alt="FSQ"/>
         <div>
           <p className="panelEyebrow">FSQ OPERATIONS CONTROL</p>
           <h1>FSQ ATLAS COMMAND</h1>
@@ -1087,6 +1114,48 @@ function Dashboard({ session, stats, projects, tasks, people, machines, material
     </section>
   </div>
 }
+function JobArchive({session,tasks,projects}) {
+  const [search,setSearch]=useState('');
+  if(!canViewJobArchive(session)) {
+    return <div className="content"><div className="sectionIntro"><h1>Job Archive</h1><p>Kun Flemming og Jakob har adgang til det fælles jobarkiv.</p></div></div>;
+  }
+  const archived=(Array.isArray(tasks)?tasks:[])
+    .filter(isArchivedJob)
+    .filter(task=>{
+      const text=`${task.title||''} ${task.project||''} ${assignmentLabel(task)} ${task.approvedBy||task.qcApprovedBy||''}`.toLowerCase();
+      return text.includes(search.trim().toLowerCase());
+    })
+    .sort((a,b)=>String(b.archivedAt||b.completedAt||b.qcApprovedAt||'').localeCompare(String(a.archivedAt||a.completedAt||a.qcApprovedAt||'')));
+
+  return <div className="content jobArchivePage">
+    <div className="sectionIntro archiveIntro">
+      <div><h1>Job Archive</h1><p>Fælles arkiv for jobs, som er færdige eller endeligt godkendt.</p></div>
+      <span>{archived.length} arkiverede jobs</span>
+    </div>
+    <section className="panel archivePanel">
+      <div className="archiveToolbar">
+        <input value={search} onChange={event=>setSearch(event.target.value)} placeholder="Søg efter job, projekt, medarbejder eller godkender..." />
+        <small>Synligt for Flemming og Jakob</small>
+      </div>
+      <div className="archiveTable">
+        <div className="archiveTableHead"><span>Job</span><span>Projekt</span><span>Medarbejdere</span><span>Godkendt af</span><span>Arkiveret</span></div>
+        {archived.map(task=>{
+          const project=projects.find(item=>item.name===task.project);
+          const archivedDate=task.archivedAt||task.completedAt||task.qcApprovedAt||task.approvedAt;
+          return <article key={task.id} className="archiveRow">
+            <div><b>{task.title||'Job uden titel'}</b><small>{task.qaStage||task.jobStatus||task.status}</small></div>
+            <div><b>{task.project||'General'}</b><small>{project?.customer||project?.location||''}</small></div>
+            <span>{assignmentLabel(task)}</span>
+            <span>{task.approvedBy||task.qcApprovedBy||task.tackApprovedBy||'Afsluttet'}</span>
+            <time>{archivedDate?new Date(archivedDate).toLocaleDateString('da-DK'):'Dato mangler'}</time>
+          </article>
+        })}
+        {!archived.length&&<div className="empty">Ingen arkiverede jobs matcher søgningen.</div>}
+      </div>
+    </section>
+  </div>
+}
+
 function WorkshopControl({ tasks, setTasks, people, machines, setMachines, materials, setMaterials, projects }) {
   const [title,setTitle]=useState('');
   const [person,setPerson]=useState('Tommy');

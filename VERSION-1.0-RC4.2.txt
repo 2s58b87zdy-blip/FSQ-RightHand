@@ -1,0 +1,12 @@
+FSQ COMMAND 1.0 RC4.2
+=====================
+
+Fælles Job Archive:
+- Endeligt godkendte jobs flyttes automatisk fra My Jobs til Job Archive.
+- Flemming og Jakob kan se arkivet fra menuen.
+- Arkivet viser job, projekt, medarbejdere, godkender og dato.
+- Søgning efter job, projekt, medarbejder og godkender.
+- Tidligere godkendte og afsluttede jobs vises også automatisk.
+- Arkiverede godkendelser bevares, hvis projektet senere slettes.
+
+Alle tidligere RC4.1-rettelser er bevaret.
