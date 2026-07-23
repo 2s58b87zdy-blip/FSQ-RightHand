@@ -80,7 +80,7 @@ assert.match(pageSource, /className="atlasCommandInput"/);
 assert.match(pageSource, /if \(!projectsHydrated \|\| !tasksHydrated\) return/);
 assert.match(pageSource, /setTasks\(cleanedTasks\)/);
 assert.doesNotMatch(pageSource, /src="\/fsq-logo\.jpg"/);
-assert.ok(fs.statSync('public/fsq-logo-clean.webp').size > 1000);
+assert.ok(fs.statSync('public/fsq-logo-clean.png').size > 1000);
 const stylesSource = fs.readFileSync('app/styles.css', 'utf8');
 assert.match(stylesSource, /\.atlasMegaCore\{/);
 assert.match(stylesSource, /@media\(max-width:650px\)\{\.atlasCommandDeck/);
