@@ -443,7 +443,7 @@ function Login({ onLogin, users }) {
     <main className="loginShell">
       <div className="gridGlow" />
       <section className="loginPanel">
-        <div className="loginLogoGlow"><img src="/fsq-logo-clean.png" alt="FSQ logo" /></div>
+        <div className="loginLogoGlow"><img src="/fsq-logo-clean.webp" alt="FSQ logo" /></div>
         <div className="brandRow"><span className="brandMark">FSQ</span><span>COMMAND</span></div>
         <p className="poweredBy">POWERED BY ATLAS</p>
         <p className="eyebrow">MARITIME · INDUSTRIAL · WORKSHOP</p>
@@ -669,7 +669,7 @@ function AppShell({ session, onLogout, users, setUsers }) {
       {mobileNavOpen&&<button className="mobileNavBackdrop" aria-label="Luk menu" onClick={()=>setMobileNavOpen(false)} />}
       <aside className={`sidebar ${mobileNavOpen?'mobileOpen':''}`}>
         <div className="mobileSidebarHead"><b>FSQ COMMAND</b><button aria-label="Luk menu" onClick={()=>setMobileNavOpen(false)}>×</button></div>
-        <div className="logo atlasBrand"><div className="sidebarLogoGlow"><img src="/fsq-logo-clean.png" alt="FSQ" /></div><b>FSQ COMMAND</b><span>POWERED BY ATLAS</span><small>v{APP_VERSION}</small></div>
+        <div className="logo atlasBrand"><div className="sidebarLogoGlow"><img src="/fsq-logo-clean.webp" alt="FSQ" /></div><b>FSQ COMMAND</b><span>POWERED BY ATLAS</span><small>v{APP_VERSION}</small></div>
         <div className="online"><i/> ALL SYSTEMS OPERATIONAL</div>
         <nav>{visibleNav.map(([id, label, icon]) => <button key={id} onClick={() => setActive(id)} className={active === id ? 'active' : ''}><span>{icon}</span>{label}</button>)}</nav>
         <div className="userCard"><div className="avatar">{session.name[0]}</div><div><b>{session.name}</b><small>{session.role}</small></div><button onClick={onLogout}>↗</button></div>
@@ -1016,7 +1016,7 @@ function Dashboard({ session, stats, projects, tasks, people, machines, material
   return <div className="content phase3Dashboard">
     <section className="atlasCommandDeck">
       <header className="atlasDeckHeader">
-        <img src="/fsq-logo-clean.png" alt="FSQ"/>
+        <img src="/fsq-logo-clean.webp" alt="FSQ"/>
         <div>
           <p className="panelEyebrow">FSQ OPERATIONS CONTROL</p>
           <h1>FSQ ATLAS COMMAND</h1>
