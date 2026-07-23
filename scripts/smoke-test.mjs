@@ -68,5 +68,9 @@ assert.doesNotMatch(myJobsSource, /machineDragActive|machineDragDepth/);
 assert.match(knowledgeSource, /const \[machineDragActive,setMachineDragActive\]=useState\(false\)/);
 assert.match(knowledgeSource, /onDrop=\{machineDrop\}/);
 assert.match(pageSource, /\['knowledge', 'Machine Binder', '▤'\]/);
+const stylesSource = fs.readFileSync('app/styles.css', 'utf8');
+assert.match(stylesSource, /@media\(max-width:1650px\)\{\.machineBinderLayout\{grid-template-columns:/);
+assert.match(stylesSource, /\.machineBinderDocuments,\.machineBinderPreview\{grid-column:1\/-1;min-height:auto\}/);
+assert.match(stylesSource, /\.machineFolderCreate input\{width:100%;min-width:0\}/);
 
 console.log('Smoke tests passed (documents, downloads, crew assignment, Machine Binder and mobile app).');
