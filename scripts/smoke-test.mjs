@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import ExcelJS from 'exceljs';
 import { extractDocumentText } from '../lib/documentText.js';
 import { detectImageMime, downloadHeaders, isAllowedDocument, safeSegment } from '../lib/files.js';
-import { assignmentLabel, isTaskAssignedTo, taskAssignees } from '../lib/taskAssignments.js';
+import { assignmentLabel, isTaskAssignedTo, taskAssignees, taskHasActiveProject } from '../lib/taskAssignments.js';
 import { projectPlannerEntries, syncProjectCrewEntries } from '../lib/plannerSync.js';
 import { parseAtlasActionOutput, rankKnowledge } from '../lib/atlas.js';
 import fs from 'node:fs';
@@ -36,6 +36,9 @@ assert.equal(isTaskAssignedTo(sharedTask, 'jakob'), true);
 assert.equal(isTaskAssignedTo(sharedTask, 'Flemming'), false);
 assert.equal(assignmentLabel(sharedTask), 'Tommy, Jakob');
 assert.equal(isTaskAssignedTo({ person: 'Tommy' }, 'Tommy'), true);
+assert.equal(taskHasActiveProject({ project: 'Wind Test' }, [{ name: 'Wind Test' }]), true);
+assert.equal(taskHasActiveProject({ project: 'Wind Test' }, []), false);
+assert.equal(taskHasActiveProject({ project: 'General' }, []), true);
 
 const plannedProject = { id: 42, name: 'Wind Test', type: 'Vessel', startDate: '2026-07-20', deadline: '2026-07-22' };
 const automaticPlan = projectPlannerEntries(plannedProject, ['Tommy', 'Jakob']);

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { assignmentLabel, isTaskAssignedTo, taskAssignees } from '../lib/taskAssignments';
+import { assignmentLabel, isTaskAssignedTo, taskAssignees, taskHasActiveProject } from '../lib/taskAssignments';
 import { syncProjectCrewEntries } from '../lib/plannerSync';
 
 const ROLE_DEFINITIONS = {
@@ -693,7 +693,7 @@ function MyJobs({ session, tasks, setTasks, projects }) {
   const [selectedId,setSelectedId]=useState(null);
   const [message,setMessage]=useState('');
   const [uploading,setUploading]=useState(false);
-  const assigned=tasks.filter(task=>isTaskAssignedTo(task,session.name));
+  const assigned=tasks.filter(task=>isTaskAssignedTo(task,session.name)&&taskHasActiveProject(task,projects));
   const selected=assigned.find(task=>task.id===selectedId) || assigned[0] || null;
   const project=projects.find(p=>p.name===selected?.project);
   const workshop=isWorkshopProject(project);
