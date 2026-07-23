@@ -49,7 +49,7 @@ const NAV = [
   ['documents', 'Project Binder', '▱'],
   ['inventory', 'Lager Center', '▣'],
   ['planner', 'Operations Planner', '▦'],
-  ['knowledge', 'ATLAS Knowledge', '▤'],
+  ['knowledge', 'Machine Binder', '▤'],
   ['ai', 'ATLAS AI', '◎'],
   ['health', 'System Health', '◌'],
   ['admin', 'Settings', '⚙']
@@ -693,8 +693,6 @@ function MyJobs({ session, tasks, setTasks, projects }) {
   const [selectedId,setSelectedId]=useState(null);
   const [message,setMessage]=useState('');
   const [uploading,setUploading]=useState(false);
-  const [machineDragActive,setMachineDragActive]=useState(false);
-  const machineDragDepth=useRef(0);
   const assigned=tasks.filter(task=>isTaskAssignedTo(task,session.name));
   const selected=assigned.find(task=>task.id===selectedId) || assigned[0] || null;
   const project=projects.find(p=>p.name===selected?.project);
@@ -2337,6 +2335,8 @@ function KnowledgeBase({session,users,folders,setFolders,machines,setMachines,do
   const [solutionText,setSolutionText]=useState('');
   const [message,setMessage]=useState('');
   const [uploading,setUploading]=useState(false);
+  const [machineDragActive,setMachineDragActive]=useState(false);
+  const machineDragDepth=useRef(0);
   const canManage=canManagePermissions(session);
   const DEFAULT_MACHINE_FOLDERS=['Manuals','Electrical Drawings','Maintenance','Spare Parts','Service History','Software','Photos'];
 

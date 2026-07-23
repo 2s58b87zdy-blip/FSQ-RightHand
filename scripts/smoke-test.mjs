@@ -61,4 +61,12 @@ assert.ok(manifest.icons.some(icon => icon.purpose === 'maskable'));
 const serviceWorker = fs.readFileSync('public/sw.js', 'utf8');
 assert.match(serviceWorker, /pathname\.startsWith\('\/api\/'\)/);
 
-console.log('Smoke tests passed (documents, downloads, crew assignment and mobile app).');
+const pageSource = fs.readFileSync('app/page.js', 'utf8');
+const myJobsSource = pageSource.slice(pageSource.indexOf('function MyJobs('), pageSource.indexOf('function Dashboard('));
+const knowledgeSource = pageSource.slice(pageSource.indexOf('function KnowledgeBase('), pageSource.indexOf('function AI('));
+assert.doesNotMatch(myJobsSource, /machineDragActive|machineDragDepth/);
+assert.match(knowledgeSource, /const \[machineDragActive,setMachineDragActive\]=useState\(false\)/);
+assert.match(knowledgeSource, /onDrop=\{machineDrop\}/);
+assert.match(pageSource, /\['knowledge', 'Machine Binder', '▤'\]/);
+
+console.log('Smoke tests passed (documents, downloads, crew assignment, Machine Binder and mobile app).');
