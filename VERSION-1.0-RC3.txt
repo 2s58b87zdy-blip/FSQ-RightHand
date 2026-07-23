@@ -1,0 +1,15 @@
+FSQ COMMAND 1.0 RC3
+===================
+
+Denne version er bygget direkte oven på FSQ-RightHand-main (6).zip.
+
+Med i versionen:
+- Det nye smarte FSQ/ATLAS-design.
+- My Jobs viser kun jobs fra aktive projekter.
+- Når et projekt slettes, fjernes projektets jobs fra My Jobs.
+- Projektets automatiske planner-poster fjernes.
+- Medarbejderens projekt, aktuelle job og fremdrift ryddes i profilen.
+- App-cachen er hævet til v3, så tidligere udgaver ikke bliver hængende.
+
+Kontrol efter upload:
+Menuen i venstre side skal vise v1.0 RC3.

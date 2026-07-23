@@ -1,5 +1,5 @@
-const CACHE_NAME = 'fsq-command-shell-v1';
-const SAFE_ASSETS = ['/offline.html', '/fsq-logo.jpg', '/icon.svg', '/maskable-icon.svg'];
+const CACHE_NAME = 'fsq-command-shell-v3';
+const SAFE_ASSETS = ['/offline.html', '/fsq-logo-clean.png', '/icon.svg', '/maskable-icon.svg'];
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(SAFE_ASSETS)));
