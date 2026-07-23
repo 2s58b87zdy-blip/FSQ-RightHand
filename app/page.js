@@ -440,7 +440,7 @@ function Login({ onLogin, users }) {
     <main className="loginShell">
       <div className="gridGlow" />
       <section className="loginPanel">
-        <div className="loginLogoGlow"><img src="/fsq-logo.jpg" alt="FSQ logo" /></div>
+        <div className="loginLogoGlow"><img src="/fsq-logo-clean.png" alt="FSQ logo" /></div>
         <div className="brandRow"><span className="brandMark">FSQ</span><span>COMMAND</span></div>
         <p className="poweredBy">POWERED BY ATLAS</p>
         <p className="eyebrow">MARITIME · INDUSTRIAL · WORKSHOP</p>
@@ -657,7 +657,7 @@ function AppShell({ session, onLogout, users, setUsers }) {
       {mobileNavOpen&&<button className="mobileNavBackdrop" aria-label="Luk menu" onClick={()=>setMobileNavOpen(false)} />}
       <aside className={`sidebar ${mobileNavOpen?'mobileOpen':''}`}>
         <div className="mobileSidebarHead"><b>FSQ COMMAND</b><button aria-label="Luk menu" onClick={()=>setMobileNavOpen(false)}>×</button></div>
-        <div className="logo atlasBrand"><div className="sidebarLogoGlow"><img src="/fsq-logo.jpg" alt="FSQ" /></div><b>FSQ COMMAND</b><span>POWERED BY ATLAS</span><small>v{APP_VERSION}</small></div>
+        <div className="logo atlasBrand"><div className="sidebarLogoGlow"><img src="/fsq-logo-clean.png" alt="FSQ" /></div><b>FSQ COMMAND</b><span>POWERED BY ATLAS</span><small>v{APP_VERSION}</small></div>
         <div className="online"><i/> ALL SYSTEMS OPERATIONAL</div>
         <nav>{visibleNav.map(([id, label, icon]) => <button key={id} onClick={() => setActive(id)} className={active === id ? 'active' : ''}><span>{icon}</span>{label}</button>)}</nav>
         <div className="userCard"><div className="avatar">{session.name[0]}</div><div><b>{session.name}</b><small>{session.role}</small></div><button onClick={onLogout}>↗</button></div>
@@ -993,45 +993,36 @@ function Dashboard({ session, stats, projects, tasks, people, machines, material
     if(status==='In use')return 'running';
     return 'ready';
   };
-  const greeting=new Date().getHours()<12?'GOOD MORNING':new Date().getHours()<18?'GOOD AFTERNOON':'GOOD EVENING';
+  const greeting=new Date().getHours()<12?'Godmorgen':new Date().getHours()<18?'God eftermiddag':'God aften';
+  const todayJobs=tasks.filter(task=>task.status!=='Completed').slice(0,4);
+  const systemAlerts=[
+    ...materialAlerts.map(material=>({id:`material-${material.id}`,icon:'!',title:`Lav lagerbeholdning: ${material.name}`,detail:`${material.quantity} ${material.unit} tilbage · minimum ${material.minimum}`})),
+    ...criticalJobs.map(task=>({id:`job-${task.id}`,icon:'!',title:task.title,detail:`${task.project} · ${task.due}`})),
+    ...machines.filter(machine=>['Service','Out of service','Fault'].includes(machine.status)).map(machine=>({id:`machine-${machine.id}`,icon:'⚙',title:`${machine.name}: ${machine.status}`,detail:machine.note||'Kræver opmærksomhed'}))
+  ].slice(0,4);
 
   return <div className="content phase3Dashboard">
-    <section className="commandHero">
-      <div>
-        <p className="eyebrow">{greeting}, {session.name.toUpperCase()}</p>
-        <h1>FSQ Command</h1>
-        <p className="commandSubtitle">Marine Operations Platform</p>
-        <p>{activeProjects.length} active projects · {pendingApprovals.length} approvals waiting · {peopleWorking.length} people working today</p>
-        <div className="heroActions"><button onClick={()=>setActive('projects')}>Open Projects</button><button onClick={()=>setActive('approvals')}>Approval Queue</button></div>
+    <section className="atlasSmartWelcome">
+      <div className="atlasSmartIdentity">
+        <img src="/fsq-logo-clean.png" alt="FSQ"/>
+        <div><p className="panelEyebrow">FSQ OPERATIONS CONTROL</p><h1>{greeting} {session.name}</h1><p>Her er dagens samlede overblik over projekter, medarbejdere og drift.</p><span><i/> ATLAS ONLINE · ALLE SYSTEMER KØRER</span></div>
       </div>
-      <div className="commandPulse"><div className="pulseRing"/><strong>{criticalJobs.length}</strong><span>CRITICAL JOBS</span></div>
+      <div className="atlasSmartActions">
+        <button onClick={()=>setActive('projects')}>Åbn projekter</button>
+        <button onClick={()=>setActive('approvals')}>Godkendelser <b>{pendingApprovals.length}</b></button>
+      </div>
+      <button className="atlasSmartCore" onClick={()=>setActive('ai')} aria-label="Åbn ATLAS"><i/><i/><span>ATLAS<small>ONLINE</small></span></button>
     </section>
 
-    <section className="atlasOperationsPanel">
-      <div className="atlasOrb" aria-hidden="true"><span>ATLAS</span></div>
-      <div className="atlasStatusText">
-        <p className="panelEyebrow">AI OPERATIONS ASSISTANT</p>
-        <h2>ATLAS online</h2>
-        <p>Good {new Date().getHours()<12?'morning':new Date().getHours()<18?'afternoon':'evening'}, {session.name}. All systems operational.</p>
-      </div>
-      <div className="atlasQuickStats">
-        <span><b>{activeProjects.length}</b> active projects</span>
-        <span><b>{pendingApprovals.length}</b> approvals waiting</span>
-        <span><b>{materialAlerts.length}</b> material alerts</span>
-        <span><b>{criticalJobs.length}</b> critical jobs</span>
-      </div>
-      <button onClick={()=>setActive('ai')}>ASK ATLAS</button>
-    </section>
+    <button className="atlasSmartAsk" onClick={()=>setActive('ai')}><span>🎙</span><div><small>ATLAS COMMAND</small><b>Spørg ATLAS eller giv en kommando…</b></div><em>ÅBN ATLAS ›</em></button>
 
-    <section className="phase3Kpis">
-      <button className="phase3Kpi" onClick={()=>setActive('projects')}><span>ACTIVE PROJECTS</span><strong>{activeProjects.length}</strong><small>{marineProjects.length} marine · {workshopProjects.length} workshop</small></button>
-      <button className="phase3Kpi" onClick={()=>setActive('projects')}><span>WORKSHOP JOBS</span><strong>{workshopProjects.length}</strong><small>{tasks.filter(task=>task.status==='In progress'&&workshopProjects.some(p=>p.name===task.project)).length} tasks in progress</small></button>
-      <button className={`phase3Kpi ${pendingApprovals.length?'attention':''}`} onClick={()=>setActive('approvals')}><span>AWAITING APPROVAL</span><strong>{pendingApprovals.length}</strong><small>{tackApprovals.length} tack · {finalApprovals.length} final</small></button>
-      <button className={`phase3Kpi ${criticalJobs.length?'danger':''}`} onClick={()=>setActive('projects')}><span>CRITICAL JOBS</span><strong>{criticalJobs.length}</strong><small>{criticalJobs.filter(task=>task.due==='Overdue').length} overdue</small></button>
-      <button className="phase3Kpi" onClick={()=>setActive('crew')}><span>STAFF WORKING TODAY</span><strong>{peopleWorking.length}</strong><small>{peopleWorking.filter(person=>person.location==='Workshop').length} in workshop</small></button>
-      <button className={`phase3Kpi ${materialAlerts.length?'attention':''}`} onClick={()=>setActive('projects')}><span>MATERIAL ALERTS</span><strong>{materialAlerts.length}</strong><small>Below minimum stock</small></button>
-      <button className="phase3Kpi" onClick={()=>setActive('projects')}><span>DRONE INSPECTIONS</span><strong>{openDrone.length}</strong><small>{openDrone.reduce((sum,item)=>sum+(item.findings||0),0)} open findings</small></button>
-      <button className="phase3Kpi" onClick={()=>setActive('projects')}><span>QUOTATIONS</span><strong>{quoteReplies.length}</strong><small>Awaiting action or reply</small></button>
+    <section className="atlasSmartMetrics">
+      <button onClick={()=>setActive('projects')}><span>AKTIVE PROJEKTER</span><strong>{activeProjects.length}</strong><small>{marineProjects.length} marine · {workshopProjects.length} workshop</small></button>
+      <button onClick={()=>setActive('myjobs')}><span>ÅBNE JOBS</span><strong>{todayJobs.length}</strong><small>De næste jobs i køen</small></button>
+      <button className={pendingApprovals.length?'attention':''} onClick={()=>setActive('approvals')}><span>GODKENDELSER</span><strong>{pendingApprovals.length}</strong><small>{tackApprovals.length} tack · {finalApprovals.length} final</small></button>
+      <button onClick={()=>setActive('crew')}><span>CREW I GANG</span><strong>{peopleWorking.length}</strong><small>{peopleWorking.filter(person=>person.location==='Workshop').length} i workshop</small></button>
+      <button className={systemAlerts.length?'warning':''} onClick={()=>setActive(materialAlerts.length?'inventory':'health')}><span>ADVARSLER</span><strong>{systemAlerts.length}</strong><small>{materialAlerts.length} lager · {criticalJobs.length} kritiske jobs</small></button>
+      <button onClick={()=>setActive('projects')}><span>DRONE / TILBUD</span><strong>{openDrone.length + quoteReplies.length}</strong><small>{openDrone.length} inspektioner · {quoteReplies.length} tilbud</small></button>
     </section>
 
     <section className="phase3Grid">
