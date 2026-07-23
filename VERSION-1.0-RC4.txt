@@ -1,0 +1,17 @@
+FSQ COMMAND 1.0 RC4
+===================
+
+ATLAS-forsiden er nu bygget som det viste FSQ ATLAS COMMAND-forslag:
+- Stor levende ATLAS-kerne i midten.
+- Aktive projekter og crew til venstre.
+- Dagens jobs og systemadvarsler til højre.
+- Direkte ATLAS-kommandofelt under kernen.
+- Driftsnøgletal nederst.
+- Responsivt layout til computer, tablet og mobil.
+
+Alle eksisterende funktioner og RC3-rettelser er bevaret.
+
+My Jobs-oprydning:
+- Jobs fra slettede projekter fjernes nu også fysisk fra den fælles jobliste.
+- Oprydningen kører automatisk efter projekter og jobs er hentet.
+- Indlæsningssikring forhindrer, at aktive jobs slettes ved langsom opstart.

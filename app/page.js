@@ -18,7 +18,7 @@ const FOLDER_ACCESS_LEVELS = ['No Access','Read','Edit','Full Control'];
 const MANAGED_FOLDERS = ['Projects','Workshop','Marine','Drawings','Procedures','QA / QC','Reports','Drone','Certificates','Templates','Finance','HR','Management','Contracts','Customers'];
 const DEFAULT_FOLDER_ACCESS = Object.fromEntries(MANAGED_FOLDERS.map(folder=>[folder,'No Access']));
 
-const APP_VERSION = '1.0 RC3';
+const APP_VERSION = '1.0 RC4';
 
 const USER_REGISTRY_DEFAULTS = [];
 
@@ -331,6 +331,7 @@ function useSpeechRecognition({ onResult, onError }) {
 
 function useStoredState(key, initialValue) {
   const [value, setValue] = useState(initialValue);
+  const [isHydrated, setIsHydrated] = useState(false);
   const hydrated = useRef(false);
   useEffect(() => {
     let cancelled = false;
@@ -341,6 +342,7 @@ function useStoredState(key, initialValue) {
           const data = await response.json();
           if (!cancelled && data.value !== null) setValue(data.value);
           hydrated.current = true;
+          if (!cancelled) setIsHydrated(true);
           return;
         }
       } catch {}
@@ -349,6 +351,7 @@ function useStoredState(key, initialValue) {
         if (!cancelled && saved) setValue(JSON.parse(saved));
       } catch {}
       hydrated.current = true;
+      if (!cancelled) setIsHydrated(true);
     }
     load();
     return () => { cancelled = true; };
@@ -361,7 +364,7 @@ function useStoredState(key, initialValue) {
     }, 250);
     return () => clearTimeout(timer);
   }, [key, value]);
-  return [value, setValue];
+  return [value, setValue, isHydrated];
 }
 
 function useMobileInstall() {
@@ -474,8 +477,8 @@ function AppShell({ session, onLogout, users, setUsers }) {
   const [active, setActive] = useState(session.role === 'Technician' ? 'myjobs' : 'dashboard');
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [activeProjectId, setActiveProjectId] = useState(null);
-  const [projects, setProjects] = useStoredState('fsq-v40-projects', DEFAULT_PROJECTS);
-  const [tasks, setTasks] = useStoredState('fsq-v40-tasks', DEFAULT_TASKS);
+  const [projects, setProjects, projectsHydrated] = useStoredState('fsq-v40-projects', DEFAULT_PROJECTS);
+  const [tasks, setTasks, tasksHydrated] = useStoredState('fsq-v40-tasks', DEFAULT_TASKS);
   const [people, setPeople] = useStoredState('fsq-v40-people', DEFAULT_PEOPLE);
   const [machines, setMachines] = useStoredState('fsq-v40-machines', DEFAULT_MACHINES);
   const [materials, setMaterials] = useStoredState('fsq-v40-materials', DEFAULT_MATERIALS);
@@ -489,6 +492,14 @@ function AppShell({ session, onLogout, users, setUsers }) {
   const [knowledgeMachines, setKnowledgeMachines] = useStoredState('fsq-v72-knowledge-machines', DEFAULT_KNOWLEDGE_MACHINES);
   const [knowledgeDocuments, setKnowledgeDocuments] = useStoredState('fsq-v72-knowledge-documents', DEFAULT_KNOWLEDGE_DOCUMENTS);
   const [knowledgeSolutions, setKnowledgeSolutions] = useStoredState('fsq-v72-knowledge-solutions', DEFAULT_KNOWLEDGE_SOLUTIONS);
+
+  // Persistently remove jobs whose project no longer exists. Waiting for both
+  // stores prevents a slow project load from being mistaken for deleted data.
+  useEffect(() => {
+    if (!projectsHydrated || !tasksHydrated) return;
+    const cleanedTasks = tasks.filter(task => taskHasActiveProject(task, projects));
+    if (cleanedTasks.length !== tasks.length) setTasks(cleanedTasks);
+  }, [projectsHydrated, tasksHydrated, projects, tasks, setTasks]);
 
   // One-time Go Live cleanup: remove demonstration jobs, tasks and materials.
   // Users, roles, Project Binder documents and ATLAS knowledge documents are preserved.
@@ -1003,75 +1014,76 @@ function Dashboard({ session, stats, projects, tasks, people, machines, material
   ].slice(0,4);
 
   return <div className="content phase3Dashboard">
-    <section className="atlasSmartWelcome">
-      <div className="atlasSmartIdentity">
+    <section className="atlasCommandDeck">
+      <header className="atlasDeckHeader">
         <img src="/fsq-logo-clean.png" alt="FSQ"/>
-        <div><p className="panelEyebrow">FSQ OPERATIONS CONTROL</p><h1>{greeting} {session.name}</h1><p>Her er dagens samlede overblik over projekter, medarbejdere og drift.</p><span><i/> ATLAS ONLINE · ALLE SYSTEMER KØRER</span></div>
-      </div>
-      <div className="atlasSmartActions">
-        <button onClick={()=>setActive('projects')}>Åbn projekter</button>
-        <button onClick={()=>setActive('approvals')}>Godkendelser <b>{pendingApprovals.length}</b></button>
-      </div>
-      <button className="atlasSmartCore" onClick={()=>setActive('ai')} aria-label="Åbn ATLAS"><i/><i/><span>ATLAS<small>ONLINE</small></span></button>
-    </section>
+        <div>
+          <p className="panelEyebrow">FSQ OPERATIONS CONTROL</p>
+          <h1>FSQ ATLAS COMMAND</h1>
+          <p>{greeting} {session.name}</p>
+        </div>
+        <span><i/> CONNECTED · ALLE SYSTEMER KØRER</span>
+      </header>
 
-    <button className="atlasSmartAsk" onClick={()=>setActive('ai')}><span>🎙</span><div><small>ATLAS COMMAND</small><b>Spørg ATLAS eller giv en kommando…</b></div><em>ÅBN ATLAS ›</em></button>
+      <div className="atlasDeckGrid">
+        <div className="atlasDeckColumn">
+          <section className="atlasHudPanel">
+            <div className="atlasHudTitle"><b>▱ AKTIVE PROJEKTER</b><button onClick={()=>setActive('projects')}>VIS ALLE</button></div>
+            {activeProjects.slice(0,4).map(project=><button className="atlasProjectLine" key={project.id} onClick={()=>setActive('projects')}>
+              <div><b>{project.name}</b><small>{project.customer} · {project.location||'Lokation mangler'}</small><span><i style={{width:`${project.progress||0}%`}}/></span></div>
+              <em>{project.progress||0}%</em>
+            </button>)}
+            {!activeProjects.length&&<p className="atlasHudEmpty">Ingen aktive projekter.</p>}
+          </section>
 
-    <section className="atlasSmartMetrics">
-      <button onClick={()=>setActive('projects')}><span>AKTIVE PROJEKTER</span><strong>{activeProjects.length}</strong><small>{marineProjects.length} marine · {workshopProjects.length} workshop</small></button>
-      <button onClick={()=>setActive('myjobs')}><span>ÅBNE JOBS</span><strong>{todayJobs.length}</strong><small>De næste jobs i køen</small></button>
-      <button className={pendingApprovals.length?'attention':''} onClick={()=>setActive('approvals')}><span>GODKENDELSER</span><strong>{pendingApprovals.length}</strong><small>{tackApprovals.length} tack · {finalApprovals.length} final</small></button>
-      <button onClick={()=>setActive('crew')}><span>CREW I GANG</span><strong>{peopleWorking.length}</strong><small>{peopleWorking.filter(person=>person.location==='Workshop').length} i workshop</small></button>
-      <button className={systemAlerts.length?'warning':''} onClick={()=>setActive(materialAlerts.length?'inventory':'health')}><span>ADVARSLER</span><strong>{systemAlerts.length}</strong><small>{materialAlerts.length} lager · {criticalJobs.length} kritiske jobs</small></button>
-      <button onClick={()=>setActive('projects')}><span>DRONE / TILBUD</span><strong>{openDrone.length + quoteReplies.length}</strong><small>{openDrone.length} inspektioner · {quoteReplies.length} tilbud</small></button>
-    </section>
+          <section className="atlasHudPanel atlasCrewHud">
+            <div className="atlasHudTitle"><b>◎ CREW ONLINE</b><button onClick={()=>setActive('crew')}>ÅBN CREW</button></div>
+            <div className="atlasCrewCount"><strong>{peopleWorking.length}</strong><span>ONLINE</span></div>
+            <dl>
+              <div><dt>Workshop</dt><dd>{peopleWorking.filter(person=>person.location==='Workshop').length}</dd></div>
+              <div><dt>On site</dt><dd>{peopleWorking.filter(person=>person.location==='On site').length}</dd></div>
+              <div><dt>On vessel</dt><dd>{peopleWorking.filter(person=>person.location==='On vessel').length}</dd></div>
+              <div><dt>Available</dt><dd>{people.filter(person=>person.status==='Available').length}</dd></div>
+            </dl>
+          </section>
+        </div>
 
-    <section className="phase3Grid">
-      <div className="glassPanel liveOperations">
-        <div className="panelHead"><div><p className="panelEyebrow">LIVE OPERATIONS</p><h3>Who is where</h3></div><button onClick={()=>setActive('crew')}>Manage people</button></div>
-        <div className="livePeopleGrid">{visiblePeople.map(person=><article key={person.id} className="livePerson">
-          <div className="avatar">{person.name[0]}</div>
-          <div><b>{person.name}</b><small>{person.location} · {person.task}</small></div>
-          <span className={`liveState ${person.status==='Working'||person.status==='Busy'||person.status==='On vessel'?'working':person.status==='Available'?'available':'waiting'}`}>{person.status}</span>
-        </article>)}</div>
+        <div className="atlasCoreStage">
+          <p>ALL SYSTEMS OPERATIONAL</p>
+          <button className="atlasMegaCore" onClick={()=>setActive('ai')} aria-label="Åbn ATLAS">
+            <i/><i/><i/><span>ATLAS<small>ONLINE</small></span>
+          </button>
+          <button className="atlasCommandInput" onClick={()=>setActive('ai')}>
+            <span>🎙</span><b>Spørg ATLAS eller giv en kommando…</b><em>ÅBN COMMANDER ›</em>
+          </button>
+        </div>
+
+        <div className="atlasDeckColumn">
+          <section className="atlasHudPanel">
+            <div className="atlasHudTitle"><b>▣ DAGENS JOBS</b><button onClick={()=>setActive('myjobs')}>VIS ALLE</button></div>
+            {todayJobs.map((task,index)=><button className="atlasJobLine" key={task.id} onClick={()=>setActive('myjobs')}>
+              <time>{['08:00','10:30','13:00','15:30'][index]}</time>
+              <div><b>{task.title}</b><small>{task.project} · {assignmentLabel(task)}</small></div>
+              <em>{task.status}</em>
+            </button>)}
+            {!todayJobs.length&&<p className="atlasHudEmpty good">Ingen åbne jobs.</p>}
+          </section>
+
+          <section className="atlasHudPanel atlasAlertsHud">
+            <div className="atlasHudTitle"><b>△ SYSTEMADVARSLER</b><button onClick={()=>setActive(materialAlerts.length?'inventory':'health')}>VIS ALLE</button></div>
+            {systemAlerts.map(alert=><div className="atlasAlertLine" key={alert.id}><span>{alert.icon}</span><div><b>{alert.title}</b><small>{alert.detail}</small></div></div>)}
+            {!systemAlerts.length&&<p className="atlasHudEmpty good">Ingen aktive advarsler.</p>}
+          </section>
+        </div>
       </div>
 
-      <div className="glassPanel qaPanel">
-        <div className="panelHead"><div><p className="panelEyebrow">WORKSHOP QC</p><h3>Approval queue</h3></div><button onClick={()=>setActive('approvals')}>Open queue</button></div>
-        <div className="qaMetric"><span>Awaiting tack approval</span><strong>{tackApprovals.length}</strong></div>
-        <div className="qaMetric"><span>Awaiting final QC</span><strong>{finalApprovals.length}</strong></div>
-        <div className="qaMetric"><span>Workshop QC waiting</span><strong>{pendingApprovals.length}</strong></div>
-        <div className="qaMetric released"><span>Released today</span><strong>{releasedToday.length}</strong></div>
-        <div className="approvalMiniList">{pendingApprovals.slice(0,4).map(task=><div key={task.id}><span className="statusDot warning"/><div><b>{task.title}</b><small>{task.project} · {task.person}</small></div></div>)}{!pendingApprovals.length&&<p className="emptySmall">No approvals are waiting.</p>}</div>
-      </div>
-
-      <div className="glassPanel marinePanel">
-        <div className="panelHead"><div><p className="panelEyebrow">MARINE & PROJECTS</p><h3>Active project status</h3></div><button onClick={()=>setActive('projects')}>View all</button></div>
-        {activeProjects.slice(0,6).map(project=><article className="commandProjectRow" key={project.id}>
-          <div><b>{project.name}</b><small>{project.customer} · {project.location||'Location TBD'}</small></div>
-          <div className="commandProjectProgress"><div><span style={{width:`${project.progress||0}%`}}/></div><em>{project.progress||0}%</em></div>
-          <span className={`projectState ${String(project.status).toLowerCase().replaceAll(' ','-')}`}>{project.status}</span>
-        </article>)}
-      </div>
-
-      <div className="glassPanel machinePanel">
-        <div className="panelHead"><div><p className="panelEyebrow">WORKSHOP</p><h3>Machine status</h3></div><span>{machines.filter(machine=>['Service','Out of service'].includes(machine.status)).length} need attention</span></div>
-        <div className="commandMachineGrid">{machines.map(machine=><article key={machine.id} className={`commandMachine ${machineStatus(machine.status)}`}>
-          <span className="machineLight"/><div><b>{machine.name}</b><small>{machine.note}</small></div><em>{machine.status}</em>
-        </article>)}</div>
-      </div>
-
-      <div className="glassPanel materialPanel">
-        <div className="panelHead"><div><p className="panelEyebrow">SUPPLY</p><h3>Materials requiring action</h3></div><span>{materialAlerts.length}</span></div>
-        {materialAlerts.map(material=><div className="materialAlertRow" key={material.id}><div><b>{material.name}</b><small>Minimum {material.minimum} {material.unit}</small></div><strong>{material.quantity} {material.unit}</strong></div>)}
-        {!materialAlerts.length&&<p className="emptySmall">All materials are above minimum stock.</p>}
-      </div>
-
-      <div className="glassPanel priorityPanel">
-        <div className="panelHead"><div><p className="panelEyebrow">PRIORITIES</p><h3>Critical and overdue work</h3></div><span>{criticalJobs.length}</span></div>
-        {criticalJobs.slice(0,6).map(task=><article className="priorityCommandRow" key={task.id}><span className="alertIcon">!</span><div><b>{task.title}</b><small>{task.project} · {task.person} · {task.due}</small></div><em>{task.status}</em></article>)}
-        {!criticalJobs.length&&<p className="emptySmall">No critical jobs.</p>}
-      </div>
+      <footer className="atlasDeckStats">
+        <button onClick={()=>setActive('projects')}><small>AKTIVE PROJEKTER</small><b>{activeProjects.length}</b><span>{marineProjects.length} marine · {workshopProjects.length} workshop</span></button>
+        <button onClick={()=>setActive('approvals')}><small>GODKENDELSER</small><b>{pendingApprovals.length}</b><span>{tackApprovals.length} tack · {finalApprovals.length} final</span></button>
+        <button onClick={()=>setActive('crew')}><small>CREW I GANG</small><b>{peopleWorking.length}</b><span>{visiblePeople.length} vist live</span></button>
+        <button onClick={()=>setActive('inventory')}><small>LAGERADVARSLER</small><b>{materialAlerts.length}</b><span>{materials.length} varer overvåget</span></button>
+        <button onClick={()=>setActive('projects')}><small>DRONE / TILBUD</small><b>{openDrone.length+quoteReplies.length}</b><span>{openDrone.length} inspektioner · {quoteReplies.length} tilbud</span></button>
+      </footer>
     </section>
   </div>
 }
