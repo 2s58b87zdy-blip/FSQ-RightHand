@@ -21,10 +21,21 @@ const protectedRoutes = [
   'app/api/knowledge/route.js', 'app/api/knowledge/file/route.js',
   'app/api/job-photos/route.js', 'app/api/job-photos/file/route.js',
   'app/api/project-documents/route.js', 'app/api/project-documents/file/route.js',
+  'app/api/atlas/report/route.js',
   'app/api/diagnostics/database/route.js', 'app/api/diagnostics/blob/route.js'
 ];
 for (const file of protectedRoutes) {
   if (!/readSession/.test(read(file))) failures.push(`${file}: mangler readSession-kontrol`);
+}
+
+const privateCompanyRoutes = [
+  'app/api/atlas/report/route.js',
+  'app/api/knowledge/route.js',
+  'app/api/knowledge/file/route.js',
+  'app/api/state/route.js'
+];
+for (const file of privateCompanyRoutes) {
+  if (!/canAccessCompanyLibrary/.test(read(file))) failures.push(`${file}: mangler Company Library-adgangskontrol`);
 }
 
 if (failures.length) {

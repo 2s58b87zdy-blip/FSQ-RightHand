@@ -1,5 +1,5 @@
 import { getBlobContainerClient } from '../../../lib/blob';
-import { readSession, canManage } from '../../../lib/auth';
+import { readSession, canManage, canAccessCompanyLibrary } from '../../../lib/auth';
 import { canEditFolder, getStateValue } from '../../../lib/access';
 import { isAllowedDocument, safeSegment } from '../../../lib/files';
 
@@ -21,6 +21,9 @@ export async function POST(request) {
     const folders = await getStateValue('fsq-v72-knowledge-folders');
     const targetFolder = (Array.isArray(folders) ? folders : []).find(item => String(item?.id) === requestedFolderId);
     if (!targetFolder) return Response.json({ error: 'Knowledge-mappen findes ikke.' }, { status: 400 });
+    if (targetFolder.companyLibrary && !canAccessCompanyLibrary(session)) {
+      return Response.json({ error: 'Du har ikke adgang til Company Library.' }, { status: 403 });
+    }
     const accessFolder = String(targetFolder.accessFolder || 'Workshop');
     if (!canEditFolder(session, accessFolder)) return Response.json({ error: 'Du har ikke skriverettighed til denne mappe.' }, { status: 403 });
     const folder = safeSegment(targetFolder.name || form.get('folder'));
@@ -36,7 +39,8 @@ export async function POST(request) {
       blobHTTPHeaders: { blobContentType: file.type || 'application/octet-stream' },
       metadata: {
         folder, folderid: folderId, accessfolder: encodeURIComponent(accessFolder), machine,
-        uploadedby: safeSegment(session.name), originalname: name
+        uploadedby: safeSegment(session.name), originalname: name,
+        companylibrary: targetFolder.companyLibrary ? 'true' : 'false'
       }
     });
     return Response.json({ document: {
@@ -58,6 +62,13 @@ export async function DELETE(request) {
   try {
     const blob = new URL(request.url).searchParams.get('blob');
     if (!blob?.startsWith('knowledge/')) return Response.json({ error: 'Invalid blob name' }, { status: 400 });
+    const blobClient = container().getBlobClient(blob);
+    const properties = await blobClient.getProperties();
+    const folders = await getStateValue('fsq-v72-knowledge-folders');
+    const targetFolder = (Array.isArray(folders) ? folders : []).find(item => String(item?.id) === String(properties.metadata?.folderid || ''));
+    if ((targetFolder?.companyLibrary || properties.metadata?.companylibrary === 'true') && !canAccessCompanyLibrary(session)) {
+      return Response.json({ error: 'Forbidden' }, { status: 403 });
+    }
     await container().deleteBlob(blob, { deleteSnapshots: 'include' });
     return Response.json({ ok: true });
   } catch (error) {

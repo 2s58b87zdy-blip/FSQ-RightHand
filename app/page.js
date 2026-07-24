@@ -18,7 +18,7 @@ const FOLDER_ACCESS_LEVELS = ['No Access','Read','Edit','Full Control'];
 const MANAGED_FOLDERS = ['Projects','Workshop','Marine','Drawings','Procedures','QA / QC','Reports','Drone','Certificates','Templates','Finance','HR','Management','Contracts','Customers'];
 const DEFAULT_FOLDER_ACCESS = Object.fromEntries(MANAGED_FOLDERS.map(folder=>[folder,'No Access']));
 
-const APP_VERSION = '1.0 RC4.3';
+const APP_VERSION = '1.0 RC4.5';
 
 const USER_REGISTRY_DEFAULTS = [];
 
@@ -48,6 +48,7 @@ const NAV = [
   ['projects', 'Projects', '◫'],
   ['crew', 'People', '◉'],
   ['documents', 'Project Binder', '▱'],
+  ['companyLibrary', 'Company Library', '▧'],
   ['inventory', 'Lager Center', '▣'],
   ['planner', 'Operations Planner', '▦'],
   ['knowledge', 'Machine Binder', '▤'],
@@ -146,13 +147,28 @@ const DEFAULT_KNOWLEDGE_FOLDERS = [
   { id: 1, name: 'Machine Manuals', description: 'Manufacturer manuals, alarm lists and maintenance instructions', accessFolder: 'Workshop' },
   { id: 2, name: 'Scrubber Repairs', description: 'Repair methods, lessons learned and technical references', accessFolder: 'Marine' },
   { id: 3, name: 'WPS & WPQR', description: 'Approved welding procedures and qualification records', accessFolder: 'QA / QC' },
-  { id: 4, name: 'Safety Procedures', description: 'Risk assessments, LOTO and safe work instructions', accessFolder: 'Procedures' }
+  { id: 4, name: 'Safety Procedures', description: 'Risk assessments, LOTO and safe work instructions', accessFolder: 'Procedures' },
+  { id: 'company-quality', name: 'Welding & Quality', description: 'WPQR, WPS, certificates and approved quality documents', accessFolder: 'QA / QC', companyLibrary:true },
+  { id: 'company-hse', name: 'HSE & Risk Assessments', description: 'RA, method statements, LOTO and safety documents', accessFolder: 'Procedures', companyLibrary:true },
+  { id: 'company-engineering', name: 'Engineering & CAD', description: 'AutoCAD, Inventor, drawings and technical references', accessFolder: 'Drawings', companyLibrary:true },
+  { id: 'company-operations', name: 'Operations & Reports', description: 'Timesheets, Work Done and service reports', accessFolder: 'Reports', companyLibrary:true },
+  { id: 'company-templates', name: 'FSQ Templates', description: 'Approved layouts, packing lists and PO marking', accessFolder: 'Templates', companyLibrary:true }
 ];
 
 const DEFAULT_KNOWLEDGE_MACHINES = [];
 
 const DEFAULT_KNOWLEDGE_DOCUMENTS = [];
 const DEFAULT_KNOWLEDGE_SOLUTIONS = [];
+const DEFAULT_COMPANY_REPORTS = [];
+
+const FSQ_REPORT_TEMPLATES = [
+  { id:'service', name:'Service Report', hint:'Service, reparation og teknisk arbejde' },
+  { id:'workdone', name:'Work Done Report', hint:'Udført arbejde, timer, materialer og resultat' },
+  { id:'inspection', name:'Inspection Report', hint:'Inspektion, observationer og anbefalinger' },
+  { id:'risk', name:'Risk Assessment', hint:'Farer, risici og sikkerhedsforanstaltninger' },
+  { id:'packing', name:'Packing List', hint:'Emner, antal, mål, vægt og destination' },
+  { id:'po', name:'PO Marking', hint:'PO-reference, mærkning, kolli og leveringsdata' }
+];
 
 function getGreeting(name) {
   const hour = new Date().getHours();
@@ -186,6 +202,11 @@ function canManagePermissions(session) {
 function canViewJobArchive(session) {
   const name=String(session?.name||'').trim().toLowerCase();
   return canManagePermissions(session) || ['flemming','jakob'].includes(name);
+}
+
+function canViewCompanyLibrary(session) {
+  const name=String(session?.name||'').trim().toLowerCase();
+  return ['flemming','jakob'].includes(name);
 }
 
 function requirePermissionManager(session) {
@@ -510,10 +531,11 @@ function AppShell({ session, onLogout, users, setUsers }) {
   const [documents, setDocuments] = useStoredState('fsq-v40-documents', DEFAULT_DOCUMENTS);
   const [deletedProjects, setDeletedProjects] = useStoredState('fsq-v40-deleted-projects', []);
   const [plannerEntries, setPlannerEntries] = useStoredState('fsq-v71-planner', []);
-  const [knowledgeFolders, setKnowledgeFolders] = useStoredState('fsq-v72-knowledge-folders', DEFAULT_KNOWLEDGE_FOLDERS);
+  const [knowledgeFolders, setKnowledgeFolders, knowledgeFoldersHydrated] = useStoredState('fsq-v72-knowledge-folders', DEFAULT_KNOWLEDGE_FOLDERS);
   const [knowledgeMachines, setKnowledgeMachines] = useStoredState('fsq-v72-knowledge-machines', DEFAULT_KNOWLEDGE_MACHINES);
   const [knowledgeDocuments, setKnowledgeDocuments] = useStoredState('fsq-v72-knowledge-documents', DEFAULT_KNOWLEDGE_DOCUMENTS);
   const [knowledgeSolutions, setKnowledgeSolutions] = useStoredState('fsq-v72-knowledge-solutions', DEFAULT_KNOWLEDGE_SOLUTIONS);
+  const [companyReports, setCompanyReports] = useStoredState('fsq-v80-company-reports', DEFAULT_COMPANY_REPORTS);
 
   // Persistently remove jobs whose project no longer exists. Waiting for both
   // stores prevents a slow project load from being mistaken for deleted data.
@@ -574,7 +596,8 @@ function AppShell({ session, onLogout, users, setUsers }) {
   function handleGlobalVoiceCommand(transcript) {
     const command = transcript.toLowerCase();
     setVoiceMessage(transcript);
-    if (command.includes('projektmappe') || command.includes('dokument')) setActive('documents');
+    if ((command.includes('rapport') || command.includes('company library') || command.includes('firmadokument')) && canViewCompanyLibrary(session)) setActive('companyLibrary');
+    else if (command.includes('projektmappe') || command.includes('dokument')) setActive('documents');
     else if (command.includes('projekt')) setActive('projects');
     else if (command.includes('medarbejder') || command.includes('personale') || command.includes('folk')) setActive('crew');
     else if (command.includes('lager') || command.includes('gas') || command.includes('flaske') || command.includes('material')) setActive('inventory');
@@ -602,12 +625,18 @@ function AppShell({ session, onLogout, users, setUsers }) {
   const visibleTasks = isTechnician ? activeProjectTasks.filter(task => isTaskAssignedTo(task, session.name)) : activeProjectTasks;
   const assignedProjectNames = new Set(visibleTasks.map(task => task.project));
   const visibleProjects = isTechnician ? projects.filter(project => assignedProjectNames.has(project.name)) : projects;
-  const roleNav = NAV.filter(item => item[0] !== 'jobArchive' || canViewJobArchive(session));
+  const roleNav = NAV.filter(item =>
+    (item[0] !== 'jobArchive' || canViewJobArchive(session)) &&
+    (item[0] !== 'companyLibrary' || canViewCompanyLibrary(session))
+  );
   const visibleNav = isTechnician
     ? NAV.filter(item => ['myjobs','inventory','knowledge','ai'].includes(item[0]))
     : roleNav;
 
   useEffect(() => { setMobileNavOpen(false); }, [active]);
+  useEffect(() => {
+    if(active==='companyLibrary'&&!canViewCompanyLibrary(session))setActive(isTechnician?'myjobs':'dashboard');
+  },[active,session,isTechnician]);
   useEffect(() => {
     if (!mobileNavOpen) return;
     const previousOverflow=document.body.style.overflow;
@@ -725,13 +754,14 @@ function AppShell({ session, onLogout, users, setUsers }) {
         {active === 'projects' && <Projects projects={projects} setProjects={setProjects} deletedProjects={deletedProjects} setDeletedProjects={setDeletedProjects} setActive={setActive} setActiveProjectId={setActiveProjectId} tasks={activeProjectTasks} setTasks={setTasks} people={people} users={users} setPlannerEntries={setPlannerEntries} />}
         {active === 'projectHub' && <ProjectHub session={session} users={users} project={projects.find(p=>p.id===activeProjectId)} projects={projects} setProjects={setProjects} people={people} setPeople={setPeople} tasks={activeProjectTasks} setTasks={setTasks} documents={documents} materials={materials} setMaterials={setMaterials} quotes={quotes} reports={reports} setActive={setActive} deletedProjects={deletedProjects} setDeletedProjects={setDeletedProjects} setActiveProjectId={setActiveProjectId} droneInspections={droneInspections} setDroneInspections={setDroneInspections} setPlannerEntries={setPlannerEntries} />}
         {active === 'documents' && <ProjectBinder documents={documents} setDocuments={setDocuments} projects={projects} session={session} />}
+        {active === 'companyLibrary' && canViewCompanyLibrary(session) && <CompanyLibrary session={session} projects={projects} folders={knowledgeFolders} setFolders={setKnowledgeFolders} foldersHydrated={knowledgeFoldersHydrated} documents={knowledgeDocuments} setDocuments={setKnowledgeDocuments} reports={companyReports} setReports={setCompanyReports} />}
         {active === 'inventory' && <InventoryCenter session={session} />}
         {active === 'planner' && <OperationsPlanner people={people} users={users} projects={projects} entries={plannerEntries} setEntries={setPlannerEntries} />}
         {active === 'knowledge' && <KnowledgeBase session={session} users={users} folders={knowledgeFolders} setFolders={setKnowledgeFolders} machines={knowledgeMachines} setMachines={setKnowledgeMachines} documents={knowledgeDocuments} setDocuments={setKnowledgeDocuments} solutions={knowledgeSolutions} setSolutions={setKnowledgeSolutions} />}
         {active === 'health' && <SystemHealth session={session} users={users} projects={projects} documents={documents} knowledgeDocuments={knowledgeDocuments} knowledgeMachines={knowledgeMachines} />}
         {active === 'admin' && <Admin session={session} users={users} setUsers={setUsers} people={people} setPeople={setPeople} machines={knowledgeMachines} setMachines={setKnowledgeMachines} materials={materials} setMaterials={setMaterials} />}
         {active === 'ai' && <AI session={session} chat={chat} setChat={setChat} voice={voice} stats={stats} context={{projects:visibleProjects,tasks:visibleTasks,people,users,machines:knowledgeMachines,materials,documents,knowledgeDocuments,knowledgeMachines,knowledgeSolutions}} onActions={executeAtlasActions} />}
-        {!['dashboard','myjobs','approvals','jobArchive','crew','projects','projectHub','documents','inventory','planner','health','admin','ai'].includes(active) && <ModulePlaceholder title={NAV.find(n=>n[0]===active)?.[1]} />}
+        {!['dashboard','myjobs','approvals','jobArchive','crew','projects','projectHub','documents','companyLibrary','inventory','planner','knowledge','health','admin','ai'].includes(active) && <ModulePlaceholder title={NAV.find(n=>n[0]===active)?.[1]} />}
       </main>
     </div>
   );
@@ -2410,6 +2440,221 @@ function Admin({session,users,setUsers,people,setPeople,machines,setMachines,mat
 }
 
 
+function CompanyLibrary({session,projects,folders,setFolders,foldersHydrated,documents,setDocuments,reports,setReports}) {
+  const [tab,setTab]=useState('generate');
+  const [selectedFolder,setSelectedFolder]=useState(null);
+  const [selectedReport,setSelectedReport]=useState(null);
+  const [uploading,setUploading]=useState(false);
+  const [generating,setGenerating]=useState(false);
+  const [message,setMessage]=useState('');
+  const [dragActive,setDragActive]=useState(false);
+  const [newFolderName,setNewFolderName]=useState('');
+  const [attachments,setAttachments]=useState([]);
+  const [form,setForm]=useState({
+    reportType:'workdone',project:'',customer:'',reference:'',notes:''
+  });
+  const canManage=canManagePermissions(session);
+  const canApprove=canManage||canApproveTackAndComplete(session);
+  const defaultCompanyFolders=DEFAULT_KNOWLEDGE_FOLDERS.filter(folder=>folder.companyLibrary);
+  const companyFolders=folders.filter(folder=>folder.companyLibrary);
+  const companyFolderIds=new Set(companyFolders.map(folder=>String(folder.id)));
+  const companyDocuments=documents.filter(document=>companyFolderIds.has(String(document.folderId)));
+  const currentFolder=companyFolders.find(folder=>String(folder.id)===String(selectedFolder));
+  const currentDocs=companyDocuments.filter(document=>String(document.folderId)===String(selectedFolder));
+  const currentReport=reports.find(report=>String(report.id)===String(selectedReport))||null;
+
+  useEffect(()=>{
+    if(!foldersHydrated||!canManage||companyFolders.length)return;
+    const existingIds=new Set(folders.map(folder=>String(folder.id)));
+    setFolders(current=>[...current,...defaultCompanyFolders.filter(folder=>!existingIds.has(String(folder.id)))]);
+  },[foldersHydrated,canManage,companyFolders.length]);
+  useEffect(()=>{
+    if(!companyFolders.some(folder=>String(folder.id)===String(selectedFolder)))setSelectedFolder(companyFolders[0]?.id||null);
+  },[folders,selectedFolder]);
+  useEffect(()=>{
+    if(selectedReport&&!reports.some(report=>String(report.id)===String(selectedReport)))setSelectedReport(null);
+  },[reports,selectedReport]);
+
+  function addFolder(){
+    if(!canManage)return setMessage('Kun Flemming og Jakob kan oprette firmamapper.');
+    const name=newFolderName.trim();
+    if(!name)return setMessage('Skriv et mappenavn.');
+    const folder={id:`company-${Date.now()}`,name,description:'FSQ Company Library',accessFolder:'Reports',companyLibrary:true};
+    setFolders(current=>[...current,folder]);setSelectedFolder(folder.id);setNewFolderName('');setMessage('Firmamappen er oprettet.');
+  }
+
+  async function uploadFiles(fileList){
+    const files=[...fileList];
+    if(!files.length)return;
+    if(!selectedFolder)return setMessage('Vælg en mappe først.');
+    setUploading(true);setMessage('');
+    for(const file of files){
+      try{
+        const upload=new FormData();
+        upload.append('file',file);
+        upload.append('folder',currentFolder?.name||'Company Library');
+        upload.append('folderId',String(selectedFolder));
+        upload.append('accessFolder',currentFolder?.accessFolder||'Reports');
+        upload.append('machine','Company');
+        const response=await fetch('/api/knowledge',{method:'POST',body:upload});
+        const data=await response.json().catch(()=>({}));
+        if(!response.ok)throw new Error(data.error||'Upload failed');
+        const document={...data.document,id:`company-doc-${Date.now()}-${Math.random()}`,folderId:selectedFolder,machineId:null,companyLibrary:true,status:'ATLAS Ready'};
+        setDocuments(current=>[...current,document]);
+      }catch(error){setMessage(`${file.name}: ${error.message}`)}
+    }
+    setUploading(false);setMessage(current=>current||'Filerne er gemt i Company Library og klar til ATLAS.');
+  }
+
+  function removeAttachment(index){setAttachments(current=>current.filter((_,itemIndex)=>itemIndex!==index))}
+
+  function imageDataForPrint(file){
+    if(!file.type.startsWith('image/'))return Promise.resolve(null);
+    return new Promise(resolve=>{
+      const reader=new FileReader();
+      reader.onload=()=>{
+        const image=new Image();
+        image.onload=()=>{
+          const max=900;
+          const scale=Math.min(1,max/Math.max(image.width,image.height));
+          const canvas=document.createElement('canvas');
+          canvas.width=Math.max(1,Math.round(image.width*scale));
+          canvas.height=Math.max(1,Math.round(image.height*scale));
+          canvas.getContext('2d').drawImage(image,0,0,canvas.width,canvas.height);
+          resolve({name:file.name,dataUrl:canvas.toDataURL('image/jpeg',.6)});
+        };
+        image.onerror=()=>resolve(null);
+        image.src=reader.result;
+      };
+      reader.onerror=()=>resolve(null);
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function generateReport(){
+    if(!form.notes.trim()&&!attachments.length)return setMessage('Tilføj noter, tekst, billeder eller bilag først.');
+    setGenerating(true);setMessage('ATLAS læser materialet og bygger et rapportudkast…');
+    try{
+      const payload=new FormData();
+      Object.entries(form).forEach(([key,value])=>payload.append(key,value));
+      attachments.forEach(file=>payload.append('files',file));
+      const response=await fetch('/api/atlas/report',{method:'POST',body:payload});
+      const data=await response.json().catch(()=>({}));
+      if(!response.ok)throw new Error(data.error||'Rapporten kunne ikke genereres.');
+      const images=(await Promise.all(attachments.slice(0,6).map(imageDataForPrint))).filter(Boolean);
+      const template=FSQ_REPORT_TEMPLATES.find(item=>item.id===form.reportType);
+      const draft={
+        id:`report-${Date.now()}`,templateId:form.reportType,templateName:template?.name||'FSQ Report',
+        project:form.project,customer:form.customer,reference:form.reference,
+        ...data.report,attachments:data.sourceNames||attachments.map(file=>file.name),images,
+        status:'Draft',createdBy:session.name,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),
+        atlasModel:data.model||''
+      };
+      setReports(current=>[...current,draft]);
+      setSelectedReport(draft.id);setTab('review');setMessage('ATLAS-kladden er klar. Gennemlæs, ret og godkend den før print.');
+    }catch(error){setMessage(error.message)}
+    finally{setGenerating(false)}
+  }
+
+  function updateReport(patch){
+    if(!currentReport)return;
+    setReports(current=>current.map(report=>String(report.id)===String(currentReport.id)
+      ?{...report,...patch,status:report.status==='Approved'?'Draft':report.status,approvedBy:undefined,approvedAt:undefined,updatedAt:new Date().toISOString()}
+      :report));
+  }
+
+  function approveReport(){
+    if(!currentReport||!canApprove)return setMessage('Du har ikke rettighed til at godkende rapporter.');
+    const reportText=JSON.stringify(currentReport);
+    if(reportText.includes('[MANGLER')&&!window.confirm('Rapporten indeholder stadig felter markeret MANGLER. Vil du godkende alligevel?'))return;
+    setReports(current=>current.map(report=>String(report.id)===String(currentReport.id)?{
+      ...report,status:'Approved',approvedBy:session.name,approvedAt:new Date().toISOString(),updatedAt:new Date().toISOString()
+    }:report));
+    setMessage('Rapporten er godkendt. Print og Word-download er nu åbnet.');
+  }
+
+  function escapeHtml(value=''){
+    return String(value).replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+  }
+  function paragraphs(value=''){
+    return escapeHtml(value).replace(/\n/g,'<br>');
+  }
+  function reportHtml(report){
+    const sections=(report.sections||[]).map(section=>`<section><h2>${escapeHtml(section.heading)}</h2><p>${paragraphs(section.body)}</p></section>`).join('');
+    const actions=(report.actionItems||[]).length?`<section><h2>Actions / opfølgning</h2><ul>${report.actionItems.map(item=>`<li>${escapeHtml(item)}</li>`).join('')}</ul></section>`:'';
+    const images=(report.images||[]).length?`<section class="photos"><h2>Fotodokumentation</h2>${report.images.map(image=>`<figure><img src="${image.dataUrl}" alt=""><figcaption>${escapeHtml(image.name)}</figcaption></figure>`).join('')}</section>`:'';
+    return `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(report.title)}</title><style>
+body{font-family:Arial,sans-serif;color:#14202b;margin:34px;line-height:1.45}header{display:flex;justify-content:space-between;border-bottom:4px solid #0876bb;padding-bottom:16px;margin-bottom:24px}header img{width:115px;height:auto}h1{margin:0;font-size:25px;color:#082b48}h2{font-size:16px;color:#0876bb;border-bottom:1px solid #c7d8e5;padding-bottom:5px;margin-top:24px}.meta{display:grid;grid-template-columns:1fr 1fr;gap:7px 25px;background:#eef5f9;padding:14px;margin-bottom:22px}.meta b{color:#476779}p{white-space:normal}.status{color:#168053;font-weight:bold}.photos{display:grid;grid-template-columns:1fr 1fr;gap:15px}.photos h2{grid-column:1/-1}.photos figure{margin:0;break-inside:avoid}.photos img{max-width:100%;max-height:370px}.photos figcaption{font-size:11px;color:#567;margin-top:4px}footer{margin-top:35px;border-top:1px solid #aac1d0;padding-top:12px;font-size:11px;color:#567}@media print{body{margin:15mm}.photos img{max-height:90mm}}</style></head><body>
+<header><img src="${window.location.origin}/fsq-logo-clean.webp" alt="FSQ"><div><h1>${escapeHtml(report.title||report.templateName)}</h1><span class="status">GODKENDT FSQ-DOKUMENT</span></div></header>
+<div class="meta"><span><b>Layout:</b> ${escapeHtml(report.templateName)}</span><span><b>Reference / PO:</b> ${escapeHtml(report.reference||'—')}</span><span><b>Projekt:</b> ${escapeHtml(report.project||'—')}</span><span><b>Kunde:</b> ${escapeHtml(report.customer||'—')}</span><span><b>Udarbejdet af:</b> ${escapeHtml(report.createdBy)}</span><span><b>Godkendt af:</b> ${escapeHtml(report.approvedBy||'—')}</span><span><b>Dato:</b> ${escapeHtml(new Date(report.createdAt).toLocaleDateString('da-DK'))}</span><span><b>Godkendt:</b> ${report.approvedAt?escapeHtml(new Date(report.approvedAt).toLocaleString('da-DK')):'—'}</span></div>
+<section><h2>Resumé</h2><p>${paragraphs(report.summary)}</p></section>${sections}${actions}
+<section><h2>Konklusion</h2><p>${paragraphs(report.conclusion)}</p></section>${images}
+<footer>FSQ Company Library · Dokument-ID ${escapeHtml(report.id)} · Genereret som kladde af ATLAS og menneskeligt godkendt.</footer>
+</body></html>`;
+  }
+  function requireApproved(){
+    if(!currentReport||currentReport.status!=='Approved'){setMessage('Rapporten skal godkendes før print eller download.');return false}
+    return true;
+  }
+  function printReport(){
+    if(!requireApproved())return;
+    const blob=new Blob([reportHtml(currentReport)],{type:'text/html'});
+    const url=URL.createObjectURL(blob);
+    const popup=window.open(url,'_blank');
+    if(!popup)return setMessage('Browseren blokerede printvinduet. Tillad pop op-vinduer og prøv igen.');
+    setTimeout(()=>{popup.focus();popup.print();setTimeout(()=>URL.revokeObjectURL(url),30000)},700);
+  }
+  function downloadReport(){
+    if(!requireApproved())return;
+    const blob=new Blob([reportHtml(currentReport)],{type:'application/msword'});
+    const url=URL.createObjectURL(blob);
+    const link=document.createElement('a');
+    link.href=url;link.download=`${(currentReport.reference||currentReport.title||'FSQ-Report').replace(/[^\wæøåÆØÅ-]+/g,'-')}.doc`;
+    link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+  }
+
+  return <div className="content companyLibraryPage">
+    <div className="sectionIntro companyLibraryIntro"><div><p className="eyebrow">FSQ CONTROLLED DOCUMENTS</p><h1>Company Library</h1><p>Firmafiler, godkendte layouts og ATLAS-rapporter samlet ét sted.</p></div><div className="knowledgeStatus"><i/> {companyDocuments.length} filer · {reports.filter(report=>report.status==='Approved').length} godkendte rapporter</div></div>
+    {message&&<div className="documentMessage">{message}</div>}
+    <div className="knowledgeTabs companyTabs">{[['generate','Ny ATLAS-rapport'],['review','Gennemlæs & godkend'],['library','Firmadokumenter'],['archive','Rapportarkiv']].map(([id,label])=><button key={id} className={tab===id?'active':''} onClick={()=>setTab(id)}>{label}</button>)}</div>
+
+    {tab==='generate'&&<div className="reportStudioGrid">
+      <section className="panel reportSetup">
+        <div className="panelHead"><div><p className="panelEyebrow">1 · VÆLG LAYOUT</p><h3>FSQ dokumenttype</h3></div></div>
+        <div className="reportTemplateGrid">{FSQ_REPORT_TEMPLATES.map(template=><button key={template.id} className={form.reportType===template.id?'active':''} onClick={()=>setForm(current=>({...current,reportType:template.id}))}><b>{template.name}</b><small>{template.hint}</small></button>)}</div>
+        <div className="reportMetaGrid"><label>Projekt<select value={form.project} onChange={event=>setForm({...form,project:event.target.value})}><option value="">Vælg eller skriv i noterne</option>{projects.map(project=><option key={project.id}>{project.name}</option>)}</select></label><label>Kunde<input value={form.customer} onChange={event=>setForm({...form,customer:event.target.value})} placeholder="Kundenavn"/></label><label>Reference / PO<input value={form.reference} onChange={event=>setForm({...form,reference:event.target.value})} placeholder="PO- eller jobnummer"/></label></div>
+      </section>
+      <section className="panel reportEvidence">
+        <div className="panelHead"><div><p className="panelEyebrow">2 · MATERIALE TIL ATLAS</p><h3>Noter, tekst, billeder og bilag</h3></div><span>{attachments.length}</span></div>
+        <textarea rows="11" value={form.notes} onChange={event=>setForm({...form,notes:event.target.value})} placeholder="Skriv eller indsæt dine noter her. Fx udført arbejde, observationer, mål, materialer, timer og hvad billederne viser…"/>
+        <label className={`companyDropZone ${dragActive?'dragActive':''}`} onDragEnter={event=>{event.preventDefault();setDragActive(true)}} onDragOver={event=>event.preventDefault()} onDragLeave={()=>setDragActive(false)} onDrop={event=>{event.preventDefault();setDragActive(false);setAttachments(current=>[...current,...event.dataTransfer.files].slice(0,12))}}>
+          <span>＋</span><b>Træk billeder og dokumenter hertil</b><small>JPG, PNG, WEBP, PDF, Word, Excel og tekst · maks. 12 filer</small>
+          <input type="file" multiple accept=".jpg,.jpeg,.png,.webp,.pdf,.docx,.xlsx,.txt,.csv,.md" onChange={event=>{setAttachments(current=>[...current,...event.target.files].slice(0,12));event.target.value=''}}/>
+        </label>
+        <div className="reportAttachmentList">{attachments.map((file,index)=><div key={`${file.name}-${index}`}><span>{file.type.startsWith('image/')?'▧':'▤'}</span><div><b>{file.name}</b><small>{Math.max(1,Math.ceil(file.size/1024))} KB</small></div><button onClick={()=>removeAttachment(index)}>×</button></div>)}</div>
+        <button className="primaryBtn generateReportBtn" disabled={generating} onClick={generateReport}>{generating?'ATLAS bygger rapporten…':'Generér rapportudkast med ATLAS →'}</button>
+      </section>
+    </div>}
+
+    {tab==='review'&&<div className="reportReviewGrid">
+      <aside className="panel reportDraftList"><div className="panelHead"><h3>Rapportkladder</h3><span>{reports.length}</span></div>{reports.slice().reverse().map(report=><button key={report.id} className={String(report.id)===String(selectedReport)?'active':''} onClick={()=>setSelectedReport(report.id)}><div><b>{report.title||report.templateName}</b><small>{report.reference||report.project||'Uden reference'} · {report.createdBy}</small></div><em className={report.status==='Approved'?'approved':''}>{report.status}</em></button>)}{!reports.length&&<div className="empty">Generér den første rapport under “Ny ATLAS-rapport”.</div>}</aside>
+      <section className="panel reportEditor">{currentReport?<><div className="reportApprovalBar"><div><span className={`reportState ${currentReport.status==='Approved'?'approved':''}`}>{currentReport.status}</span><small>{currentReport.status==='Approved'?`Godkendt af ${currentReport.approvedBy}`:'ATLAS-kladden skal kontrolleres af et menneske'}</small></div><div><button disabled={currentReport.status!=='Approved'} onClick={printReport}>Print</button><button disabled={currentReport.status!=='Approved'} onClick={downloadReport}>Download Word</button>{canApprove&&<button className="primaryBtn" onClick={approveReport}>Godkend rapport</button>}</div></div>
+        <label>Titel<input value={currentReport.title||''} onChange={event=>updateReport({title:event.target.value})}/></label>
+        <label>Resumé<textarea rows="5" value={currentReport.summary||''} onChange={event=>updateReport({summary:event.target.value})}/></label>
+        <div className="reportSections">{(currentReport.sections||[]).map((section,index)=><article key={index}><input value={section.heading||''} onChange={event=>updateReport({sections:currentReport.sections.map((item,itemIndex)=>itemIndex===index?{...item,heading:event.target.value}:item)})}/><textarea rows="6" value={section.body||''} onChange={event=>updateReport({sections:currentReport.sections.map((item,itemIndex)=>itemIndex===index?{...item,body:event.target.value}:item)})}/></article>)}</div>
+        <label>Actions / opfølgning<textarea rows="4" value={(currentReport.actionItems||[]).join('\n')} onChange={event=>updateReport({actionItems:event.target.value.split('\n').filter(Boolean)})}/></label>
+        <label>Konklusion<textarea rows="4" value={currentReport.conclusion||''} onChange={event=>updateReport({conclusion:event.target.value})}/></label>
+        {currentReport.verificationNotes&&<div className="atlasVerification"><b>ATLAS: kontrollér før godkendelse</b><p>{currentReport.verificationNotes}</p></div>}
+        {(currentReport.images||[]).length>0&&<div className="reportPhotoStrip">{currentReport.images.map((image,index)=><figure key={index}><img src={image.dataUrl} alt={image.name}/><figcaption>{image.name}</figcaption></figure>)}</div>}
+      </>:<div className="reportEmpty"><span>ATLAS</span><h3>Vælg en rapportkladde</h3><p>Her kan du gennemlæse, rette og godkende før print.</p></div>}</section>
+    </div>}
+
+    {tab==='library'&&<div className="companyLibraryGrid"><aside className="panel companyFolders"><div className="panelHead"><h3>Firmamapper</h3><span>{companyFolders.length}</span></div>{companyFolders.map(folder=><button key={folder.id} className={String(folder.id)===String(selectedFolder)?'active':''} onClick={()=>setSelectedFolder(folder.id)}><span>▤</span><div><b>{folder.name}</b><small>{companyDocuments.filter(document=>String(document.folderId)===String(folder.id)).length} filer</small></div></button>)}{canManage&&<div className="companyFolderCreate"><input value={newFolderName} onChange={event=>setNewFolderName(event.target.value)} placeholder="Ny firmamappe"/><button onClick={addFolder}>Opret</button></div>}</aside><section className="panel companyFiles" onDragOver={event=>event.preventDefault()} onDrop={event=>{event.preventDefault();uploadFiles(event.dataTransfer.files)}}><div className="panelHead"><div><h3>{currentFolder?.name||'Vælg mappe'}</h3><small>{currentFolder?.description}</small></div><label className="binderUpload">{uploading?'Uploader…':'+ Upload filer'}<input disabled={uploading||!selectedFolder} type="file" multiple onChange={event=>{uploadFiles(event.target.files);event.target.value=''}}/></label></div><div className="companyFileDrop">Træk filer direkte ind i vinduet</div><div className="companyFileList">{currentDocs.map(document=><a key={document.id} href={document.url} target="_blank" rel="noreferrer"><span>▧</span><div><b>{document.name}</b><small>{document.size} · {document.uploadedBy} · {document.status}</small></div><em>Åbn</em></a>)}{!currentDocs.length&&<div className="empty">Denne mappe er tom.</div>}</div></section></div>}
+
+    {tab==='archive'&&<section className="panel reportArchive"><div className="panelHead"><h3>Godkendte FSQ-rapporter</h3><span>{reports.filter(report=>report.status==='Approved').length}</span></div>{reports.filter(report=>report.status==='Approved').slice().reverse().map(report=><button key={report.id} onClick={()=>{setSelectedReport(report.id);setTab('review')}}><div><b>{report.title}</b><small>{report.templateName} · {report.project||'Generel'} · {report.reference||'uden reference'}</small></div><span>{report.approvedBy}<small>{new Date(report.approvedAt).toLocaleDateString('da-DK')}</small></span></button>)}{!reports.some(report=>report.status==='Approved')&&<div className="empty">Ingen rapporter er godkendt endnu.</div>}</section>}
+  </div>;
+}
+
 function KnowledgeBase({session,users,folders,setFolders,machines,setMachines,documents,setDocuments,solutions,setSolutions}) {
   const [tab,setTab]=useState('machineBinder');
   const [selectedFolder,setSelectedFolder]=useState(folders.find(f=>!f.machineId)?.id||null);
@@ -2429,7 +2674,7 @@ function KnowledgeBase({session,users,folders,setFolders,machines,setMachines,do
   const canManage=canManagePermissions(session);
   const DEFAULT_MACHINE_FOLDERS=['Manuals','Electrical Drawings','Maintenance','Spare Parts','Service History','Software','Photos'];
 
-  const libraryFolders=folders.filter(f=>!f.machineId);
+  const libraryFolders=folders.filter(f=>!f.machineId&&!f.companyLibrary);
   const machineFolders=folders.filter(f=>String(f.machineId)===String(selectedMachine));
   const currentMachine=machines.find(m=>String(m.id)===String(selectedMachine));
   const currentMachineFolder=machineFolders.find(f=>String(f.id)===String(selectedMachineFolder));

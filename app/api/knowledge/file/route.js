@@ -1,5 +1,5 @@
 import { getBlobContainerClient } from '../../../../lib/blob';
-import { readSession } from '../../../../lib/auth';
+import { canAccessCompanyLibrary, readSession } from '../../../../lib/auth';
 import { canReadFolder, getStateValue } from '../../../../lib/access';
 import { downloadHeaders } from '../../../../lib/files';
 
@@ -17,6 +17,9 @@ export async function GET(request) {
     const properties = await client.getProperties();
     const folders = await getStateValue('fsq-v72-knowledge-folders');
     const currentFolder = (Array.isArray(folders) ? folders : []).find(item => String(item?.id) === String(properties.metadata?.folderid || ''));
+    if ((currentFolder?.companyLibrary || properties.metadata?.companylibrary === 'true') && !canAccessCompanyLibrary(session)) {
+      return Response.json({ error: 'Forbidden' }, { status: 403 });
+    }
     let storedAccessFolder = 'Workshop';
     try { storedAccessFolder = decodeURIComponent(properties.metadata?.accessfolder || 'Workshop'); } catch {}
     const accessFolder = currentFolder?.accessFolder || storedAccessFolder;

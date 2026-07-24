@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { readSession, canManage } from '../../../lib/auth';
+import { canAccessCompanyLibrary, readSession, canManage } from '../../../lib/auth';
 import { ensureSchema, sql } from '../../../lib/db';
 import { canReadFolder, getAllowedProjectNames, getStateValue, hasPermission } from '../../../lib/access';
 import { isTaskAssignedTo } from '../../../lib/taskAssignments';
@@ -10,7 +10,7 @@ const STATE_KEYS = new Set([
   'fsq-v40-machines', 'fsq-v40-materials', 'fsq-v40-people', 'fsq-v40-projects',
   'fsq-v40-quotes', 'fsq-v40-reports', 'fsq-v40-tasks', 'fsq-v50-custom-folders',
   'fsq-v71-planner', 'fsq-v72-knowledge-documents', 'fsq-v72-knowledge-folders',
-  'fsq-v72-knowledge-machines', 'fsq-v72-knowledge-solutions'
+  'fsq-v72-knowledge-machines', 'fsq-v72-knowledge-solutions', 'fsq-v80-company-reports'
 ]);
 
 const ROLE_WRITE_KEYS = {
@@ -24,20 +24,24 @@ function forbidden() { return NextResponse.json({ error: 'Forbidden' }, { status
 function projectName(item) { return String(item?.project || item?.projectName || '').trim(); }
 
 async function filterForSession(key, value, session) {
+  if (key === 'fsq-v80-company-reports') return value;
+  if (key === 'fsq-v72-knowledge-folders' && Array.isArray(value)) {
+    if (canAccessCompanyLibrary(session)) return value;
+    return value.filter(folder => !folder?.companyLibrary && canReadFolder(session, folder?.accessFolder || 'Workshop'));
+  }
+  if (key === 'fsq-v72-knowledge-documents' && Array.isArray(value)) {
+    const folders = await getStateValue('fsq-v72-knowledge-folders');
+    const allowedIds = new Set((Array.isArray(folders) ? folders : [])
+      .filter(folder => (!folder?.companyLibrary || canAccessCompanyLibrary(session)) && canReadFolder(session, folder?.accessFolder || 'Workshop'))
+      .map(folder => String(folder.id)));
+    return value.filter(document => allowedIds.has(String(document?.folderId)));
+  }
   if (canManage(session) || hasPermission(session, 'view_all_projects')) return value;
   if (!Array.isArray(value)) return value;
   const userName = String(session.name || '').trim().toLowerCase();
   if (key === 'fsq-v40-tasks') return value.filter(item => isTaskAssignedTo(item, userName));
   if (key === 'fsq-v40-people') return value.filter(item => String(item?.name || '').trim().toLowerCase() === userName);
   if (key === 'fsq-v71-planner') return value.filter(item => String(item?.person || '').trim().toLowerCase() === userName);
-  if (key === 'fsq-v72-knowledge-folders') return value.filter(folder => canReadFolder(session, folder?.accessFolder || 'Workshop'));
-  if (key === 'fsq-v72-knowledge-documents') {
-    const folders = await getStateValue('fsq-v72-knowledge-folders');
-    const allowedIds = new Set((Array.isArray(folders) ? folders : [])
-      .filter(folder => canReadFolder(session, folder?.accessFolder || 'Workshop'))
-      .map(folder => String(folder.id)));
-    return value.filter(document => allowedIds.has(String(document?.folderId)));
-  }
   if (['fsq-v40-projects','fsq-v40-documents','fsq-v40-reports','fsq-v40-quotes','fsq-v40-drone-inspections'].includes(key)) {
     const allowed = await getAllowedProjectNames(session);
     if (allowed === null) return value;
@@ -66,6 +70,30 @@ async function mergeScopedValue(key, incoming, session) {
     return existing.map(item => replacements.get(String(item.id)) || item);
   }
 
+  if (key === 'fsq-v80-company-reports') {
+    const canApprove = hasPermission(session, 'approve_final');
+    const existingById = new Map(existing.map(item => [String(item?.id), item]));
+    const incomingById = new Map(incoming.map(item => [String(item?.id), item]));
+    for (const item of incoming) {
+      const prior = existingById.get(String(item?.id));
+      if (prior && String(prior.createdBy || '').trim().toLowerCase() !== userName) {
+        throw Object.assign(new Error('Du kan kun redigere dine egne rapportkladder.'), { status: 403 });
+      }
+      if (!prior && String(item?.createdBy || '').trim().toLowerCase() !== userName) {
+        throw Object.assign(new Error('Rapporten skal oprettes i dit eget navn.'), { status: 403 });
+      }
+    }
+    const untouched = existing.filter(item => !incomingById.has(String(item?.id)));
+    const owned = incoming.map(item => {
+      const prior = existingById.get(String(item?.id));
+      if (!canApprove && item?.status === 'Approved' && prior?.status !== 'Approved') {
+        return { ...item, status:'Draft', approvedBy:undefined, approvedAt:undefined };
+      }
+      return item;
+    });
+    return [...untouched, ...owned].slice(-1000);
+  }
+
   if (key === 'fsq-v72-knowledge-documents' || key === 'fsq-v72-knowledge-solutions') {
     const existingIds = new Set(existing.map(item => String(item?.id)));
     const additions = incoming.filter(item => !existingIds.has(String(item?.id))).map(item => {
@@ -85,6 +113,7 @@ export async function GET(request) {
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const key = new URL(request.url).searchParams.get('key');
   if (!STATE_KEYS.has(key)) return NextResponse.json({ error: 'Unknown state key' }, { status: 400 });
+  if (key === 'fsq-v80-company-reports' && !canAccessCompanyLibrary(session)) return forbidden();
   const value = await getStateValue(key);
   return NextResponse.json({ value: await filterForSession(key, value, session) }, { headers: { 'Cache-Control': 'no-store' } });
 }
@@ -95,13 +124,14 @@ export async function PUT(request) {
   try {
     const { key, value } = await request.json();
     if (!STATE_KEYS.has(key)) return NextResponse.json({ error: 'Unknown state key' }, { status: 400 });
+    if (key === 'fsq-v80-company-reports' && !canAccessCompanyLibrary(session)) return forbidden();
     const serialized = JSON.stringify(value);
     if (serialized.length > 5 * 1024 * 1024) return NextResponse.json({ error: 'State payload is too large' }, { status: 413 });
 
     const roleKeys = ROLE_WRITE_KEYS[session.role];
     let storedValue = value;
     if (!canManage(session) && !roleKeys?.has(key)) {
-      if (!['fsq-v40-tasks','fsq-v72-knowledge-documents','fsq-v72-knowledge-solutions'].includes(key)) return forbidden();
+      if (!['fsq-v40-tasks','fsq-v72-knowledge-documents','fsq-v72-knowledge-solutions','fsq-v80-company-reports'].includes(key)) return forbidden();
       storedValue = await mergeScopedValue(key, value, session);
     }
 

@@ -1,0 +1,7 @@
+FSQ Command 1.0 RC4.5
+
+Private Company Library
+- Company Library is visible only to Flemming and Jakob.
+- Employees no longer see the menu item on desktop or mobile.
+- Report generation, report state and stored company files are protected server-side.
+- Direct API and file-link access is denied to other users.

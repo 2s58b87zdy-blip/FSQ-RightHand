@@ -21,6 +21,8 @@ assert.match(extracted, /Wind Orca/);
 assert.match(extracted, /Ready/);
 
 assert.equal(isAllowedDocument('manual.pdf'), true);
+assert.equal(isAllowedDocument('drawing.dwg'), true);
+assert.equal(isAllowedDocument('site-photo.jpg'), true);
 assert.equal(isAllowedDocument('payload.html'), false);
 assert.equal(safeSegment('../../secret'), '..-..-secret');
 assert.equal(detectImageMime(Buffer.from([0xff,0xd8,0xff,0x00,0,0,0,0,0,0,0,0])), 'image/jpeg');
@@ -74,6 +76,14 @@ assert.doesNotMatch(myJobsSource, /machineDragActive|machineDragDepth/);
 assert.match(knowledgeSource, /const \[machineDragActive,setMachineDragActive\]=useState\(false\)/);
 assert.match(knowledgeSource, /onDrop=\{machineDrop\}/);
 assert.match(pageSource, /\['knowledge', 'Machine Binder', '▤'\]/);
+assert.match(pageSource, /\['companyLibrary', 'Company Library', '▧'\]/);
+assert.match(pageSource, /function canViewCompanyLibrary\(/);
+assert.match(pageSource, /item\[0\] !== 'companyLibrary' \|\| canViewCompanyLibrary\(session\)/);
+assert.doesNotMatch(pageSource, /\['myjobs','companyLibrary','inventory'/);
+assert.match(pageSource, /function CompanyLibrary\(/);
+assert.match(pageSource, /Generér rapportudkast med ATLAS/);
+assert.match(pageSource, /Rapporten skal godkendes før print eller download/);
+assert.match(pageSource, /FSQ_REPORT_TEMPLATES/);
 assert.match(pageSource, /className="atlasCommandDeck"/);
 assert.match(pageSource, /className="atlasMegaCore"/);
 assert.match(pageSource, /className="atlasCommandInput"/);
@@ -94,5 +104,12 @@ assert.match(stylesSource, /@media\(max-width:650px\)\{\.atlasCommandDeck/);
 assert.match(stylesSource, /@media\(max-width:1650px\)\{\.machineBinderLayout\{grid-template-columns:/);
 assert.match(stylesSource, /\.machineBinderDocuments,\.machineBinderPreview\{grid-column:1\/-1;min-height:auto\}/);
 assert.match(stylesSource, /\.machineFolderCreate input\{width:100%;min-width:0\}/);
+assert.match(stylesSource, /\.reportStudioGrid\{/);
+assert.match(stylesSource, /\.reportApprovalBar\{/);
 
-console.log('Smoke tests passed (documents, downloads, crew assignment, Machine Binder and mobile app).');
+const reportRoute = fs.readFileSync('app/api/atlas/report/route.js', 'utf8');
+assert.match(reportRoute, /Use only facts visible/);
+assert.match(reportRoute, /MAX_TOTAL_SIZE/);
+assert.match(reportRoute, /store: false/);
+
+console.log('Smoke tests passed (documents, reports, downloads, crew assignment, Machine Binder and mobile app).');
