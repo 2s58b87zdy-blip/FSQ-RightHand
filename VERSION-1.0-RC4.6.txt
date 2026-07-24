@@ -1,0 +1,8 @@
+FSQ Command 1.0 RC4.6
+
+Improved mobile menu
+- Menu drawer starts below the phone safe area instead of touching the top edge.
+- Rounded drawer with clearer top spacing and close button.
+- Independent menu scrolling while the user card remains available.
+- Compact layout for short mobile screens.
+- Mobile top bar respects iPhone and installed-app safe areas.
