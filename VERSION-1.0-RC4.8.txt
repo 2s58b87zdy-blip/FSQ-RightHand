@@ -1,0 +1,12 @@
+FSQ Command 1.0 RC4.8
+
+Fleet Map and ATLAS hotfix:
+- Existing marine projects can edit IMO, MMSI and fallback coordinates in Project Hub > Overview.
+- A vessel without a position has a direct button to its tracking settings.
+- Fleet Map Ask ATLAS now uses the real secure ATLAS API with live fleet context.
+- ATLAS shows a precise warning when OPENAI_API_KEY is missing in Azure.
+- Version and mobile cache updated.
+
+Live AIS requires AISSTREAM_API_KEY in Azure.
+ATLAS requires OPENAI_API_KEY in Azure.
+Without live AIS, enter both fallback latitude and longitude to show the vessel immediately.

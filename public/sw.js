@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fsq-command-shell-v4-7';
+const CACHE_NAME = 'fsq-command-shell-v4-8';
 const SAFE_ASSETS = ['/offline.html', '/fsq-logo-clean.webp', '/icon.svg', '/maskable-icon.svg'];
 
 self.addEventListener('install', event => {

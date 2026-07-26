@@ -26,6 +26,10 @@ export async function POST(request) {
   if (!question) return Response.json({ error: 'Question is required' }, { status: 400 });
   if (question.length > 12000) return Response.json({ error: 'Question is too long' }, { status: 413 });
   if (mode === 'developer' && !isFlemming(session)) return Response.json({ error: 'ATLAS Developer is restricted to Flemming.' }, { status: 403 });
+  if (!process.env.OPENAI_API_KEY) return Response.json({
+    error: 'ATLAS is not configured.',
+    detail: 'OPENAI_API_KEY mangler under Azure App Service → Environment variables.'
+  }, { status: 503 });
 
   try {
     const approvedKnowledge = await loadRelevantInternalKnowledge(question, 16);

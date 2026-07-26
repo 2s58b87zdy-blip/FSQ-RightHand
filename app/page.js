@@ -18,7 +18,7 @@ const FOLDER_ACCESS_LEVELS = ['No Access','Read','Edit','Full Control'];
 const MANAGED_FOLDERS = ['Projects','Workshop','Marine','Drawings','Procedures','QA / QC','Reports','Drone','Certificates','Templates','Finance','HR','Management','Contracts','Customers'];
 const DEFAULT_FOLDER_ACCESS = Object.fromEntries(MANAGED_FOLDERS.map(folder=>[folder,'No Access']));
 
-const APP_VERSION = '1.0 RC4.7';
+const APP_VERSION = '1.0 RC4.8';
 
 const USER_REGISTRY_DEFAULTS = [];
 
@@ -235,6 +235,10 @@ function isWorkshopProject(project) {
   const type = String(project.type || '').trim().toLowerCase();
   const location = String(project.location || '').trim().toLowerCase();
   return ['workshop', 'fabrication'].includes(type) || location.includes('workshop');
+}
+
+function isMarineProject(project) {
+  return ['vessel','inspection','service','marine'].includes(String(project?.type || '').trim().toLowerCase());
 }
 
 function workshopStageLabel(task) {
@@ -754,7 +758,7 @@ function AppShell({ session, onLogout, users, setUsers }) {
         {active === 'jobArchive' && <JobArchive session={session} tasks={archivedTasks} projects={projects} />}
         {active === 'crew' && <CrewManagement people={people} setPeople={setPeople} projects={projects} />}
         {active === 'projects' && <Projects projects={projects} setProjects={setProjects} deletedProjects={deletedProjects} setDeletedProjects={setDeletedProjects} setActive={setActive} setActiveProjectId={setActiveProjectId} tasks={activeProjectTasks} setTasks={setTasks} people={people} users={users} setPlannerEntries={setPlannerEntries} />}
-        {active === 'fleet' && <FleetMap projects={visibleProjects} setActive={setActive} />}
+        {active === 'fleet' && <FleetMap projects={visibleProjects} setActive={setActive} setActiveProjectId={setActiveProjectId} />}
         {active === 'projectHub' && <ProjectHub session={session} users={users} project={projects.find(p=>p.id===activeProjectId)} projects={projects} setProjects={setProjects} people={people} setPeople={setPeople} tasks={activeProjectTasks} setTasks={setTasks} documents={documents} materials={materials} setMaterials={setMaterials} quotes={quotes} reports={reports} setActive={setActive} deletedProjects={deletedProjects} setDeletedProjects={setDeletedProjects} setActiveProjectId={setActiveProjectId} droneInspections={droneInspections} setDroneInspections={setDroneInspections} setPlannerEntries={setPlannerEntries} />}
         {active === 'documents' && <ProjectBinder documents={documents} setDocuments={setDocuments} projects={projects} session={session} />}
         {active === 'companyLibrary' && canViewCompanyLibrary(session) && <CompanyLibrary session={session} projects={projects} folders={knowledgeFolders} setFolders={setKnowledgeFolders} foldersHydrated={knowledgeFoldersHydrated} documents={knowledgeDocuments} setDocuments={setKnowledgeDocuments} reports={companyReports} setReports={setCompanyReports} />}
@@ -1306,7 +1310,7 @@ function MaterialRow({ material, materials, setMaterials }) {
 }
 
 
-function FleetMap({projects,setActive}) {
+function FleetMap({projects,setActive,setActiveProjectId}) {
   const marineProjects=useMemo(()=>projects.filter(project=>
     ['Vessel','Inspection','Service','Marine'].includes(project.type) &&
     !['Completed','Archived'].includes(project.lifecycle) &&
@@ -1318,6 +1322,7 @@ function FleetMap({projects,setActive}) {
   const [status,setStatus]=useState({configured:false,source:'Manual fallback'});
   const [question,setQuestion]=useState('');
   const [answer,setAnswer]=useState('ATLAS is ready to summarize the active fleet.');
+  const [atlasBusy,setAtlasBusy]=useState(false);
 
   async function loadFleet(){
     setLoading(true);
@@ -1358,19 +1363,25 @@ function FleetMap({projects,setActive}) {
     const date=new Date(value);
     return Number.isNaN(date.getTime())?'Unknown':date.toLocaleString('da-DK',{dateStyle:'short',timeStyle:'short'});
   };
-  function askAtlas(){
+  async function askAtlas(){
     const query=question.trim().toLowerCase();
-    if(!query)return;
-    if(!fleet.length)setAnswer('No active marine projects are registered yet.');
-    else if(query.includes('hvor')||query.includes('position')||query.includes('location')){
-      const summaries=located.map(item=>`${item.name}: ${coordinate(item.latitude)}, ${coordinate(item.longitude)}`);
-      setAnswer(summaries.length?summaries.join(' · '):'The vessels need an MMSI signal or a manual fallback position.');
-    }else if(query.includes('crew')||query.includes('medarbejder')){
-      setAnswer(fleet.map(item=>`${item.name}: ${(item.crew||[]).join(', ')||'no crew assigned'}`).join(' · '));
-    }else{
-      setAnswer(`${fleet.length} active marine project${fleet.length===1?'':'s'} · ${live} live AIS · ${located.length} shown on map.`);
-    }
+    if(!query||atlasBusy)return;
+    const localSummary=!fleet.length?'No active marine projects are registered yet.':
+      `${fleet.length} active marine project${fleet.length===1?'':'s'} · ${live} live AIS · ${located.length} shown on map.`;
     setQuestion('');
+    setAtlasBusy(true);
+    setAnswer('ATLAS is analysing the current fleet…');
+    try{
+      const response=await fetch('/api/atlas/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+        question:question.trim(),mode:'assistant',useWeb:false,history:[],
+        context:{fleet:fleet.map(item=>({name:item.name,projectNo:item.projectNo,customer:item.customer,mmsi:item.mmsi,latitude:item.hasPosition?item.latitude:null,longitude:item.hasPosition?item.longitude:null,speed:item.speed,course:item.course,crew:item.crew,progress:item.progress,source:item.source,updatedAt:item.updatedAt}))}
+      })});
+      const data=await response.json().catch(()=>({}));
+      if(!response.ok)throw new Error(data.detail||data.error||`HTTP ${response.status}`);
+      setAnswer(data.answer||localSummary);
+    }catch(error){
+      setAnswer(`ATLAS is not connected: ${error.message}. Fleet status: ${localSummary}`);
+    }finally{setAtlasBusy(false)}
   }
 
   return <div className="content fleetCommand">
@@ -1424,13 +1435,14 @@ function FleetMap({projects,setActive}) {
           <div className="vesselStatusRow"><span>Last signal</span><b>{lastSignal(selected.updatedAt)}</b></div>
           <div className="vesselStatusRow"><span>MMSI</span><b>{selected.mmsi||'Not set'}</b></div>
           <div className="vesselStatusRow"><span>Crew</span><b>{(selected.crew||[]).join(', ')||'Not assigned'}</b></div>
+          {!selected.hasPosition&&<div className="fleetPositionMissing"><b>Position is missing</b><p>Add MMSI for live AIS, or enter fallback latitude and longitude under the project overview.</p><button className="primaryBtn" onClick={()=>{setActiveProjectId(selected.projectId);setActive('projectHub')}}>Open tracking settings</button></div>}
           <div className="fleetProgress"><span>Project progress <b>{selected.progress||0}%</b></span><i><em style={{width:`${selected.progress||0}%`}}/></i></div>
         </>}
       </aside>
     </div>
     <section className="panel fleetAtlasBar">
       <div className="fleetAtlasOrb">A</div><div><b>ASK ATLAS ABOUT THE FLEET</b><p>{answer}</p></div>
-      <div className="fleetAtlasInput"><input value={question} onChange={event=>setQuestion(event.target.value)} onKeyDown={event=>event.key==='Enter'&&askAtlas()} placeholder="Where are our vessels? Who is onboard?" /><button onClick={askAtlas}>Ask ATLAS</button></div>
+      <div className="fleetAtlasInput"><input value={question} onChange={event=>setQuestion(event.target.value)} onKeyDown={event=>event.key==='Enter'&&askAtlas()} placeholder="Where are our vessels? Who is onboard?" /><button onClick={askAtlas} disabled={atlasBusy}>{atlasBusy?'Working…':'Ask ATLAS'}</button></div>
     </section>
   </div>;
 }
@@ -2000,6 +2012,17 @@ function ProjectHub({session,users,project,projects,setProjects,people,setPeople
         <label>Progress {project.progress}%<input type="range" min="0" max="100" value={project.progress} onChange={e=>update('progress',Number(e.target.value))}/></label>
         <label>Next milestone<input value={project.next||''} onChange={e=>update('next',e.target.value)}/></label>
       </div></div>
+      {isMarineProject(project)&&<div className="panel projectTrackingPanel">
+        <div className="panelHead"><div><h3>Vessel tracking</h3><small>Use MMSI for free live AIS, or save a fallback position.</small></div><span className={(project.mmsi||'').match(/^\d{7,9}$/)?'trackingReady':'trackingMissing'}>{(project.mmsi||'').match(/^\d{7,9}$/)?'AIS READY':'POSITION NEEDED'}</span></div>
+        <div className="detailGrid">
+          <label>IMO number<input inputMode="numeric" value={project.imo||''} onChange={e=>update('imo',e.target.value.replace(/\D/g,'').slice(0,9))} placeholder="IMO number"/></label>
+          <label>MMSI · live AIS<input inputMode="numeric" value={project.mmsi||''} onChange={e=>update('mmsi',e.target.value.replace(/\D/g,'').slice(0,9))} placeholder="7 to 9 digits"/></label>
+          <label>Fallback latitude<input inputMode="decimal" value={project.aisLat??''} onChange={e=>update('aisLat',e.target.value)} placeholder="55.6761"/></label>
+          <label>Fallback longitude<input inputMode="decimal" value={project.aisLon??''} onChange={e=>update('aisLon',e.target.value)} placeholder="12.5683"/></label>
+        </div>
+        <div className="trackingHelp"><b>How to make the vessel visible:</b><span>Live: enter MMSI and configure the free AISstream key in Azure.</span><span>Immediate fallback: enter both latitude and longitude.</span></div>
+        <button className="secondaryBtn trackingMapButton" onClick={()=>setActive('fleet')}>Open Fleet Map</button>
+      </div>}
       <div className="panel"><h3>Readiness</h3>{[['Project plan',true],['Drawings',projectDocs.some(d=>d.category==='Drawings')],['Method Statement',projectDocs.some(d=>d.category==='Method Statements')],['Risk Assessment',projectDocs.some(d=>d.category==='Risk Assessments')],['Certificates',projectDocs.some(d=>d.category==='Certificates')],['Packing List',projectDocs.some(d=>d.category==='Packing Lists')]].map(([n,ok])=><div className="checkRow" key={n}><span className={ok?'ok':'missing'}>{ok?'✓':'!'}</span><b>{n}</b><em>{ok?'Ready':'Missing'}</em></div>)}</div>
       <div className="panel"><h3>Project notes</h3><textarea className="hubTextarea" value={project.notes||''} onChange={e=>update('notes',e.target.value)}/></div>
       <div className="panel"><h3>Next actions</h3>{projectTasks.filter(t=>t.status!=='Completed').slice(0,5).map(t=><div className="taskMini" key={t.id}><span className={t.priority==='High'?'dot danger':'dot'}/><div><b>{t.title}</b><small>{t.person} · {t.status}</small></div></div>)}</div>
@@ -3075,8 +3098,9 @@ function AI({session,chat,setChat,voice,stats,context,onActions}) {
         {developerAllowed&&<button className={mode==='developer'?'active developer':''} onClick={()=>setMode('developer')}>Developer · Flemming</button>}
       </div>
       <label className="webToggle"><input type="checkbox" checked={useWeb} onChange={e=>setUseWeb(e.target.checked)} disabled={mode==='research'}/> Online research</label>
-      <div className="brainStatus"><i className={status?.ok?'online':''}/>{status?.ok?'Brain online':'Connecting'}{status&&` · ${status.ApprovedKnowledge||0} approved`}</div>
+      <div className="brainStatus"><i className={status?.ok&&status?.webConfigured?'online':''}/>{!status?'Connecting':!status.ok?'Brain offline':!status.webConfigured?'OpenAI key missing':'Brain online'}{status&&` · ${status.ApprovedKnowledge||0} approved`}</div>
     </div>
+    {status?.ok&&!status?.webConfigured&&<div className="atlasConfigWarning"><b>ATLAS is not connected to OpenAI.</b><span>Add <code>OPENAI_API_KEY</code> under Azure App Service → Environment variables, then restart the app.</span></div>}
     {mode==='developer'&&<div className="developerNotice"><b>ATLAS Developer</b><span>Kun Flemming har adgang. Denne version analyserer og planlægger kodeændringer; den ændrer eller deployer ikke uden en senere godkendelsesfunktion.</span></div>}
     {speechError&&<div className="error">{speechError}</div>}{error&&<div className="error">{error}</div>}
     <div className="atlasBrainGrid">

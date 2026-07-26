@@ -97,6 +97,10 @@ assert.match(pageSource, /active === 'jobArchive'/);
 assert.match(pageSource, /\['fleet', 'Fleet Map', '⌖'\]/);
 assert.match(pageSource, /function FleetMap\(/);
 assert.match(pageSource, /MMSI · live tracking/);
+assert.match(pageSource, /function isMarineProject\(/);
+assert.match(pageSource, /Open tracking settings/);
+assert.match(pageSource, /Vessel tracking/);
+assert.match(pageSource, /OpenAI key missing/);
 assert.match(pageSource, /setActive\(id\);setMobileNavOpen\(false\)/);
 assert.doesNotMatch(pageSource, /src="\/fsq-logo\.jpg"/);
 assert.ok(fs.statSync('public/fsq-logo-clean.webp').size > 1000);
@@ -115,6 +119,8 @@ assert.match(stylesSource, /\.reportStudioGrid\{/);
 assert.match(stylesSource, /\.reportApprovalBar\{/);
 assert.match(stylesSource, /\.fleetLayout\{/);
 assert.match(stylesSource, /\.worldMap\{/);
+assert.match(stylesSource, /\.projectTrackingPanel\{/);
+assert.match(stylesSource, /\.atlasConfigWarning\{/);
 
 const reportRoute = fs.readFileSync('app/api/atlas/report/route.js', 'utf8');
 assert.match(reportRoute, /Use only facts visible/);
@@ -124,5 +130,6 @@ const fleetRoute = fs.readFileSync('app/api/fleet/positions/route.js', 'utf8');
 assert.match(fleetRoute, /AISSTREAM_API_KEY/);
 assert.match(fleetRoute, /readSession/);
 assert.doesNotMatch(pageSource, /AISSTREAM_API_KEY/);
+assert.match(fs.readFileSync('app/api/atlas/chat/route.js','utf8'), /OPENAI_API_KEY mangler/);
 
 console.log('Smoke tests passed (documents, reports, downloads, crew assignment, Machine Binder and mobile app).');
