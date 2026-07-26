@@ -1,0 +1,14 @@
+FSQ Command 1.0 RC4.7
+
+New in this release:
+- Fleet Map with active marine projects on a global FSQ map
+- Free AISstream.io live positions through a server-side API key
+- MMSI, IMO and manual fallback coordinates in the project wizard
+- Mobile-friendly vessel list, map, vessel details and ATLAS fleet summary
+- Secure fallback mode when no AIS key or signal is available
+- Corrected env.example file
+
+Azure setting for live tracking:
+AISSTREAM_API_KEY
+
+Without this setting, Fleet Map still works with the manual fallback position saved on each project.

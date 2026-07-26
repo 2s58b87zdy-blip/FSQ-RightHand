@@ -18,7 +18,7 @@ const FOLDER_ACCESS_LEVELS = ['No Access','Read','Edit','Full Control'];
 const MANAGED_FOLDERS = ['Projects','Workshop','Marine','Drawings','Procedures','QA / QC','Reports','Drone','Certificates','Templates','Finance','HR','Management','Contracts','Customers'];
 const DEFAULT_FOLDER_ACCESS = Object.fromEntries(MANAGED_FOLDERS.map(folder=>[folder,'No Access']));
 
-const APP_VERSION = '1.0 RC4.6';
+const APP_VERSION = '1.0 RC4.7';
 
 const USER_REGISTRY_DEFAULTS = [];
 
@@ -46,6 +46,7 @@ const NAV = [
   ['approvals', 'Job Approvals', '✓'],
   ['jobArchive', 'Job Archive', '▤'],
   ['projects', 'Projects', '◫'],
+  ['fleet', 'Fleet Map', '⌖'],
   ['crew', 'People', '◉'],
   ['documents', 'Project Binder', '▱'],
   ['companyLibrary', 'Company Library', '▧'],
@@ -599,6 +600,7 @@ function AppShell({ session, onLogout, users, setUsers }) {
     if ((command.includes('rapport') || command.includes('company library') || command.includes('firmadokument')) && canViewCompanyLibrary(session)) setActive('companyLibrary');
     else if (command.includes('projektmappe') || command.includes('dokument')) setActive('documents');
     else if (command.includes('projekt')) setActive('projects');
+    else if ((command.includes('skib') || command.includes('flåde') || command.includes('fleet') || command.includes('verdenskort')) && session.role !== 'Technician') setActive('fleet');
     else if (command.includes('medarbejder') || command.includes('personale') || command.includes('folk')) setActive('crew');
     else if (command.includes('lager') || command.includes('gas') || command.includes('flaske') || command.includes('material')) setActive('inventory');
     else if (command.includes('plan') || command.includes('uge')) setActive('planner');
@@ -752,6 +754,7 @@ function AppShell({ session, onLogout, users, setUsers }) {
         {active === 'jobArchive' && <JobArchive session={session} tasks={archivedTasks} projects={projects} />}
         {active === 'crew' && <CrewManagement people={people} setPeople={setPeople} projects={projects} />}
         {active === 'projects' && <Projects projects={projects} setProjects={setProjects} deletedProjects={deletedProjects} setDeletedProjects={setDeletedProjects} setActive={setActive} setActiveProjectId={setActiveProjectId} tasks={activeProjectTasks} setTasks={setTasks} people={people} users={users} setPlannerEntries={setPlannerEntries} />}
+        {active === 'fleet' && <FleetMap projects={visibleProjects} setActive={setActive} />}
         {active === 'projectHub' && <ProjectHub session={session} users={users} project={projects.find(p=>p.id===activeProjectId)} projects={projects} setProjects={setProjects} people={people} setPeople={setPeople} tasks={activeProjectTasks} setTasks={setTasks} documents={documents} materials={materials} setMaterials={setMaterials} quotes={quotes} reports={reports} setActive={setActive} deletedProjects={deletedProjects} setDeletedProjects={setDeletedProjects} setActiveProjectId={setActiveProjectId} droneInspections={droneInspections} setDroneInspections={setDroneInspections} setPlannerEntries={setPlannerEntries} />}
         {active === 'documents' && <ProjectBinder documents={documents} setDocuments={setDocuments} projects={projects} session={session} />}
         {active === 'companyLibrary' && canViewCompanyLibrary(session) && <CompanyLibrary session={session} projects={projects} folders={knowledgeFolders} setFolders={setKnowledgeFolders} foldersHydrated={knowledgeFoldersHydrated} documents={knowledgeDocuments} setDocuments={setKnowledgeDocuments} reports={companyReports} setReports={setCompanyReports} />}
@@ -761,7 +764,7 @@ function AppShell({ session, onLogout, users, setUsers }) {
         {active === 'health' && <SystemHealth session={session} users={users} projects={projects} documents={documents} knowledgeDocuments={knowledgeDocuments} knowledgeMachines={knowledgeMachines} />}
         {active === 'admin' && <Admin session={session} users={users} setUsers={setUsers} people={people} setPeople={setPeople} machines={knowledgeMachines} setMachines={setKnowledgeMachines} materials={materials} setMaterials={setMaterials} />}
         {active === 'ai' && <AI session={session} chat={chat} setChat={setChat} voice={voice} stats={stats} context={{projects:visibleProjects,tasks:visibleTasks,people,users,machines:knowledgeMachines,materials,documents,knowledgeDocuments,knowledgeMachines,knowledgeSolutions}} onActions={executeAtlasActions} />}
-        {!['dashboard','myjobs','approvals','jobArchive','crew','projects','projectHub','documents','companyLibrary','inventory','planner','knowledge','health','admin','ai'].includes(active) && <ModulePlaceholder title={NAV.find(n=>n[0]===active)?.[1]} />}
+        {!['dashboard','myjobs','approvals','jobArchive','crew','projects','fleet','projectHub','documents','companyLibrary','inventory','planner','knowledge','health','admin','ai'].includes(active) && <ModulePlaceholder title={NAV.find(n=>n[0]===active)?.[1]} />}
       </main>
     </div>
   );
@@ -1303,6 +1306,135 @@ function MaterialRow({ material, materials, setMaterials }) {
 }
 
 
+function FleetMap({projects,setActive}) {
+  const marineProjects=useMemo(()=>projects.filter(project=>
+    ['Vessel','Inspection','Service','Marine'].includes(project.type) &&
+    !['Completed','Archived'].includes(project.lifecycle) &&
+    project.status !== 'Completed'
+  ),[projects]);
+  const [fleet,setFleet]=useState([]);
+  const [selectedId,setSelectedId]=useState(null);
+  const [loading,setLoading]=useState(true);
+  const [status,setStatus]=useState({configured:false,source:'Manual fallback'});
+  const [question,setQuestion]=useState('');
+  const [answer,setAnswer]=useState('ATLAS is ready to summarize the active fleet.');
+
+  async function loadFleet(){
+    setLoading(true);
+    try{
+      const response=await fetch('/api/fleet/positions',{cache:'no-store'});
+      const data=await response.json();
+      if(!response.ok)throw new Error(data.error||'Fleet service unavailable');
+      setFleet(Array.isArray(data.vessels)?data.vessels:[]);
+      setStatus({configured:Boolean(data.configured),source:data.source||'Manual fallback',note:data.note||''});
+      setSelectedId(current=>current&&data.vessels?.some(item=>String(item.projectId)===String(current))?current:(data.vessels?.[0]?.projectId??null));
+    }catch(error){
+      setFleet(marineProjects.map(project=>({
+        projectId:project.id,name:project.name,projectNo:project.projectNo,customer:project.customer,
+        crew:project.crew||[],progress:project.progress||0,mmsi:project.mmsi||'',
+        latitude:Number(project.aisLat),longitude:Number(project.aisLon),
+        hasPosition:project.aisLat!==''&&project.aisLon!=='',source:'Manual',updatedAt:null
+      })));
+      setStatus({configured:false,source:'Manual fallback',note:error.message});
+    }finally{setLoading(false)}
+  }
+
+  useEffect(()=>{
+    loadFleet();
+    const timer=setInterval(loadFleet,90000);
+    return()=>clearInterval(timer);
+  },[marineProjects]);
+
+  const selected=fleet.find(item=>String(item.projectId)===String(selectedId))||fleet[0]||null;
+  const located=fleet.filter(item=>item.hasPosition);
+  const live=fleet.filter(item=>item.source==='AISstream').length;
+  const mapPoint=item=>({
+    left:`${Math.max(1,Math.min(99,((Number(item.longitude)+180)/360)*100))}%`,
+    top:`${Math.max(2,Math.min(98,((90-Number(item.latitude))/180)*100))}%`
+  });
+  const coordinate=value=>Number.isFinite(Number(value))?Number(value).toFixed(4):'—';
+  const lastSignal=value=>{
+    if(!value)return 'Waiting for signal';
+    const date=new Date(value);
+    return Number.isNaN(date.getTime())?'Unknown':date.toLocaleString('da-DK',{dateStyle:'short',timeStyle:'short'});
+  };
+  function askAtlas(){
+    const query=question.trim().toLowerCase();
+    if(!query)return;
+    if(!fleet.length)setAnswer('No active marine projects are registered yet.');
+    else if(query.includes('hvor')||query.includes('position')||query.includes('location')){
+      const summaries=located.map(item=>`${item.name}: ${coordinate(item.latitude)}, ${coordinate(item.longitude)}`);
+      setAnswer(summaries.length?summaries.join(' · '):'The vessels need an MMSI signal or a manual fallback position.');
+    }else if(query.includes('crew')||query.includes('medarbejder')){
+      setAnswer(fleet.map(item=>`${item.name}: ${(item.crew||[]).join(', ')||'no crew assigned'}`).join(' · '));
+    }else{
+      setAnswer(`${fleet.length} active marine project${fleet.length===1?'':'s'} · ${live} live AIS · ${located.length} shown on map.`);
+    }
+    setQuestion('');
+  }
+
+  return <div className="content fleetCommand">
+    <div className="fleetHero">
+      <div><p className="eyebrow">FSQ GLOBAL OPERATIONS</p><h1>FLEET COMMAND</h1><p>Active vessels and marine projects on one operational map.</p></div>
+      <div className="fleetHeroActions"><span className={status.configured?'fleetConnected':'fleetFallback'}>{status.configured?'● AIS CONNECTED':'○ MANUAL FALLBACK'}</span><button className="secondaryBtn" onClick={loadFleet} disabled={loading}>{loading?'Updating…':'↻ Refresh'}</button></div>
+    </div>
+    {!status.configured&&<div className="fleetNotice"><b>Free tracking is ready.</b> Add an AISstream API key in Azure for live positions. Until then, Fleet Map uses the fallback coordinates saved on each project.</div>}
+    <div className="fleetLayout">
+      <section className="panel fleetList">
+        <div className="panelHead"><div><p className="eyebrow">ACTIVE PROJECTS</p><h3>Tracked vessels</h3></div><span>{fleet.length}</span></div>
+        <div className="fleetListItems">
+          {fleet.map(item=><button key={item.projectId} className={String(item.projectId)===String(selected?.projectId)?'active':''} onClick={()=>setSelectedId(item.projectId)}>
+            <span className="fleetShipIcon">▰</span><div><b>{item.name}</b><small>{item.customer||item.projectNo||'FSQ project'}</small><em>{item.hasPosition?`${coordinate(item.latitude)}, ${coordinate(item.longitude)}`:'Waiting for position'}</em></div><i className={item.source==='AISstream'?'live':'manual'}>{item.source==='AISstream'?'LIVE':'MANUAL'}</i>
+          </button>)}
+          {!fleet.length&&<div className="fleetEmpty"><b>No marine projects yet</b><p>Create a Vessel, Inspection or Service project and add its MMSI.</p><button className="primaryBtn" onClick={()=>setActive('projects')}>Open Projects</button></div>}
+        </div>
+      </section>
+
+      <section className="panel fleetMapPanel">
+        <div className="fleetMapHeader"><div><p className="eyebrow">GLOBAL VESSEL OVERVIEW</p><h3>{located.length} positions shown</h3></div><span>90 SEC REFRESH</span></div>
+        <div className="worldMap" aria-label="World map with vessel positions">
+          <svg viewBox="0 0 1000 500" role="img" aria-label="Stylized world map">
+            <defs><radialGradient id="oceanGlow"><stop offset="0" stopColor="#073d69"/><stop offset="1" stopColor="#031425"/></radialGradient></defs>
+            <rect width="1000" height="500" fill="url(#oceanGlow)"/>
+            {[100,200,300,400].map(y=><line key={`y${y}`} x1="0" x2="1000" y1={y} y2={y} className="mapGridLine"/>)}
+            {[125,250,375,500,625,750,875].map(x=><line key={`x${x}`} x1={x} x2={x} y1="0" y2="500" className="mapGridLine"/>)}
+            <g className="continents">
+              <path d="M72 94l71-45 89 14 45 47 53 16-23 43-51 9-31 54-55 8-27-35-49-20-31-53z"/>
+              <path d="M257 258l47 17 34 65-15 89-35 47-24-62 9-60-38-53z"/>
+              <path d="M451 91l61-30 58 18 41-21 79 20 57 42 87-2 104 47-48 44-80-5-43 40-60-8-48-63-43 21-28 69-38-42-2-61-55-12z"/>
+              <path d="M523 247l60 4 48 67-15 106-46 38-36-77-34-67z"/>
+              <path d="M781 343l63-22 63 37-11 58-85 8-52-34z"/>
+              <path d="M415 95l21-21 18 15-14 31z"/>
+            </g>
+          </svg>
+          {located.map(item=><button key={item.projectId} className={`vesselMarker ${item.source==='AISstream'?'live':''} ${String(item.projectId)===String(selected?.projectId)?'selected':''}`} style={mapPoint(item)} onClick={()=>setSelectedId(item.projectId)} title={`${item.name} · ${item.source}`}><span>▲</span><b>{item.name}</b></button>)}
+          <div className="atlasRadar"><span>ATLAS</span></div>
+        </div>
+        <div className="fleetLegend"><span><i className="live"/> Live AIS</span><span><i/> Manual fallback</span><small>AISstream.io beta · Not for navigation</small></div>
+      </section>
+
+      <aside className="panel vesselDetail">
+        <div className="panelHead"><div><p className="eyebrow">SELECTED VESSEL</p><h3>{selected?.name||'No vessel selected'}</h3></div><span className={selected?.source==='AISstream'?'fleetConnected':'fleetFallback'}>{selected?.source||'OFFLINE'}</span></div>
+        {selected&&<>
+          <div className="vesselIdentity"><div className="vesselGlyph">FSQ</div><div><b>{selected.customer||'FSQ customer'}</b><small>{selected.projectNo||'Marine project'}</small></div></div>
+          <div className="vesselMetrics">
+            <div><small>LATITUDE</small><b>{coordinate(selected.latitude)}°</b></div><div><small>LONGITUDE</small><b>{coordinate(selected.longitude)}°</b></div>
+            <div><small>SPEED</small><b>{Number.isFinite(Number(selected.speed))?`${Number(selected.speed).toFixed(1)} kn`:'—'}</b></div><div><small>COURSE</small><b>{Number.isFinite(Number(selected.course))?`${Math.round(Number(selected.course))}°`:'—'}</b></div>
+          </div>
+          <div className="vesselStatusRow"><span>Last signal</span><b>{lastSignal(selected.updatedAt)}</b></div>
+          <div className="vesselStatusRow"><span>MMSI</span><b>{selected.mmsi||'Not set'}</b></div>
+          <div className="vesselStatusRow"><span>Crew</span><b>{(selected.crew||[]).join(', ')||'Not assigned'}</b></div>
+          <div className="fleetProgress"><span>Project progress <b>{selected.progress||0}%</b></span><i><em style={{width:`${selected.progress||0}%`}}/></i></div>
+        </>}
+      </aside>
+    </div>
+    <section className="panel fleetAtlasBar">
+      <div className="fleetAtlasOrb">A</div><div><b>ASK ATLAS ABOUT THE FLEET</b><p>{answer}</p></div>
+      <div className="fleetAtlasInput"><input value={question} onChange={event=>setQuestion(event.target.value)} onKeyDown={event=>event.key==='Enter'&&askAtlas()} placeholder="Where are our vessels? Who is onboard?" /><button onClick={askAtlas}>Ask ATLAS</button></div>
+    </section>
+  </div>;
+}
+
 function CrewManagement({ people, setPeople, projects }) {
   const locations = ['Workshop', 'Office', 'Offshore', 'Travel', 'Course', 'Free'];
   const [selected, setSelected] = useState(people[0]?.id || null);
@@ -1437,6 +1569,9 @@ function Projects({projects,setProjects,deletedProjects,setDeletedProjects,setAc
     contact:'',
     name:'',
     imo:'',
+    mmsi:'',
+    aisLat:'',
+    aisLon:'',
     lead:'Flemming',
     location:'Workshop',
     startDate:today,
@@ -1460,6 +1595,9 @@ function Projects({projects,setProjects,deletedProjects,setDeletedProjects,setAc
       completedAt: project.completedAt || '',
       contact: project.contact || '',
       crew: project.crew || [],
+      mmsi: project.mmsi || '',
+      aisLat: project.aisLat ?? '',
+      aisLon: project.aisLon ?? '',
       ...project
     };
   }
@@ -1495,7 +1633,7 @@ function Projects({projects,setProjects,deletedProjects,setDeletedProjects,setAc
   function resetWizard(){
     setWizardStep(1);
     setForm({
-      type:'Workshop',customer:'',contact:'',name:'',imo:'',lead:'Flemming',location:'Workshop',
+      type:'Workshop',customer:'',contact:'',name:'',imo:'',mmsi:'',aisLat:'',aisLon:'',lead:'Flemming',location:'Workshop',
       startDate:today,deadline:'',status:'Planning',priority:'Medium',health:'Green',notes:'',crew:[]
     });
   }
@@ -1510,6 +1648,20 @@ function Projects({projects,setProjects,deletedProjects,setDeletedProjects,setAc
   function validateStep(){
     if(wizardStep===1 && (!form.name.trim() || !form.customer.trim())){
       alert('Project name and customer are required.');
+      return false;
+    }
+    if(wizardStep===1 && form.mmsi && !/^\d{7,9}$/.test(form.mmsi.trim())){
+      alert('MMSI must contain 7 to 9 digits.');
+      return false;
+    }
+    const latitude=Number(form.aisLat);
+    const longitude=Number(form.aisLon);
+    if(wizardStep===1 && form.aisLat!=='' && (!Number.isFinite(latitude) || latitude < -90 || latitude > 90)){
+      alert('Fallback latitude must be between -90 and 90.');
+      return false;
+    }
+    if(wizardStep===1 && form.aisLon!=='' && (!Number.isFinite(longitude) || longitude < -180 || longitude > 180)){
+      alert('Fallback longitude must be between -180 and 180.');
       return false;
     }
     if(wizardStep===2 && !form.lead){
@@ -1625,6 +1777,9 @@ function Projects({projects,setProjects,deletedProjects,setDeletedProjects,setAc
           <label>Customer contact<input value={form.contact} onChange={e=>update('contact',e.target.value)} placeholder="Name / email / phone" /></label>
           <label>Project / vessel name *<input value={form.name} onChange={e=>update('name',e.target.value)} placeholder={isWorkshop?'Stainless Frames':'Wind Orca'} /></label>
           <label>IMO number<input value={form.imo} onChange={e=>update('imo',e.target.value)} placeholder={isMarine?'IMO number':'Not required'} disabled={!isMarine} /></label>
+          <label>MMSI · live tracking<input inputMode="numeric" value={form.mmsi} onChange={e=>update('mmsi',e.target.value.replace(/\D/g,'').slice(0,9))} placeholder={isMarine?'9 digit MMSI':'Not required'} disabled={!isMarine} /></label>
+          <label>Fallback latitude<input inputMode="decimal" value={form.aisLat} onChange={e=>update('aisLat',e.target.value)} placeholder={isMarine?'55.6761':'Not required'} disabled={!isMarine} /></label>
+          <label>Fallback longitude<input inputMode="decimal" value={form.aisLon} onChange={e=>update('aisLon',e.target.value)} placeholder={isMarine?'12.5683':'Not required'} disabled={!isMarine} /></label>
           <label>Location<input value={form.location} onChange={e=>update('location',e.target.value)} placeholder={isWorkshop?'Workshop':'Port / vessel location'} /></label>
           <label>Priority<select value={form.priority} onChange={e=>update('priority',e.target.value)}><option>Low</option><option>Medium</option><option>High</option><option>Critical</option></select></label>
           <label>Start date<input type="date" value={form.startDate} onClick={e=>e.currentTarget.showPicker?.()} onFocus={e=>e.currentTarget.showPicker?.()} onChange={e=>update('startDate',e.target.value)} /></label>
@@ -1668,6 +1823,7 @@ function Projects({projects,setProjects,deletedProjects,setDeletedProjects,setAc
           <div><small>Priority</small><b>{form.priority}</b></div>
           <div><small>Assigned crew</small><b>{form.crew.length?form.crew.join(', '):'Not assigned yet'}</b></div>
           <div><small>Workflow</small><b>{isWorkshop?'Workshop QC':'Marine documentation'}</b></div>
+          {isMarine&&<div><small>AIS tracking</small><b>{form.mmsi?`MMSI ${form.mmsi}`:'Manual fallback only'}</b></div>}
         </div>
         <div className="creationSummary">
           <h3>FSQ Command will create</h3>

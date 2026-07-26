@@ -23,8 +23,15 @@ Create these environment variables before the first start:
 - `AZURE_STORAGE_CONTAINER`: normally `fsq-documents`.
 - `OPENAI_API_KEY`: required for ATLAS.
 - `OPENAI_MODEL`: optional; defaults to `gpt-5`.
+- `AISSTREAM_API_KEY`: free key from AISstream.io for live vessel positions. If omitted, Fleet Map uses each project's manual fallback coordinates.
 
 Never commit real secrets. `.env.example` contains placeholders only.
+
+## Gratis Fleet Map
+
+Create a free account and API key at [AISstream.io](https://aisstream.io/). Add the key as the Azure App Service setting `AISSTREAM_API_KEY`, then restart the app. The key stays on the server and is never sent to the browser.
+
+For every Vessel, Inspection or Service project, add its MMSI. Optional fallback latitude and longitude keep the vessel visible if a live AIS signal is unavailable. AIS data is operational information only and must not be used for navigation.
 
 ## Secure upgrade from an older release
 

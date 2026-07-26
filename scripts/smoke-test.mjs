@@ -94,6 +94,9 @@ assert.match(pageSource, /Workshop control active <span\/> v\{APP_VERSION\}/);
 assert.match(pageSource, /function JobArchive\(/);
 assert.match(pageSource, /archiveReason:'Final QC approved'/);
 assert.match(pageSource, /active === 'jobArchive'/);
+assert.match(pageSource, /\['fleet', 'Fleet Map', '⌖'\]/);
+assert.match(pageSource, /function FleetMap\(/);
+assert.match(pageSource, /MMSI · live tracking/);
 assert.match(pageSource, /setActive\(id\);setMobileNavOpen\(false\)/);
 assert.doesNotMatch(pageSource, /src="\/fsq-logo\.jpg"/);
 assert.ok(fs.statSync('public/fsq-logo-clean.webp').size > 1000);
@@ -110,10 +113,16 @@ assert.match(stylesSource, /\.machineBinderDocuments,\.machineBinderPreview\{gri
 assert.match(stylesSource, /\.machineFolderCreate input\{width:100%;min-width:0\}/);
 assert.match(stylesSource, /\.reportStudioGrid\{/);
 assert.match(stylesSource, /\.reportApprovalBar\{/);
+assert.match(stylesSource, /\.fleetLayout\{/);
+assert.match(stylesSource, /\.worldMap\{/);
 
 const reportRoute = fs.readFileSync('app/api/atlas/report/route.js', 'utf8');
 assert.match(reportRoute, /Use only facts visible/);
 assert.match(reportRoute, /MAX_TOTAL_SIZE/);
 assert.match(reportRoute, /store: false/);
+const fleetRoute = fs.readFileSync('app/api/fleet/positions/route.js', 'utf8');
+assert.match(fleetRoute, /AISSTREAM_API_KEY/);
+assert.match(fleetRoute, /readSession/);
+assert.doesNotMatch(pageSource, /AISSTREAM_API_KEY/);
 
 console.log('Smoke tests passed (documents, reports, downloads, crew assignment, Machine Binder and mobile app).');
