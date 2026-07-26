@@ -1,0 +1,12 @@
+FSQ Command 1.0 RC4.11
+
+Geographic world map upgrade:
+- Replaces the stylized continent shapes with real Natural Earth 1:110m country geometry.
+- Recognizable continents, coastlines, islands and country boundaries.
+- Adds continent labels for North America, South America, Europe, Africa, Asia, Oceania and Antarctica.
+- Keeps the FSQ luminous command design, animated shipping routes, global city markers and Nibe FSQ HQ beacon.
+- Keeps all persistent live-AIS and ATLAS fixes from RC4.10.
+
+Map source:
+Natural Earth public-domain vector data.
+https://www.naturalearthdata.com/about/terms-of-use/

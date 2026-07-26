@@ -18,7 +18,7 @@ const FOLDER_ACCESS_LEVELS = ['No Access','Read','Edit','Full Control'];
 const MANAGED_FOLDERS = ['Projects','Workshop','Marine','Drawings','Procedures','QA / QC','Reports','Drone','Certificates','Templates','Finance','HR','Management','Contracts','Customers'];
 const DEFAULT_FOLDER_ACCESS = Object.fromEntries(MANAGED_FOLDERS.map(folder=>[folder,'No Access']));
 
-const APP_VERSION = '1.0 RC4.10';
+const APP_VERSION = '1.0 RC4.11';
 
 const USER_REGISTRY_DEFAULTS = [];
 
@@ -1444,6 +1444,7 @@ function FleetMap({projects,setActive,setActiveProjectId}) {
             <ellipse cx="520" cy="240" rx="350" ry="166" fill="none" stroke="#1a8fc0" strokeWidth="1" opacity=".1"/>
             {[100,200,300,400].map(y=><line key={`y${y}`} x1="0" x2="1000" y1={y} y2={y} className="mapGridLine"/>)}
             {[125,250,375,500,625,750,875].map(x=><line key={`x${x}`} x1={x} x2={x} y1="0" y2="500" className="mapGridLine"/>)}
+            <image href="/world-map-natural-earth.svg" x="0" y="0" width="1000" height="500" preserveAspectRatio="none" className="naturalEarthMap"/>
             <g className="shippingRoutes">
               <path d="M235 168 Q430 45 529 92 T787 244"/>
               <path d="M529 92 Q605 175 655 181 T787 244"/>
@@ -1451,13 +1452,14 @@ function FleetMap({projects,setActive,setActiveProjectId}) {
               <path d="M235 168 Q270 285 380 314"/>
               <path d="M787 244 Q850 337 822 339"/>
             </g>
-            <g className="continents">
-              <path d="M72 94l71-45 89 14 45 47 53 16-23 43-51 9-31 54-55 8-27-35-49-20-31-53z"/>
-              <path d="M257 258l47 17 34 65-15 89-35 47-24-62 9-60-38-53z"/>
-              <path d="M451 91l61-30 58 18 41-21 79 20 57 42 87-2 104 47-48 44-80-5-43 40-60-8-48-63-43 21-28 69-38-42-2-61-55-12z"/>
-              <path d="M523 247l60 4 48 67-15 106-46 38-36-77-34-67z"/>
-              <path d="M781 343l63-22 63 37-11 58-85 8-52-34z"/>
-              <path d="M415 95l21-21 18 15-14 31z"/>
+            <g className="continentLabels" aria-hidden="true">
+              <text x="205" y="150">NORTH AMERICA</text>
+              <text x="305" y="330">SOUTH AMERICA</text>
+              <text x="493" y="112">EUROPE</text>
+              <text x="535" y="280">AFRICA</text>
+              <text x="690" y="150">ASIA</text>
+              <text x="825" y="365">OCEANIA</text>
+              <text x="500" y="478">ANTARCTICA</text>
             </g>
             <rect width="1000" height="500" fill="url(#mapScan)" pointerEvents="none"/>
           </svg>
