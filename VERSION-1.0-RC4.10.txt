@@ -1,0 +1,11 @@
+FSQ Command 1.0 RC4.10
+
+Fleet Map visual upgrade:
+- New luminous ocean and enhanced continent styling.
+- Animated global shipping routes.
+- Maritime city markers for Copenhagen, Houston, Rio de Janeiro, Cape Town, Dubai, Singapore, Perth and Tokyo.
+- Nibe added as a prominent gold FSQ HQ beacon.
+- Mobile view keeps the Nibe label visible while simplifying the other city labels.
+- Includes all RC4.9 persistent live-AIS fixes.
+
+Nibe marker coordinates: 56.9833 N, 9.6333 E.

@@ -5,13 +5,19 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const AIS_URL = 'wss://stream.aisstream.io/v0/stream';
-const CACHE_MS = 75_000;
 let positionCache = new Map();
 let cacheUpdatedAt = 0;
+let streamSocket = null;
+let streamApiKey = '';
+let streamMmsis = '';
+let streamState = 'idle';
+let streamError = '';
+let streamOpenedAt = null;
+let lastMessageAt = null;
 
 function cleanMmsi(value) {
   const mmsi = String(value || '').trim();
-  return /^\d{7,9}$/.test(mmsi) ? mmsi : '';
+  return /^\d{9}$/.test(mmsi) ? mmsi : '';
 }
 
 function manualPosition(project) {
@@ -47,7 +53,7 @@ function vesselRecord(project, live) {
     navigationStatus: useLive ? live.navigationStatus : '',
     updatedAt: useLive ? live.updatedAt : (project.aisUpdatedAt || null),
     hasPosition: useLive || manual.hasPosition,
-    source: useLive ? 'AISstream' : 'Manual'
+    source: useLive ? 'AISstream' : manual.hasPosition ? 'Manual' : 'Waiting'
   };
 }
 
@@ -79,41 +85,77 @@ function extractPosition(payload) {
   };
 }
 
-async function fetchLivePositions(apiKey, mmsis) {
-  return new Promise(resolve => {
-    const found = new Map();
-    let settled = false;
-    let socket;
-    const finish = () => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      try { socket?.close(); } catch {}
-      resolve(found);
-    };
-    const timer = setTimeout(finish, 5_500);
-    try {
-      socket = new WebSocket(AIS_URL);
-      socket.addEventListener('open', () => socket.send(JSON.stringify({
+function ensureLiveStream(apiKey, mmsis) {
+  const signature = [...mmsis].sort().join(',');
+  const socketActive = streamSocket && [0, 1].includes(streamSocket.readyState);
+  if (socketActive && streamApiKey === apiKey && streamMmsis === signature) return;
+
+  try { streamSocket?.close(); } catch {}
+  streamSocket = null;
+  streamApiKey = apiKey;
+  streamMmsis = signature;
+  streamState = 'connecting';
+  streamError = '';
+  streamOpenedAt = null;
+
+  try {
+    const socket = new WebSocket(AIS_URL);
+    streamSocket = socket;
+    socket.addEventListener('open', () => {
+      streamState = 'listening';
+      streamOpenedAt = new Date().toISOString();
+      socket.send(JSON.stringify({
         APIKey: apiKey,
         BoundingBoxes: [[[-90, -180], [90, 180]]],
         FiltersShipMMSI: mmsis,
         FilterMessageTypes: ['PositionReport', 'StandardClassBPositionReport', 'ExtendedClassBPositionReport']
-      })));
-      socket.addEventListener('message', async event => {
-        try {
-          const position = extractPosition(JSON.parse(await messageText(event.data)));
-          if (!position || !mmsis.includes(position.mmsi)) return;
-          found.set(position.mmsi, position);
-          if (found.size === mmsis.length) finish();
-        } catch {}
-      });
-      socket.addEventListener('error', finish);
-      socket.addEventListener('close', finish);
-    } catch {
-      finish();
-    }
-  });
+      }));
+    });
+    socket.addEventListener('message', async event => {
+      try {
+        const payload = JSON.parse(await messageText(event.data));
+        const serviceError = payload?.Error || payload?.error ||
+          (payload?.MessageType === 'Error' ? payload?.Message : '');
+        if (serviceError) {
+          streamState = 'error';
+          streamError = typeof serviceError === 'string' ? serviceError : JSON.stringify(serviceError);
+          return;
+        }
+        const position = extractPosition(payload);
+        if (!position || !mmsis.includes(position.mmsi)) return;
+        positionCache.set(position.mmsi, position);
+        cacheUpdatedAt = Date.now();
+        lastMessageAt = position.updatedAt || new Date().toISOString();
+        streamState = 'receiving';
+      } catch {
+        streamError = 'AISstream returned an unreadable message.';
+      }
+    });
+    socket.addEventListener('error', () => {
+      streamState = 'error';
+      streamError = 'Could not connect to AISstream. Check the API key and Azure outbound network access.';
+    });
+    socket.addEventListener('close', event => {
+      if (streamSocket !== socket) return;
+      streamSocket = null;
+      if (streamState !== 'error') {
+        streamState = 'disconnected';
+        streamError = event?.reason || `AISstream closed the connection (code ${event?.code || 'unknown'}).`;
+      }
+    });
+  } catch (error) {
+    streamState = 'error';
+    streamError = error?.message || 'AISstream connection could not be started.';
+  }
+}
+
+async function waitForFirstPosition(mmsis, timeoutMs = 12_000) {
+  if (mmsis.some(mmsi => positionCache.has(mmsi))) return;
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs && !['error', 'disconnected'].includes(streamState)) {
+    await new Promise(resolve => setTimeout(resolve, 250));
+    if (mmsis.some(mmsi => positionCache.has(mmsi))) return;
+  }
 }
 
 export async function GET() {
@@ -132,21 +174,33 @@ export async function GET() {
     const mmsis = [...new Set(projects.map(project => cleanMmsi(project.mmsi)).filter(Boolean))].slice(0, 50);
     const apiKey = String(process.env.AISSTREAM_API_KEY || '').trim();
     const websocketAvailable = typeof WebSocket === 'function';
-    let livePositions = new Map(positionCache);
-
-    if (apiKey && websocketAvailable && mmsis.length && Date.now() - cacheUpdatedAt > CACHE_MS) {
-      const fresh = await fetchLivePositions(apiKey, mmsis);
-      for (const [mmsi, position] of fresh) positionCache.set(mmsi, position);
-      cacheUpdatedAt = Date.now();
-      livePositions = new Map(positionCache);
+    if (apiKey && websocketAvailable && mmsis.length) {
+      ensureLiveStream(apiKey, mmsis);
+      await waitForFirstPosition(mmsis);
     }
 
+    const livePositions = new Map(positionCache);
     const vessels = projects.map(project => vesselRecord(project, livePositions.get(cleanMmsi(project.mmsi))));
     const configured = Boolean(apiKey && websocketAvailable);
+    const liveCount = vessels.filter(vessel => vessel.source === 'AISstream').length;
+    const connectionStatus = !configured ? 'not-configured' :
+      !mmsis.length ? 'missing-mmsi' :
+      streamState === 'receiving' && liveCount ? 'live' :
+      streamState;
+    const note = !apiKey ? 'AISSTREAM_API_KEY is not configured.' :
+      !websocketAvailable ? 'WebSocket is unavailable in this Node runtime.' :
+      !mmsis.length ? 'Add a valid 9-digit MMSI to the vessel project.' :
+      streamError || (liveCount ? '' : 'Connected to AISstream and waiting for the vessel to transmit a new position.');
     return Response.json({
       configured,
       source: configured ? 'AISstream + manual fallback' : 'Manual fallback',
-      note: !apiKey ? 'AISSTREAM_API_KEY is not configured.' : !websocketAvailable ? 'WebSocket is unavailable in this Node runtime.' : '',
+      connectionStatus,
+      note,
+      trackedMmsis: mmsis.length,
+      liveCount,
+      streamOpenedAt,
+      lastMessageAt,
+      cacheUpdatedAt: cacheUpdatedAt ? new Date(cacheUpdatedAt).toISOString() : null,
       vessels,
       refreshedAt: new Date().toISOString()
     }, { headers: { 'Cache-Control': 'private, no-store' } });
