@@ -18,7 +18,7 @@ const FOLDER_ACCESS_LEVELS = ['No Access','Read','Edit','Full Control'];
 const MANAGED_FOLDERS = ['Projects','Workshop','Marine','Drawings','Procedures','QA / QC','Reports','Drone','Certificates','Templates','Finance','HR','Management','Contracts','Customers'];
 const DEFAULT_FOLDER_ACCESS = Object.fromEntries(MANAGED_FOLDERS.map(folder=>[folder,'No Access']));
 
-const APP_VERSION = '1.0 RC4.11';
+const APP_VERSION = '1.0 RC4.12';
 
 const USER_REGISTRY_DEFAULTS = [];
 
@@ -1382,6 +1382,7 @@ function FleetMap({projects,setActive,setActiveProjectId}) {
   };
   const fleetStatusLabel={
     live:'● AIS LIVE',receiving:'● AIS LIVE',connecting:'◌ CONNECTING',
+    reconnecting:'◌ RECONNECTING',
     listening:'◌ WAITING FOR SIGNAL',disconnected:'○ DISCONNECTED',
     error:'! AIS ERROR','missing-mmsi':'! MMSI MISSING','not-configured':'○ MANUAL FALLBACK'
   }[status.connectionStatus]||'◌ WAITING FOR SIGNAL';
@@ -1389,7 +1390,8 @@ function FleetMap({projects,setActive,setActiveProjectId}) {
   const fleetNoticeTitle={
     error:'AIS connection error',disconnected:'AIS connection closed',
     'missing-mmsi':'MMSI is missing or invalid','not-configured':'Free tracking needs an API key',
-    connecting:'Connecting to AISstream',listening:'Connected — waiting for the vessel'
+    connecting:'Connecting to AISstream',reconnecting:'AIS reconnecting automatically',
+    listening:'Connected — waiting for the vessel'
   }[status.connectionStatus]||'Waiting for live AIS';
   async function askAtlas(){
     const query=question.trim().toLowerCase();

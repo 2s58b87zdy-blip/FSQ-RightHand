@@ -14,6 +14,13 @@ let streamState = 'idle';
 let streamError = '';
 let streamOpenedAt = null;
 let lastMessageAt = null;
+let lastDisconnectedAt = null;
+let reconnectTimer = null;
+let reconnectAttempts = 0;
+let nextReconnectAt = null;
+
+const RECONNECT_BASE_MS = 2_000;
+const RECONNECT_MAX_MS = 60_000;
 
 function cleanMmsi(value) {
   const mmsi = String(value || '').trim();
@@ -85,11 +92,55 @@ function extractPosition(payload) {
   };
 }
 
-function ensureLiveStream(apiKey, mmsis) {
+function clearReconnectTimer() {
+  if (reconnectTimer) clearTimeout(reconnectTimer);
+  reconnectTimer = null;
+  nextReconnectAt = null;
+}
+
+function serviceErrorMessage(value) {
+  const raw = String(typeof value === 'string' ? value : JSON.stringify(value || '')).trim();
+  if (/api.?key|auth|unauthori[sz]ed|forbidden|invalid key/i.test(raw)) {
+    return 'AISstream rejected AISSTREAM_API_KEY. Create a valid key, update the Azure App Service setting, and restart the app.';
+  }
+  if (/thrott|rate.?limit|too many/i.test(raw)) {
+    return 'AISstream is temporarily throttling the connection. FSQ will retry automatically.';
+  }
+  return raw ? `AISstream returned: ${raw.slice(0, 180)}` : 'AISstream rejected the subscription.';
+}
+
+function scheduleReconnect(apiKey, mmsis) {
+  if (reconnectTimer || !apiKey || !mmsis.length) return;
+  const delay = Math.min(RECONNECT_MAX_MS, RECONNECT_BASE_MS * (2 ** Math.min(reconnectAttempts, 5)));
+  reconnectAttempts += 1;
+  streamState = 'reconnecting';
+  nextReconnectAt = new Date(Date.now() + delay).toISOString();
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    nextReconnectAt = null;
+    ensureLiveStream(apiKey, mmsis, true);
+  }, delay);
+  reconnectTimer.unref?.();
+}
+
+function stopLiveStream() {
+  clearReconnectTimer();
+  const socket = streamSocket;
+  streamSocket = null;
+  streamApiKey = '';
+  streamMmsis = '';
+  streamState = 'idle';
+  streamError = '';
+  try { socket?.close(); } catch {}
+}
+
+function ensureLiveStream(apiKey, mmsis, force = false) {
   const signature = [...mmsis].sort().join(',');
   const socketActive = streamSocket && [0, 1].includes(streamSocket.readyState);
-  if (socketActive && streamApiKey === apiKey && streamMmsis === signature) return;
+  const sameSubscription = streamApiKey === apiKey && streamMmsis === signature;
+  if (!force && socketActive && sameSubscription && !['error', 'disconnected'].includes(streamState)) return;
 
+  clearReconnectTimer();
   try { streamSocket?.close(); } catch {}
   streamSocket = null;
   streamApiKey = apiKey;
@@ -103,7 +154,10 @@ function ensureLiveStream(apiKey, mmsis) {
     streamSocket = socket;
     socket.addEventListener('open', () => {
       streamState = 'listening';
+      streamError = '';
       streamOpenedAt = new Date().toISOString();
+      reconnectAttempts = 0;
+      nextReconnectAt = null;
       socket.send(JSON.stringify({
         APIKey: apiKey,
         BoundingBoxes: [[[-90, -180], [90, 180]]],
@@ -118,7 +172,8 @@ function ensureLiveStream(apiKey, mmsis) {
           (payload?.MessageType === 'Error' ? payload?.Message : '');
         if (serviceError) {
           streamState = 'error';
-          streamError = typeof serviceError === 'string' ? serviceError : JSON.stringify(serviceError);
+          streamError = serviceErrorMessage(serviceError);
+          try { socket.close(); } catch {}
           return;
         }
         const position = extractPosition(payload);
@@ -128,28 +183,34 @@ function ensureLiveStream(apiKey, mmsis) {
         lastMessageAt = position.updatedAt || new Date().toISOString();
         streamState = 'receiving';
       } catch {
-        streamError = 'AISstream returned an unreadable message.';
+        streamError = 'AISstream returned an unreadable message. FSQ will keep listening for the next valid signal.';
       }
     });
     socket.addEventListener('error', () => {
       streamState = 'error';
-      streamError = 'Could not connect to AISstream. Check the API key and Azure outbound network access.';
+      streamError = 'Could not connect to AISstream. FSQ will retry automatically; check the API key and Azure outbound network access if the error continues.';
+      if (streamSocket === socket) streamSocket = null;
+      try { socket.close(); } catch {}
+      scheduleReconnect(apiKey, mmsis);
     });
     socket.addEventListener('close', event => {
       if (streamSocket !== socket) return;
       streamSocket = null;
+      lastDisconnectedAt = new Date().toISOString();
       if (streamState !== 'error') {
         streamState = 'disconnected';
         streamError = event?.reason || `AISstream closed the connection (code ${event?.code || 'unknown'}).`;
       }
+      scheduleReconnect(apiKey, mmsis);
     });
   } catch (error) {
     streamState = 'error';
-    streamError = error?.message || 'AISstream connection could not be started.';
+    streamError = `${error?.message || 'AISstream connection could not be started.'} FSQ will retry automatically.`;
+    scheduleReconnect(apiKey, mmsis);
   }
 }
 
-async function waitForFirstPosition(mmsis, timeoutMs = 12_000) {
+async function waitForFirstPosition(mmsis, timeoutMs = 4_000) {
   if (mmsis.some(mmsi => positionCache.has(mmsi))) return;
   const started = Date.now();
   while (Date.now() - started < timeoutMs && !['error', 'disconnected'].includes(streamState)) {
@@ -177,6 +238,8 @@ export async function GET() {
     if (apiKey && websocketAvailable && mmsis.length) {
       ensureLiveStream(apiKey, mmsis);
       await waitForFirstPosition(mmsis);
+    } else if (streamSocket || reconnectTimer) {
+      stopLiveStream();
     }
 
     const livePositions = new Map(positionCache);
@@ -200,6 +263,8 @@ export async function GET() {
       liveCount,
       streamOpenedAt,
       lastMessageAt,
+      lastDisconnectedAt,
+      nextReconnectAt,
       cacheUpdatedAt: cacheUpdatedAt ? new Date(cacheUpdatedAt).toISOString() : null,
       vessels,
       refreshedAt: new Date().toISOString()

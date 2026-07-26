@@ -1,0 +1,10 @@
+FSQ COMMAND 1.0 RC4.12
+
+AIS CONNECTION RECOVERY
+
+- Reconnects automatically when the free AISstream beta connection closes.
+- Uses exponential retry delay to avoid connection throttling.
+- Shows a precise message when AISSTREAM_API_KEY is invalid.
+- Reduces the first-position wait so Fleet Command remains responsive.
+- Keeps manual and last-known positions visible while live AIS reconnects.
+- Includes the geographic Natural Earth world map from RC4.11.
