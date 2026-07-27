@@ -18,7 +18,7 @@ const FOLDER_ACCESS_LEVELS = ['No Access','Read','Edit','Full Control'];
 const MANAGED_FOLDERS = ['Projects','Workshop','Marine','Drawings','Procedures','QA / QC','Reports','Drone','Certificates','Templates','Finance','HR','Management','Contracts','Customers'];
 const DEFAULT_FOLDER_ACCESS = Object.fromEntries(MANAGED_FOLDERS.map(folder=>[folder,'No Access']));
 
-const APP_VERSION = '1.0 RC4.12';
+const APP_VERSION = '1.0 RC4.13';
 
 const USER_REGISTRY_DEFAULTS = [];
 
@@ -161,13 +161,21 @@ const DEFAULT_KNOWLEDGE_MACHINES = [];
 const DEFAULT_KNOWLEDGE_DOCUMENTS = [];
 const DEFAULT_KNOWLEDGE_SOLUTIONS = [];
 const DEFAULT_COMPANY_REPORTS = [];
+const DEFAULT_COMPANY_PROFILE = {
+  name:'FSQ',
+  address:'Nibe, Denmark',
+  vat:'',
+  phone:'',
+  email:'',
+  website:''
+};
 
 const FSQ_REPORT_TEMPLATES = [
   { id:'service', name:'Service Report', hint:'Service, reparation og teknisk arbejde' },
   { id:'workdone', name:'Work Done Report', hint:'Udført arbejde, timer, materialer og resultat' },
   { id:'inspection', name:'Inspection Report', hint:'Inspektion, observationer og anbefalinger' },
   { id:'risk', name:'Risk Assessment', hint:'Farer, risici og sikkerhedsforanstaltninger' },
-  { id:'packing', name:'Packing List', hint:'Emner, antal, mål, vægt og destination' },
+  { id:'packing', name:'PO → FSQ Packing List', hint:'Upload PO og få emner, antal, kolli, mål og vægt i FSQ-layout' },
   { id:'po', name:'PO Marking', hint:'PO-reference, mærkning, kolli og leveringsdata' }
 ];
 
@@ -541,6 +549,7 @@ function AppShell({ session, onLogout, users, setUsers }) {
   const [knowledgeDocuments, setKnowledgeDocuments] = useStoredState('fsq-v72-knowledge-documents', DEFAULT_KNOWLEDGE_DOCUMENTS);
   const [knowledgeSolutions, setKnowledgeSolutions] = useStoredState('fsq-v72-knowledge-solutions', DEFAULT_KNOWLEDGE_SOLUTIONS);
   const [companyReports, setCompanyReports] = useStoredState('fsq-v80-company-reports', DEFAULT_COMPANY_REPORTS);
+  const [companyProfile, setCompanyProfile] = useStoredState('fsq-v81-company-profile', DEFAULT_COMPANY_PROFILE);
 
   // Persistently remove jobs whose project no longer exists. Waiting for both
   // stores prevents a slow project load from being mistaken for deleted data.
@@ -761,7 +770,7 @@ function AppShell({ session, onLogout, users, setUsers }) {
         {active === 'fleet' && <FleetMap projects={visibleProjects} setActive={setActive} setActiveProjectId={setActiveProjectId} />}
         {active === 'projectHub' && <ProjectHub session={session} users={users} project={projects.find(p=>p.id===activeProjectId)} projects={projects} setProjects={setProjects} people={people} setPeople={setPeople} tasks={activeProjectTasks} setTasks={setTasks} documents={documents} materials={materials} setMaterials={setMaterials} quotes={quotes} reports={reports} setActive={setActive} deletedProjects={deletedProjects} setDeletedProjects={setDeletedProjects} setActiveProjectId={setActiveProjectId} droneInspections={droneInspections} setDroneInspections={setDroneInspections} setPlannerEntries={setPlannerEntries} />}
         {active === 'documents' && <ProjectBinder documents={documents} setDocuments={setDocuments} projects={projects} session={session} />}
-        {active === 'companyLibrary' && canViewCompanyLibrary(session) && <CompanyLibrary session={session} projects={projects} folders={knowledgeFolders} setFolders={setKnowledgeFolders} foldersHydrated={knowledgeFoldersHydrated} documents={knowledgeDocuments} setDocuments={setKnowledgeDocuments} reports={companyReports} setReports={setCompanyReports} />}
+        {active === 'companyLibrary' && canViewCompanyLibrary(session) && <CompanyLibrary session={session} projects={projects} folders={knowledgeFolders} setFolders={setKnowledgeFolders} foldersHydrated={knowledgeFoldersHydrated} documents={knowledgeDocuments} setDocuments={setKnowledgeDocuments} reports={companyReports} setReports={setCompanyReports} companyProfile={companyProfile} setCompanyProfile={setCompanyProfile} />}
         {active === 'inventory' && <InventoryCenter session={session} />}
         {active === 'planner' && <OperationsPlanner people={people} users={users} projects={projects} entries={plannerEntries} setEntries={setPlannerEntries} />}
         {active === 'knowledge' && <KnowledgeBase session={session} users={users} folders={knowledgeFolders} setFolders={setKnowledgeFolders} machines={knowledgeMachines} setMachines={setKnowledgeMachines} documents={knowledgeDocuments} setDocuments={setKnowledgeDocuments} solutions={knowledgeSolutions} setSolutions={setKnowledgeSolutions} />}
@@ -2669,7 +2678,7 @@ function Admin({session,users,setUsers,people,setPeople,machines,setMachines,mat
 }
 
 
-function CompanyLibrary({session,projects,folders,setFolders,foldersHydrated,documents,setDocuments,reports,setReports}) {
+function CompanyLibrary({session,projects,folders,setFolders,foldersHydrated,documents,setDocuments,reports,setReports,companyProfile,setCompanyProfile}) {
   const [tab,setTab]=useState('generate');
   const [selectedFolder,setSelectedFolder]=useState(null);
   const [selectedReport,setSelectedReport]=useState(null);
@@ -2680,7 +2689,7 @@ function CompanyLibrary({session,projects,folders,setFolders,foldersHydrated,doc
   const [newFolderName,setNewFolderName]=useState('');
   const [attachments,setAttachments]=useState([]);
   const [form,setForm]=useState({
-    reportType:'workdone',project:'',customer:'',reference:'',notes:''
+    reportType:'packing',project:'',customer:'',reference:'',notes:''
   });
   const canManage=canManagePermissions(session);
   const canApprove=canManage||canApproveTackAndComplete(session);
@@ -2691,6 +2700,7 @@ function CompanyLibrary({session,projects,folders,setFolders,foldersHydrated,doc
   const currentFolder=companyFolders.find(folder=>String(folder.id)===String(selectedFolder));
   const currentDocs=companyDocuments.filter(document=>String(document.folderId)===String(selectedFolder));
   const currentReport=reports.find(report=>String(report.id)===String(selectedReport))||null;
+  const packingMode=form.reportType==='packing';
 
   useEffect(()=>{
     if(!foldersHydrated||!canManage||companyFolders.length)return;
@@ -2772,10 +2782,14 @@ function CompanyLibrary({session,projects,folders,setFolders,foldersHydrated,doc
       if(!response.ok)throw new Error(data.error||'Rapporten kunne ikke genereres.');
       const images=(await Promise.all(attachments.slice(0,6).map(imageDataForPrint))).filter(Boolean);
       const template=FSQ_REPORT_TEMPLATES.find(item=>item.id===form.reportType);
+      const extractedPo=data.report?.packingDetails?.poNumber;
+      const extractedCustomer=data.report?.packingDetails?.customer;
+      const extractedProject=data.report?.packingDetails?.projectReference;
       const draft={
         id:`report-${Date.now()}`,templateId:form.reportType,templateName:template?.name||'FSQ Report',
-        project:form.project,customer:form.customer,reference:form.reference,
+        project:form.project||extractedProject||'',customer:form.customer||extractedCustomer||'',reference:form.reference||extractedPo||'',
         ...data.report,attachments:data.sourceNames||attachments.map(file=>file.name),images,
+        companyProfile:{...DEFAULT_COMPANY_PROFILE,...companyProfile},
         status:'Draft',createdBy:session.name,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),
         atlasModel:data.model||''
       };
@@ -2790,6 +2804,22 @@ function CompanyLibrary({session,projects,folders,setFolders,foldersHydrated,doc
     setReports(current=>current.map(report=>String(report.id)===String(currentReport.id)
       ?{...report,...patch,status:report.status==='Approved'?'Draft':report.status,approvedBy:undefined,approvedAt:undefined,updatedAt:new Date().toISOString()}
       :report));
+  }
+
+  function updatePackingItem(index,field,value){
+    if(!currentReport)return;
+    updateReport({packingItems:(currentReport.packingItems||[]).map((item,itemIndex)=>itemIndex===index?{...item,[field]:value}:item)});
+  }
+
+  function addPackingItem(){
+    if(!currentReport)return;
+    const items=currentReport.packingItems||[];
+    updateReport({packingItems:[...items,{line:String(items.length+1),description:'',quantity:'',unit:'',packageNo:'',dimensions:'',netWeightKg:'',grossWeightKg:'',marking:''}]});
+  }
+
+  function removePackingItem(index){
+    if(!currentReport)return;
+    updateReport({packingItems:(currentReport.packingItems||[]).filter((_,itemIndex)=>itemIndex!==index)});
   }
 
   function approveReport(){
@@ -2812,13 +2842,21 @@ function CompanyLibrary({session,projects,folders,setFolders,foldersHydrated,doc
     const sections=(report.sections||[]).map(section=>`<section><h2>${escapeHtml(section.heading)}</h2><p>${paragraphs(section.body)}</p></section>`).join('');
     const actions=(report.actionItems||[]).length?`<section><h2>Actions / opfølgning</h2><ul>${report.actionItems.map(item=>`<li>${escapeHtml(item)}</li>`).join('')}</ul></section>`:'';
     const images=(report.images||[]).length?`<section class="photos"><h2>Fotodokumentation</h2>${report.images.map(image=>`<figure><img src="${image.dataUrl}" alt=""><figcaption>${escapeHtml(image.name)}</figcaption></figure>`).join('')}</section>`:'';
+    const packingDetails=report.packingDetails||{};
+    const packingRows=(report.packingItems||[]).map(item=>`<tr><td>${escapeHtml(item.line)}</td><td>${escapeHtml(item.description)}</td><td>${escapeHtml(item.quantity)}</td><td>${escapeHtml(item.unit)}</td><td>${escapeHtml(item.packageNo)}</td><td>${escapeHtml(item.dimensions)}</td><td>${escapeHtml(item.netWeightKg)}</td><td>${escapeHtml(item.grossWeightKg)}</td><td>${escapeHtml(item.marking)}</td></tr>`).join('');
+    const packing=report.templateId==='packing'?`<section class="packing"><h2>Forsendelsesoplysninger</h2><div class="packingMeta"><span><b>PO:</b> ${escapeHtml(packingDetails.poNumber||report.reference||'—')}</span><span><b>Leveringsdato:</b> ${escapeHtml(packingDetails.deliveryDate||'—')}</span><span><b>Leveringsadresse:</b> ${escapeHtml(packingDetails.deliveryAddress||'—')}</span><span><b>Transport:</b> ${escapeHtml(packingDetails.shippingMethod||'—')}</span></div><table><thead><tr><th>Linje</th><th>Beskrivelse</th><th>Antal</th><th>Enhed</th><th>Kolli</th><th>Mål</th><th>Netto kg</th><th>Brutto kg</th><th>Mærkning</th></tr></thead><tbody>${packingRows||'<tr><td colspan="9">Ingen pakkelinjer</td></tr>'}</tbody><tfoot><tr><td colspan="4"><b>Total</b></td><td>${escapeHtml(packingDetails.totalPackages||'—')}</td><td></td><td>${escapeHtml(packingDetails.totalNetWeightKg||'—')}</td><td>${escapeHtml(packingDetails.totalGrossWeightKg||'—')}</td><td></td></tr></tfoot></table></section>`:'';
+    const profile={...DEFAULT_COMPANY_PROFILE,...(report.companyProfile||{})};
+    const companyDetails=[
+      profile.name,profile.address,profile.vat&&`CVR/VAT: ${profile.vat}`,
+      profile.phone&&`Tel: ${profile.phone}`,profile.email,profile.website
+    ].filter(Boolean).map(escapeHtml).join(' · ');
     return `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(report.title)}</title><style>
-body{font-family:Arial,sans-serif;color:#14202b;margin:34px;line-height:1.45}header{display:flex;justify-content:space-between;border-bottom:4px solid #0876bb;padding-bottom:16px;margin-bottom:24px}header img{width:115px;height:auto}h1{margin:0;font-size:25px;color:#082b48}h2{font-size:16px;color:#0876bb;border-bottom:1px solid #c7d8e5;padding-bottom:5px;margin-top:24px}.meta{display:grid;grid-template-columns:1fr 1fr;gap:7px 25px;background:#eef5f9;padding:14px;margin-bottom:22px}.meta b{color:#476779}p{white-space:normal}.status{color:#168053;font-weight:bold}.photos{display:grid;grid-template-columns:1fr 1fr;gap:15px}.photos h2{grid-column:1/-1}.photos figure{margin:0;break-inside:avoid}.photos img{max-width:100%;max-height:370px}.photos figcaption{font-size:11px;color:#567;margin-top:4px}footer{margin-top:35px;border-top:1px solid #aac1d0;padding-top:12px;font-size:11px;color:#567}@media print{body{margin:15mm}.photos img{max-height:90mm}}</style></head><body>
+body{font-family:Arial,sans-serif;color:#14202b;margin:34px;line-height:1.45}header{display:flex;justify-content:space-between;border-bottom:4px solid #0876bb;padding-bottom:16px;margin-bottom:24px}header img{width:115px;height:auto}h1{margin:0;font-size:25px;color:#082b48}h2{font-size:16px;color:#0876bb;border-bottom:1px solid #c7d8e5;padding-bottom:5px;margin-top:24px}.meta,.packingMeta{display:grid;grid-template-columns:1fr 1fr;gap:7px 25px;background:#eef5f9;padding:14px;margin-bottom:22px}.meta b,.packingMeta b{color:#476779}p{white-space:normal}.status{color:#168053;font-weight:bold}.packing table{width:100%;border-collapse:collapse;font-size:10px}.packing th{background:#0b5f91;color:#fff}.packing th,.packing td{border:1px solid #9fb8c8;padding:6px;text-align:left;vertical-align:top}.packing tfoot{background:#e9f2f7}.photos{display:grid;grid-template-columns:1fr 1fr;gap:15px}.photos h2{grid-column:1/-1}.photos figure{margin:0;break-inside:avoid}.photos img{max-width:100%;max-height:370px}.photos figcaption{font-size:11px;color:#567;margin-top:4px}footer{margin-top:35px;border-top:2px solid #0876bb;padding-top:10px;font-size:10px;color:#456;display:grid;gap:3px}footer strong{color:#082b48;font-size:11px}@media print{body{margin:15mm}.photos img{max-height:90mm}.packing tr{break-inside:avoid}}</style></head><body>
 <header><img src="${window.location.origin}/fsq-logo-clean.webp" alt="FSQ"><div><h1>${escapeHtml(report.title||report.templateName)}</h1><span class="status">GODKENDT FSQ-DOKUMENT</span></div></header>
 <div class="meta"><span><b>Layout:</b> ${escapeHtml(report.templateName)}</span><span><b>Reference / PO:</b> ${escapeHtml(report.reference||'—')}</span><span><b>Projekt:</b> ${escapeHtml(report.project||'—')}</span><span><b>Kunde:</b> ${escapeHtml(report.customer||'—')}</span><span><b>Udarbejdet af:</b> ${escapeHtml(report.createdBy)}</span><span><b>Godkendt af:</b> ${escapeHtml(report.approvedBy||'—')}</span><span><b>Dato:</b> ${escapeHtml(new Date(report.createdAt).toLocaleDateString('da-DK'))}</span><span><b>Godkendt:</b> ${report.approvedAt?escapeHtml(new Date(report.approvedAt).toLocaleString('da-DK')):'—'}</span></div>
-<section><h2>Resumé</h2><p>${paragraphs(report.summary)}</p></section>${sections}${actions}
+<section><h2>Resumé</h2><p>${paragraphs(report.summary)}</p></section>${packing}${sections}${actions}
 <section><h2>Konklusion</h2><p>${paragraphs(report.conclusion)}</p></section>${images}
-<footer>FSQ Company Library · Dokument-ID ${escapeHtml(report.id)} · Genereret som kladde af ATLAS og menneskeligt godkendt.</footer>
+<footer><strong>${companyDetails}</strong><span>FSQ Company Library · Dokument-ID ${escapeHtml(report.id)} · Genereret som kladde af ATLAS og menneskeligt godkendt.</span></footer>
 </body></html>`;
   }
   function requireApproved(){
@@ -2851,17 +2889,19 @@ body{font-family:Arial,sans-serif;color:#14202b;margin:34px;line-height:1.45}hea
       <section className="panel reportSetup">
         <div className="panelHead"><div><p className="panelEyebrow">1 · VÆLG LAYOUT</p><h3>FSQ dokumenttype</h3></div></div>
         <div className="reportTemplateGrid">{FSQ_REPORT_TEMPLATES.map(template=><button key={template.id} className={form.reportType===template.id?'active':''} onClick={()=>setForm(current=>({...current,reportType:template.id}))}><b>{template.name}</b><small>{template.hint}</small></button>)}</div>
-        <div className="reportMetaGrid"><label>Projekt<select value={form.project} onChange={event=>setForm({...form,project:event.target.value})}><option value="">Vælg eller skriv i noterne</option>{projects.map(project=><option key={project.id}>{project.name}</option>)}</select></label><label>Kunde<input value={form.customer} onChange={event=>setForm({...form,customer:event.target.value})} placeholder="Kundenavn"/></label><label>Reference / PO<input value={form.reference} onChange={event=>setForm({...form,reference:event.target.value})} placeholder="PO- eller jobnummer"/></label></div>
+        <div className="reportMetaGrid"><label>Projekt<select value={form.project} onChange={event=>setForm({...form,project:event.target.value})}><option value="">Vælg eller hentes fra PO</option>{projects.map(project=><option key={project.id}>{project.name}</option>)}</select></label><label>Kunde<input value={form.customer} onChange={event=>setForm({...form,customer:event.target.value})} placeholder={packingMode?'Hentes automatisk fra PO':'Kundenavn'}/></label><label>Reference / PO<input value={form.reference} onChange={event=>setForm({...form,reference:event.target.value})} placeholder={packingMode?'Hentes automatisk fra PO':'PO- eller jobnummer'}/></label></div>
+        <div className="companyProfileEditor"><div><b>FSQ firmadetaljer i dokumentets bund</b><small>Gemmes til alle kommende dokumenter</small></div><div className="companyProfileGrid"><label>Firmanavn<input disabled={!canManage} value={companyProfile.name||''} onChange={event=>setCompanyProfile({...companyProfile,name:event.target.value})}/></label><label>Adresse<input disabled={!canManage} value={companyProfile.address||''} onChange={event=>setCompanyProfile({...companyProfile,address:event.target.value})}/></label><label>CVR / VAT<input disabled={!canManage} value={companyProfile.vat||''} onChange={event=>setCompanyProfile({...companyProfile,vat:event.target.value})}/></label><label>Telefon<input disabled={!canManage} value={companyProfile.phone||''} onChange={event=>setCompanyProfile({...companyProfile,phone:event.target.value})}/></label><label>E-mail<input disabled={!canManage} value={companyProfile.email||''} onChange={event=>setCompanyProfile({...companyProfile,email:event.target.value})}/></label><label>Webside<input disabled={!canManage} value={companyProfile.website||''} onChange={event=>setCompanyProfile({...companyProfile,website:event.target.value})}/></label></div></div>
       </section>
       <section className="panel reportEvidence">
-        <div className="panelHead"><div><p className="panelEyebrow">2 · MATERIALE TIL ATLAS</p><h3>Noter, tekst, billeder og bilag</h3></div><span>{attachments.length}</span></div>
-        <textarea rows="11" value={form.notes} onChange={event=>setForm({...form,notes:event.target.value})} placeholder="Skriv eller indsæt dine noter her. Fx udført arbejde, observationer, mål, materialer, timer og hvad billederne viser…"/>
+        <div className="panelHead"><div><p className="panelEyebrow">2 · {packingMode?'UPLOAD PO ORDRE':'MATERIALE TIL ATLAS'}</p><h3>{packingMode?'ATLAS bygger FSQ-pakkelisten':'Noter, tekst, billeder og bilag'}</h3></div><span>{attachments.length}</span></div>
+        {packingMode&&<div className="packingAutoFlow"><span>1</span><b>Upload PO</b><i>→</i><span>2</span><b>ATLAS udtrækker linjer</b><i>→</i><span>3</span><b>Kontrollér og godkend</b></div>}
+        <textarea rows={packingMode?'5':'11'} value={form.notes} onChange={event=>setForm({...form,notes:event.target.value})} placeholder={packingMode?'Valgfrit: skriv særlige krav til emballering, mærkning eller levering. Selve PO’en trækkes ind nedenfor.':'Skriv eller indsæt dine noter her. Fx udført arbejde, observationer, mål, materialer, timer og hvad billederne viser…'}/>
         <label className={`companyDropZone ${dragActive?'dragActive':''}`} onDragEnter={event=>{event.preventDefault();setDragActive(true)}} onDragOver={event=>event.preventDefault()} onDragLeave={()=>setDragActive(false)} onDrop={event=>{event.preventDefault();setDragActive(false);setAttachments(current=>[...current,...event.dataTransfer.files].slice(0,12))}}>
-          <span>＋</span><b>Træk billeder og dokumenter hertil</b><small>JPG, PNG, WEBP, PDF, Word, Excel og tekst · maks. 12 filer</small>
+          <span>＋</span><b>{packingMode?'Træk PO-ordren hertil':'Træk billeder og dokumenter hertil'}</b><small>PDF, Word, Excel, billeder og tekst · maks. 12 filer</small>
           <input type="file" multiple accept=".jpg,.jpeg,.png,.webp,.pdf,.docx,.xlsx,.txt,.csv,.md" onChange={event=>{setAttachments(current=>[...current,...event.target.files].slice(0,12));event.target.value=''}}/>
         </label>
         <div className="reportAttachmentList">{attachments.map((file,index)=><div key={`${file.name}-${index}`}><span>{file.type.startsWith('image/')?'▧':'▤'}</span><div><b>{file.name}</b><small>{Math.max(1,Math.ceil(file.size/1024))} KB</small></div><button onClick={()=>removeAttachment(index)}>×</button></div>)}</div>
-        <button className="primaryBtn generateReportBtn" disabled={generating} onClick={generateReport}>{generating?'ATLAS bygger rapporten…':'Generér rapportudkast med ATLAS →'}</button>
+        <button className="primaryBtn generateReportBtn" disabled={generating} onClick={generateReport}>{generating?(packingMode?'ATLAS læser PO og bygger pakkelisten…':'ATLAS bygger rapporten…'):(packingMode?'Generér FSQ-pakkeliste automatisk →':'Generér rapportudkast med ATLAS →')}</button>
       </section>
     </div>}
 
@@ -2870,6 +2910,16 @@ body{font-family:Arial,sans-serif;color:#14202b;margin:34px;line-height:1.45}hea
       <section className="panel reportEditor">{currentReport?<><div className="reportApprovalBar"><div><span className={`reportState ${currentReport.status==='Approved'?'approved':''}`}>{currentReport.status}</span><small>{currentReport.status==='Approved'?`Godkendt af ${currentReport.approvedBy}`:'ATLAS-kladden skal kontrolleres af et menneske'}</small></div><div><button disabled={currentReport.status!=='Approved'} onClick={printReport}>Print</button><button disabled={currentReport.status!=='Approved'} onClick={downloadReport}>Download Word</button>{canApprove&&<button className="primaryBtn" onClick={approveReport}>Godkend rapport</button>}</div></div>
         <label>Titel<input value={currentReport.title||''} onChange={event=>updateReport({title:event.target.value})}/></label>
         <label>Resumé<textarea rows="5" value={currentReport.summary||''} onChange={event=>updateReport({summary:event.target.value})}/></label>
+        {currentReport.templateId==='packing'&&<section className="packingReview">
+          <div className="panelHead"><div><p className="panelEyebrow">PO → FSQ PACKING LIST</p><h3>Kontrollér leveringsdata og pakkelinjer</h3></div><button onClick={addPackingItem}>+ Tilføj linje</button></div>
+          <div className="packingDetailsGrid">
+            {[['poNumber','PO-nummer'],['customer','Kunde'],['projectReference','Projektreference'],['deliveryAddress','Leveringsadresse'],['deliveryDate','Leveringsdato'],['shippingMethod','Transport'],['totalPackages','Antal kolli'],['totalNetWeightKg','Netto kg'],['totalGrossWeightKg','Brutto kg']].map(([field,label])=><label key={field}>{label}<input value={currentReport.packingDetails?.[field]||''} onChange={event=>updateReport({packingDetails:{...(currentReport.packingDetails||{}),[field]:event.target.value}})}/></label>)}
+          </div>
+          <div className="packingEditorTable"><div className="packingEditorRow packingEditorHead"><b>Linje</b><b>Beskrivelse</b><b>Antal</b><b>Enhed</b><b>Kolli</b><b>Mål</b><b>Netto kg</b><b>Brutto kg</b><b>Mærkning</b><b/></div>
+            {(currentReport.packingItems||[]).map((item,index)=><div className="packingEditorRow" key={index}>{[['line',item.line],['description',item.description],['quantity',item.quantity],['unit',item.unit],['packageNo',item.packageNo],['dimensions',item.dimensions],['netWeightKg',item.netWeightKg],['grossWeightKg',item.grossWeightKg],['marking',item.marking]].map(([field,value])=><input key={field} aria-label={`${field} ${index+1}`} value={value||''} onChange={event=>updatePackingItem(index,field,event.target.value)}/>)}<button className="packingDelete" onClick={()=>removePackingItem(index)}>×</button></div>)}
+          </div>
+          {!(currentReport.packingItems||[]).length&&<div className="empty">ATLAS fandt ingen sikre PO-linjer. Tilføj dem manuelt eller kontrollér PO-filen.</div>}
+        </section>}
         <div className="reportSections">{(currentReport.sections||[]).map((section,index)=><article key={index}><input value={section.heading||''} onChange={event=>updateReport({sections:currentReport.sections.map((item,itemIndex)=>itemIndex===index?{...item,heading:event.target.value}:item)})}/><textarea rows="6" value={section.body||''} onChange={event=>updateReport({sections:currentReport.sections.map((item,itemIndex)=>itemIndex===index?{...item,body:event.target.value}:item)})}/></article>)}</div>
         <label>Actions / opfølgning<textarea rows="4" value={(currentReport.actionItems||[]).join('\n')} onChange={event=>updateReport({actionItems:event.target.value.split('\n').filter(Boolean)})}/></label>
         <label>Konklusion<textarea rows="4" value={currentReport.conclusion||''} onChange={event=>updateReport({conclusion:event.target.value})}/></label>

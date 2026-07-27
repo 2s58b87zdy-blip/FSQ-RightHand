@@ -1,0 +1,13 @@
+FSQ COMMAND 1.0 RC4.13
+
+PO TO FSQ PACKING LIST
+
+- Upload a customer PO as PDF, Word, Excel, image or text.
+- ATLAS extracts PO number, delivery data and every readable PO line.
+- Generates a structured, editable FSQ packing list with packages, dimensions,
+  net weight, gross weight and marking.
+- Missing values are marked for human review instead of being invented.
+- Packing lists require approval before print or Word download.
+- Printed documents include the FSQ logo and saved company details in the footer.
+- Company details are shared securely through the existing Commander state store.
+- Includes the AIS recovery and geographic world map from RC4.12.

@@ -21,6 +21,28 @@ function parseReport(raw='') {
   const end = text.lastIndexOf('}');
   if (start < 0 || end <= start) throw new Error('ATLAS returned an invalid report format.');
   const parsed = JSON.parse(text.slice(start, end + 1));
+  const packingDetails = parsed.packingDetails && typeof parsed.packingDetails === 'object' ? {
+    poNumber: clean(parsed.packingDetails.poNumber, 180),
+    customer: clean(parsed.packingDetails.customer, 300),
+    projectReference: clean(parsed.packingDetails.projectReference, 300),
+    deliveryAddress: clean(parsed.packingDetails.deliveryAddress, 800),
+    deliveryDate: clean(parsed.packingDetails.deliveryDate, 120),
+    shippingMethod: clean(parsed.packingDetails.shippingMethod, 180),
+    totalPackages: clean(parsed.packingDetails.totalPackages, 80),
+    totalNetWeightKg: clean(parsed.packingDetails.totalNetWeightKg, 80),
+    totalGrossWeightKg: clean(parsed.packingDetails.totalGrossWeightKg, 80)
+  } : {};
+  const packingItems = (Array.isArray(parsed.packingItems) ? parsed.packingItems : []).slice(0, 150).map((item, index) => ({
+    line: clean(item?.line || String(index + 1), 60),
+    description: clean(item?.description, 1200),
+    quantity: clean(item?.quantity, 80),
+    unit: clean(item?.unit, 80),
+    packageNo: clean(item?.packageNo, 80),
+    dimensions: clean(item?.dimensions, 160),
+    netWeightKg: clean(item?.netWeightKg, 80),
+    grossWeightKg: clean(item?.grossWeightKg, 80),
+    marking: clean(item?.marking, 400)
+  })).filter(item => item.description || item.quantity || item.packageNo);
   return {
     title: clean(parsed.title, 300),
     summary: clean(parsed.summary, 6000),
@@ -30,7 +52,9 @@ function parseReport(raw='') {
     })).filter(section => section.heading || section.body),
     actionItems: (Array.isArray(parsed.actionItems) ? parsed.actionItems : []).slice(0, 30).map(item => clean(item, 800)).filter(Boolean),
     conclusion: clean(parsed.conclusion, 5000),
-    verificationNotes: clean(parsed.verificationNotes, 2500)
+    verificationNotes: clean(parsed.verificationNotes, 2500),
+    packingDetails,
+    packingItems
   };
 }
 
@@ -83,8 +107,14 @@ Never invent measurements, quantities, standards, PO numbers, signatures, work p
 Mark missing required facts clearly as "[MANGLER – udfyld før godkendelse]".
 For safety, welding, lifting, pressure, electrical or classification matters, explicitly require competent review where appropriate.
 Return valid JSON only, with this exact shape:
-{"title":"...","summary":"...","sections":[{"heading":"...","body":"..."}],"actionItems":["..."],"conclusion":"...","verificationNotes":"Facts or fields that the reviewer must verify"}
-Make the sections fit the selected template. For packing lists and PO marking, use clear line-oriented text that can be checked and printed.`;
+{"title":"...","summary":"...","sections":[{"heading":"...","body":"..."}],"actionItems":["..."],"conclusion":"...","verificationNotes":"Facts or fields that the reviewer must verify","packingDetails":{"poNumber":"","customer":"","projectReference":"","deliveryAddress":"","deliveryDate":"","shippingMethod":"","totalPackages":"","totalNetWeightKg":"","totalGrossWeightKg":""},"packingItems":[{"line":"","description":"","quantity":"","unit":"","packageNo":"","dimensions":"","netWeightKg":"","grossWeightKg":"","marking":""}]}
+Make the sections fit the selected template.
+${reportType === 'packing' ? `This is an FSQ packing list generated from a purchase order.
+Extract every PO line into packingItems without silently merging or omitting lines.
+Copy PO descriptions, quantities and units exactly when readable.
+Extract PO number, customer, project reference, delivery address and requested delivery date into packingDetails.
+Do not guess package numbers, dimensions or weights. Use "[MANGLER]" in those fields when the PO does not provide them.
+Use verificationNotes to list unreadable, ambiguous or missing packing facts that require human review.` : 'For non-packing templates, return empty packingDetails and packingItems.'}`;
 
     const userText = `Template: ${templateName}
 Project: ${project || '[not supplied]'}
