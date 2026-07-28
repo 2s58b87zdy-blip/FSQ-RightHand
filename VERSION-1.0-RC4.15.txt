@@ -1,0 +1,13 @@
+FSQ COMMAND 1.0 RC4.15
+
+- Company Library: FSQ TEMPLATES now contains:
+  - Scrubber Rapport
+  - RA
+  - Pakkelister
+  - Service Rapport / Workdone
+  - Timesheet
+- Uploads are stored in the selected template folder.
+- Flemming and Jakob can upload Company Library files without a second,
+  conflicting folder-permission check.
+- Existing templates stored directly in the old FSQ Templates folder remain
+  visible under Scrubber Rapport for migration.

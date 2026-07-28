@@ -21,11 +21,14 @@ export async function POST(request) {
     const folders = await getStateValue('fsq-v72-knowledge-folders');
     const targetFolder = (Array.isArray(folders) ? folders : []).find(item => String(item?.id) === requestedFolderId);
     if (!targetFolder) return Response.json({ error: 'Knowledge-mappen findes ikke.' }, { status: 400 });
-    if (targetFolder.companyLibrary && !canAccessCompanyLibrary(session)) {
+    const companyTarget = Boolean(targetFolder.companyLibrary);
+    if (companyTarget && !canAccessCompanyLibrary(session)) {
       return Response.json({ error: 'Du har ikke adgang til Company Library.' }, { status: 403 });
     }
     const accessFolder = String(targetFolder.accessFolder || 'Workshop');
-    if (!canEditFolder(session, accessFolder)) return Response.json({ error: 'Du har ikke skriverettighed til denne mappe.' }, { status: 403 });
+    if (!companyTarget && !canEditFolder(session, accessFolder)) {
+      return Response.json({ error: 'Du har ikke skriverettighed til denne mappe.' }, { status: 403 });
+    }
     const folder = safeSegment(targetFolder.name || form.get('folder'));
     const folderId = safeSegment(requestedFolderId, 'unknown');
     const machine = safeSegment(form.get('machine'));

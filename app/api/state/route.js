@@ -10,8 +10,10 @@ const STATE_KEYS = new Set([
   'fsq-v40-machines', 'fsq-v40-materials', 'fsq-v40-people', 'fsq-v40-projects',
   'fsq-v40-quotes', 'fsq-v40-reports', 'fsq-v40-tasks', 'fsq-v50-custom-folders',
   'fsq-v71-planner', 'fsq-v72-knowledge-documents', 'fsq-v72-knowledge-folders',
-  'fsq-v72-knowledge-machines', 'fsq-v72-knowledge-solutions', 'fsq-v80-company-reports'
+  'fsq-v72-knowledge-machines', 'fsq-v72-knowledge-solutions',
+  'fsq-v80-company-reports', 'fsq-v81-company-profile'
 ]);
+const PRIVATE_COMPANY_KEYS = new Set(['fsq-v80-company-reports','fsq-v81-company-profile']);
 
 const ROLE_WRITE_KEYS = {
   'Project Manager': new Set(['fsq-v40-projects','fsq-v40-tasks','fsq-v40-people','fsq-v40-documents','fsq-v40-reports','fsq-v40-drone-inspections','fsq-v71-planner']),
@@ -32,7 +34,9 @@ async function filterForSession(key, value, session) {
   if (key === 'fsq-v72-knowledge-documents' && Array.isArray(value)) {
     const folders = await getStateValue('fsq-v72-knowledge-folders');
     const allowedIds = new Set((Array.isArray(folders) ? folders : [])
-      .filter(folder => (!folder?.companyLibrary || canAccessCompanyLibrary(session)) && canReadFolder(session, folder?.accessFolder || 'Workshop'))
+      .filter(folder => folder?.companyLibrary
+        ? canAccessCompanyLibrary(session)
+        : canReadFolder(session, folder?.accessFolder || 'Workshop'))
       .map(folder => String(folder.id)));
     return value.filter(document => allowedIds.has(String(document?.folderId)));
   }
@@ -113,7 +117,7 @@ export async function GET(request) {
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const key = new URL(request.url).searchParams.get('key');
   if (!STATE_KEYS.has(key)) return NextResponse.json({ error: 'Unknown state key' }, { status: 400 });
-  if (key === 'fsq-v80-company-reports' && !canAccessCompanyLibrary(session)) return forbidden();
+  if (PRIVATE_COMPANY_KEYS.has(key) && !canAccessCompanyLibrary(session)) return forbidden();
   const value = await getStateValue(key);
   return NextResponse.json({ value: await filterForSession(key, value, session) }, { headers: { 'Cache-Control': 'no-store' } });
 }
@@ -124,15 +128,24 @@ export async function PUT(request) {
   try {
     const { key, value } = await request.json();
     if (!STATE_KEYS.has(key)) return NextResponse.json({ error: 'Unknown state key' }, { status: 400 });
-    if (key === 'fsq-v80-company-reports' && !canAccessCompanyLibrary(session)) return forbidden();
+    if (PRIVATE_COMPANY_KEYS.has(key) && !canAccessCompanyLibrary(session)) return forbidden();
     const serialized = JSON.stringify(value);
     if (serialized.length > 5 * 1024 * 1024) return NextResponse.json({ error: 'State payload is too large' }, { status: 413 });
 
     const roleKeys = ROLE_WRITE_KEYS[session.role];
     let storedValue = value;
     if (!canManage(session) && !roleKeys?.has(key)) {
-      if (!['fsq-v40-tasks','fsq-v72-knowledge-documents','fsq-v72-knowledge-solutions','fsq-v80-company-reports'].includes(key)) return forbidden();
-      storedValue = await mergeScopedValue(key, value, session);
+      if (key === 'fsq-v72-knowledge-folders' && canAccessCompanyLibrary(session)) {
+        if (!Array.isArray(value)) return NextResponse.json({ error:'Expected an array.' }, { status:400 });
+        const existing = await getStateValue(key);
+        storedValue = [
+          ...(Array.isArray(existing) ? existing.filter(folder => !folder?.companyLibrary) : []),
+          ...value.filter(folder => folder?.companyLibrary)
+        ];
+      } else {
+        if (!['fsq-v40-tasks','fsq-v72-knowledge-documents','fsq-v72-knowledge-solutions','fsq-v80-company-reports'].includes(key)) return forbidden();
+        storedValue = await mergeScopedValue(key, value, session);
+      }
     }
 
     const pool = await ensureSchema();

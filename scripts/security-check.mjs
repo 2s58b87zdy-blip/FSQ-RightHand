@@ -21,7 +21,7 @@ const protectedRoutes = [
   'app/api/knowledge/route.js', 'app/api/knowledge/file/route.js',
   'app/api/job-photos/route.js', 'app/api/job-photos/file/route.js',
   'app/api/project-documents/route.js', 'app/api/project-documents/file/route.js',
-  'app/api/atlas/report/route.js',
+  'app/api/atlas/report/route.js', 'app/api/atlas/template/route.js',
   'app/api/fleet/positions/route.js',
   'app/api/diagnostics/database/route.js', 'app/api/diagnostics/blob/route.js'
 ];
@@ -31,6 +31,7 @@ for (const file of protectedRoutes) {
 
 const privateCompanyRoutes = [
   'app/api/atlas/report/route.js',
+  'app/api/atlas/template/route.js',
   'app/api/knowledge/route.js',
   'app/api/knowledge/file/route.js',
   'app/api/state/route.js'

@@ -18,7 +18,7 @@ const FOLDER_ACCESS_LEVELS = ['No Access','Read','Edit','Full Control'];
 const MANAGED_FOLDERS = ['Projects','Workshop','Marine','Drawings','Procedures','QA / QC','Reports','Drone','Certificates','Templates','Finance','HR','Management','Contracts','Customers'];
 const DEFAULT_FOLDER_ACCESS = Object.fromEntries(MANAGED_FOLDERS.map(folder=>[folder,'No Access']));
 
-const APP_VERSION = '1.0 RC4.13';
+const APP_VERSION = '1.0 RC4.15';
 
 const USER_REGISTRY_DEFAULTS = [];
 
@@ -153,7 +153,12 @@ const DEFAULT_KNOWLEDGE_FOLDERS = [
   { id: 'company-hse', name: 'HSE & Risk Assessments', description: 'RA, method statements, LOTO and safety documents', accessFolder: 'Procedures', companyLibrary:true },
   { id: 'company-engineering', name: 'Engineering & CAD', description: 'AutoCAD, Inventor, drawings and technical references', accessFolder: 'Drawings', companyLibrary:true },
   { id: 'company-operations', name: 'Operations & Reports', description: 'Timesheets, Work Done and service reports', accessFolder: 'Reports', companyLibrary:true },
-  { id: 'company-templates', name: 'FSQ Templates', description: 'Approved layouts, packing lists and PO marking', accessFolder: 'Templates', companyLibrary:true }
+  { id: 'company-templates', name: 'FSQ TEMPLATES', description: 'Godkendte FSQ-masterfiler opdelt efter dokumenttype', accessFolder: 'Templates', companyLibrary:true },
+  { id: 'company-template-scrubber', parentId:'company-templates', templateCategory:true, name: 'Scrubber Rapport', description: 'Scrubber inspection og tekniske rapportmastere', accessFolder: 'Templates', companyLibrary:true },
+  { id: 'company-template-ra', parentId:'company-templates', templateCategory:true, name: 'RA', description: 'Risk Assessment-mastere', accessFolder: 'Templates', companyLibrary:true },
+  { id: 'company-template-packing', parentId:'company-templates', templateCategory:true, name: 'Pakkelister', description: 'Pakkelister, PO-markering og leveringsdokumenter', accessFolder: 'Templates', companyLibrary:true },
+  { id: 'company-template-service', parentId:'company-templates', templateCategory:true, name: 'Service Rapport / Workdone', description: 'Service-, workdone- og arbejdsrapportmastere', accessFolder: 'Templates', companyLibrary:true },
+  { id: 'company-template-timesheet', parentId:'company-templates', templateCategory:true, name: 'Timesheet', description: 'Timeseddel- og timeregistreringsmastere', accessFolder: 'Templates', companyLibrary:true }
 ];
 
 const DEFAULT_KNOWLEDGE_MACHINES = [];
@@ -770,7 +775,7 @@ function AppShell({ session, onLogout, users, setUsers }) {
         {active === 'fleet' && <FleetMap projects={visibleProjects} setActive={setActive} setActiveProjectId={setActiveProjectId} />}
         {active === 'projectHub' && <ProjectHub session={session} users={users} project={projects.find(p=>p.id===activeProjectId)} projects={projects} setProjects={setProjects} people={people} setPeople={setPeople} tasks={activeProjectTasks} setTasks={setTasks} documents={documents} materials={materials} setMaterials={setMaterials} quotes={quotes} reports={reports} setActive={setActive} deletedProjects={deletedProjects} setDeletedProjects={setDeletedProjects} setActiveProjectId={setActiveProjectId} droneInspections={droneInspections} setDroneInspections={setDroneInspections} setPlannerEntries={setPlannerEntries} />}
         {active === 'documents' && <ProjectBinder documents={documents} setDocuments={setDocuments} projects={projects} session={session} />}
-        {active === 'companyLibrary' && canViewCompanyLibrary(session) && <CompanyLibrary session={session} projects={projects} folders={knowledgeFolders} setFolders={setKnowledgeFolders} foldersHydrated={knowledgeFoldersHydrated} documents={knowledgeDocuments} setDocuments={setKnowledgeDocuments} reports={companyReports} setReports={setCompanyReports} companyProfile={companyProfile} setCompanyProfile={setCompanyProfile} />}
+        {active === 'companyLibrary' && canViewCompanyLibrary(session) && <CompanyLibrary session={session} projects={projects} tasks={activeProjectTasks} folders={knowledgeFolders} setFolders={setKnowledgeFolders} foldersHydrated={knowledgeFoldersHydrated} documents={knowledgeDocuments} setDocuments={setKnowledgeDocuments} reports={companyReports} setReports={setCompanyReports} companyProfile={companyProfile} setCompanyProfile={setCompanyProfile} />}
         {active === 'inventory' && <InventoryCenter session={session} />}
         {active === 'planner' && <OperationsPlanner people={people} users={users} projects={projects} entries={plannerEntries} setEntries={setPlannerEntries} />}
         {active === 'knowledge' && <KnowledgeBase session={session} users={users} folders={knowledgeFolders} setFolders={setKnowledgeFolders} machines={knowledgeMachines} setMachines={setKnowledgeMachines} documents={knowledgeDocuments} setDocuments={setKnowledgeDocuments} solutions={knowledgeSolutions} setSolutions={setKnowledgeSolutions} />}
@@ -2678,7 +2683,7 @@ function Admin({session,users,setUsers,people,setPeople,machines,setMachines,mat
 }
 
 
-function CompanyLibrary({session,projects,folders,setFolders,foldersHydrated,documents,setDocuments,reports,setReports,companyProfile,setCompanyProfile}) {
+function CompanyLibrary({session,projects,tasks,folders,setFolders,foldersHydrated,documents,setDocuments,reports,setReports,companyProfile,setCompanyProfile}) {
   const [tab,setTab]=useState('generate');
   const [selectedFolder,setSelectedFolder]=useState(null);
   const [selectedReport,setSelectedReport]=useState(null);
@@ -2688,10 +2693,20 @@ function CompanyLibrary({session,projects,folders,setFolders,foldersHydrated,doc
   const [dragActive,setDragActive]=useState(false);
   const [newFolderName,setNewFolderName]=useState('');
   const [attachments,setAttachments]=useState([]);
+  const [selectedTemplate,setSelectedTemplate]=useState('');
+  const [selectedTemplateFolder,setSelectedTemplateFolder]=useState('company-template-scrubber');
+  const [templateProject,setTemplateProject]=useState('');
+  const [templateSources,setTemplateSources]=useState([]);
+  const [templateNotes,setTemplateNotes]=useState('');
+  const [templateValues,setTemplateValues]=useState({});
+  const [templateFields,setTemplateFields]=useState([]);
+  const [templateVerification,setTemplateVerification]=useState('');
+  const [templateBusy,setTemplateBusy]=useState(false);
   const [form,setForm]=useState({
     reportType:'packing',project:'',customer:'',reference:'',notes:''
   });
   const canManage=canManagePermissions(session);
+  const canManageLibrary=canViewCompanyLibrary(session);
   const canApprove=canManage||canApproveTackAndComplete(session);
   const defaultCompanyFolders=DEFAULT_KNOWLEDGE_FOLDERS.filter(folder=>folder.companyLibrary);
   const companyFolders=folders.filter(folder=>folder.companyLibrary);
@@ -2701,18 +2716,42 @@ function CompanyLibrary({session,projects,folders,setFolders,foldersHydrated,doc
   const currentDocs=companyDocuments.filter(document=>String(document.folderId)===String(selectedFolder));
   const currentReport=reports.find(report=>String(report.id)===String(selectedReport))||null;
   const packingMode=form.reportType==='packing';
+  const templateFolder=companyFolders.find(folder=>String(folder.id)==='company-templates');
+  const templateCategories=companyFolders.filter(folder=>String(folder.parentId)==='company-templates'&&folder.templateCategory);
+  const selectedTemplateCategory=templateCategories.find(folder=>String(folder.id)===String(selectedTemplateFolder))||templateCategories[0]||templateFolder;
+  const templateFolderIds=new Set([templateFolder?.id,...templateCategories.map(folder=>folder.id)].filter(Boolean).map(String));
+  const allTemplateDocuments=companyDocuments.filter(document=>
+    templateFolderIds.has(String(document.folderId)) && /\.(docx|xlsx)$/i.test(document.name||'')
+  );
+  const templateDocuments=allTemplateDocuments.filter(document=>
+    String(document.folderId)===String(selectedTemplateCategory?.id) ||
+    (String(selectedTemplateCategory?.id)===String(templateCategories[0]?.id) && String(document.folderId)===String(templateFolder?.id))
+  );
+  const activeTemplate=templateDocuments.find(document=>String(document.blobName)===String(selectedTemplate))||null;
 
   useEffect(()=>{
-    if(!foldersHydrated||!canManage||companyFolders.length)return;
+    if(!foldersHydrated||!canManageLibrary)return;
     const existingIds=new Set(folders.map(folder=>String(folder.id)));
-    setFolders(current=>[...current,...defaultCompanyFolders.filter(folder=>!existingIds.has(String(folder.id)))]);
-  },[foldersHydrated,canManage,companyFolders.length]);
+    const missing=defaultCompanyFolders.filter(folder=>!existingIds.has(String(folder.id)));
+    if(missing.length)setFolders(current=>[...current,...missing]);
+  },[foldersHydrated,canManageLibrary,companyFolders.length]);
   useEffect(()=>{
     if(!companyFolders.some(folder=>String(folder.id)===String(selectedFolder)))setSelectedFolder(companyFolders[0]?.id||null);
   },[folders,selectedFolder]);
   useEffect(()=>{
+    if(!templateCategories.some(folder=>String(folder.id)===String(selectedTemplateFolder))){
+      setSelectedTemplateFolder(templateCategories[0]?.id||templateFolder?.id||'');
+    }
+  },[folders,selectedTemplateFolder]);
+  useEffect(()=>{
     if(selectedReport&&!reports.some(report=>String(report.id)===String(selectedReport)))setSelectedReport(null);
   },[reports,selectedReport]);
+  useEffect(()=>{
+    if(!templateDocuments.some(document=>String(document.blobName)===String(selectedTemplate))){
+      setSelectedTemplate(templateDocuments[0]?.blobName||'');
+      setTemplateFields([]);setTemplateValues({});setTemplateVerification('');
+    }
+  },[documents,selectedTemplate,selectedTemplateFolder]);
 
   function addFolder(){
     if(!canManage)return setMessage('Kun Flemming og Jakob kan oprette firmamapper.');
@@ -2722,23 +2761,25 @@ function CompanyLibrary({session,projects,folders,setFolders,foldersHydrated,doc
     setFolders(current=>[...current,folder]);setSelectedFolder(folder.id);setNewFolderName('');setMessage('Firmamappen er oprettet.');
   }
 
-  async function uploadFiles(fileList){
+  async function uploadFiles(fileList,targetFolder=currentFolder){
+    if(!canManageLibrary)return setMessage('Kun Flemming og Jakob kan uploade i Company Library.');
     const files=[...fileList];
     if(!files.length)return;
-    if(!selectedFolder)return setMessage('Vælg en mappe først.');
+    const targetId=targetFolder?.id||selectedFolder;
+    if(!targetId)return setMessage('Vælg en mappe først.');
     setUploading(true);setMessage('');
     for(const file of files){
       try{
         const upload=new FormData();
         upload.append('file',file);
-        upload.append('folder',currentFolder?.name||'Company Library');
-        upload.append('folderId',String(selectedFolder));
-        upload.append('accessFolder',currentFolder?.accessFolder||'Reports');
+        upload.append('folder',targetFolder?.name||currentFolder?.name||'Company Library');
+        upload.append('folderId',String(targetId));
+        upload.append('accessFolder',targetFolder?.accessFolder||currentFolder?.accessFolder||'Reports');
         upload.append('machine','Company');
         const response=await fetch('/api/knowledge',{method:'POST',body:upload});
         const data=await response.json().catch(()=>({}));
         if(!response.ok)throw new Error(data.error||'Upload failed');
-        const document={...data.document,id:`company-doc-${Date.now()}-${Math.random()}`,folderId:selectedFolder,machineId:null,companyLibrary:true,status:'ATLAS Ready'};
+        const document={...data.document,id:`company-doc-${Date.now()}-${Math.random()}`,folderId:targetId,machineId:null,companyLibrary:true,status:'ATLAS Ready'};
         setDocuments(current=>[...current,document]);
       }catch(error){setMessage(`${file.name}: ${error.message}`)}
     }
@@ -2746,6 +2787,54 @@ function CompanyLibrary({session,projects,folders,setFolders,foldersHydrated,doc
   }
 
   function removeAttachment(index){setAttachments(current=>current.filter((_,itemIndex)=>itemIndex!==index))}
+  function removeTemplateSource(index){setTemplateSources(current=>current.filter((_,itemIndex)=>itemIndex!==index))}
+
+  async function prepareTemplate(){
+    if(!activeTemplate)return setMessage('Upload eller vælg en Word/Excel-skabelon først.');
+    const project=projects.find(item=>String(item.id)===String(templateProject))||null;
+    const projectJobs=project?tasks.filter(task=>String(task.project||'')===String(project.name||'')):[];
+    setTemplateBusy(true);setMessage('ATLAS læser skabelonen og indsætter data fra projekt, job og bilag…');
+    try{
+      const payload=new FormData();
+      payload.append('templateBlob',activeTemplate.blobName);
+      payload.append('context',JSON.stringify({company:companyProfile,project,jobs:projectJobs}));
+      payload.append('notes',templateNotes);
+      templateSources.forEach(file=>payload.append('files',file));
+      const response=await fetch('/api/atlas/template',{method:'POST',body:payload});
+      const data=await response.json().catch(()=>({}));
+      if(!response.ok)throw new Error(data.error||'Skabelonen kunne ikke udfyldes.');
+      setTemplateFields(Array.isArray(data.fields)?data.fields:[]);
+      setTemplateValues(data.values&&typeof data.values==='object'?data.values:{});
+      setTemplateVerification(data.verificationNotes||'');
+      setMessage('ATLAS har udfyldt felterne. Kontrollér værdierne og download derefter dokumentet.');
+    }catch(error){setMessage(error.message)}
+    finally{setTemplateBusy(false)}
+  }
+
+  async function downloadFilledTemplate(){
+    if(!activeTemplate||!templateFields.length)return setMessage('Lad ATLAS udfylde skabelonen først.');
+    if(Object.values(templateValues).some(value=>String(value).includes('[MANGLER')))return setMessage('Udfyld alle felter markeret MANGLER før download.');
+    setTemplateBusy(true);setMessage('Commander bygger dokumentet i det oprindelige layout…');
+    try{
+      const response=await fetch('/api/atlas/template',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({action:'render',templateBlob:activeTemplate.blobName,values:templateValues})
+      });
+      if(!response.ok){
+        const data=await response.json().catch(()=>({}));
+        throw new Error(data.error||'Dokumentet kunne ikke bygges.');
+      }
+      const blob=await response.blob();
+      const disposition=response.headers.get('content-disposition')||'';
+      const match=disposition.match(/filename="?([^";]+)"?/i);
+      const link=document.createElement('a');
+      const url=URL.createObjectURL(blob);
+      link.href=url;link.download=match?.[1]||`FSQ-filled-${activeTemplate.name}`;
+      link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+      setMessage('FSQ-dokumentet er udfyldt og downloadet.');
+    }catch(error){setMessage(error.message)}
+    finally{setTemplateBusy(false)}
+  }
 
   function imageDataForPrint(file){
     if(!file.type.startsWith('image/'))return Promise.resolve(null);
@@ -2883,7 +2972,7 @@ body{font-family:Arial,sans-serif;color:#14202b;margin:34px;line-height:1.45}hea
   return <div className="content companyLibraryPage">
     <div className="sectionIntro companyLibraryIntro"><div><p className="eyebrow">FSQ CONTROLLED DOCUMENTS</p><h1>Company Library</h1><p>Firmafiler, godkendte layouts og ATLAS-rapporter samlet ét sted.</p></div><div className="knowledgeStatus"><i/> {companyDocuments.length} filer · {reports.filter(report=>report.status==='Approved').length} godkendte rapporter</div></div>
     {message&&<div className="documentMessage">{message}</div>}
-    <div className="knowledgeTabs companyTabs">{[['generate','Ny ATLAS-rapport'],['review','Gennemlæs & godkend'],['library','Firmadokumenter'],['archive','Rapportarkiv']].map(([id,label])=><button key={id} className={tab===id?'active':''} onClick={()=>setTab(id)}>{label}</button>)}</div>
+    <div className="knowledgeTabs companyTabs">{[['templates','Udfyld FSQ-template'],['generate','Ny ATLAS-rapport'],['review','Gennemlæs & godkend'],['library','Firmadokumenter'],['archive','Rapportarkiv']].map(([id,label])=><button key={id} className={tab===id?'active':''} onClick={()=>setTab(id)}>{label}</button>)}</div>
 
     {tab==='generate'&&<div className="reportStudioGrid">
       <section className="panel reportSetup">
@@ -2902,6 +2991,28 @@ body{font-family:Arial,sans-serif;color:#14202b;margin:34px;line-height:1.45}hea
         </label>
         <div className="reportAttachmentList">{attachments.map((file,index)=><div key={`${file.name}-${index}`}><span>{file.type.startsWith('image/')?'▧':'▤'}</span><div><b>{file.name}</b><small>{Math.max(1,Math.ceil(file.size/1024))} KB</small></div><button onClick={()=>removeAttachment(index)}>×</button></div>)}</div>
         <button className="primaryBtn generateReportBtn" disabled={generating} onClick={generateReport}>{generating?(packingMode?'ATLAS læser PO og bygger pakkelisten…':'ATLAS bygger rapporten…'):(packingMode?'Generér FSQ-pakkeliste automatisk →':'Generér rapportudkast med ATLAS →')}</button>
+      </section>
+    </div>}
+
+    {tab==='templates'&&<div className="templateStudioGrid">
+      <section className="panel templateLibrary">
+        <div className="panelHead"><div><p className="panelEyebrow">1 · VÆLG MAPPE OG LAYOUT</p><h3>FSQ TEMPLATES</h3></div><span>{allTemplateDocuments.length}</span></div>
+        <div className="templateCategoryTabs">{templateCategories.map(folder=><button key={folder.id} className={String(folder.id)===String(selectedTemplateCategory?.id)?'active':''} onClick={()=>{setSelectedTemplateFolder(folder.id);setSelectedTemplate('');setTemplateFields([]);setTemplateValues({});setTemplateVerification('')}}><b>{folder.name}</b><small>{companyDocuments.filter(document=>String(document.folderId)===String(folder.id)).length} filer</small></button>)}</div>
+        <div className="templateGuide"><b>Sådan markeres felter i Word/Excel</b><code>{'{{CUSTOMER}}'}</code><code>{'{{PO_NUMBER}}'}</code><code>{'{{JOB_DESCRIPTION}}'}</code><small>Skriv hvert felt samlet med samme formatering. Layout, logo, sidehoved og sidefod bevares.</small></div>
+        <div className="templateDocumentList">{templateDocuments.map(document=><button key={document.blobName} className={String(document.blobName)===String(selectedTemplate)?'active':''} onClick={()=>{setSelectedTemplate(document.blobName);setTemplateFields([]);setTemplateValues({});setTemplateVerification('')}}><span>{document.name?.toLowerCase().endsWith('.xlsx')?'XLSX':'DOCX'}</span><div><b>{document.name}</b><small>{document.size} · {document.uploadedBy}</small></div></button>)}{!templateDocuments.length&&<div className="empty">Upload den første DOCX- eller XLSX-template.</div>}</div>
+        {canManageLibrary&&<label className="templateUploadBtn">+ Upload til {selectedTemplateCategory?.name||'FSQ TEMPLATES'}<input disabled={!selectedTemplateCategory||uploading} type="file" multiple accept=".docx,.xlsx" onChange={event=>{uploadFiles(event.target.files,selectedTemplateCategory);event.target.value=''}}/></label>}
+      </section>
+      <section className="panel templateSources">
+        <div className="panelHead"><div><p className="panelEyebrow">2 · VÆLG DATA</p><h3>Projekt, job, PO og noter</h3></div><span>{templateSources.length}</span></div>
+        <label>Projekt<select value={templateProject} onChange={event=>setTemplateProject(event.target.value)}><option value="">Generelt dokument</option>{projects.map(project=><option key={project.id} value={project.id}>{project.name}</option>)}</select></label>
+        <textarea rows="6" value={templateNotes} onChange={event=>setTemplateNotes(event.target.value)} placeholder="Valgfrit: information eller instruktion til ATLAS…"/>
+        <label className="companyDropZone"><span>＋</span><b>Tilføj PO, jobnoter eller billeder</b><small>ATLAS kombinerer bilagene med projektets gemte jobdata</small><input type="file" multiple accept=".pdf,.docx,.xlsx,.txt,.csv,.jpg,.jpeg,.png,.webp" onChange={event=>{setTemplateSources(current=>[...current,...event.target.files].slice(0,10));event.target.value=''}}/></label>
+        <div className="reportAttachmentList">{templateSources.map((file,index)=><div key={`${file.name}-${index}`}><span>▧</span><div><b>{file.name}</b><small>{Math.max(1,Math.ceil(file.size/1024))} KB</small></div><button onClick={()=>removeTemplateSource(index)}>×</button></div>)}</div>
+        <button className="primaryBtn generateReportBtn" disabled={templateBusy||!activeTemplate} onClick={prepareTemplate}>{templateBusy?'ATLAS arbejder…':'Lad ATLAS udfylde template →'}</button>
+      </section>
+      <section className="panel templateReview">
+        <div className="panelHead"><div><p className="panelEyebrow">3 · KONTROLLÉR</p><h3>Felter til dokumentet</h3></div><span>{templateFields.length}</span></div>
+        {templateFields.length?<><div className="templateValueList">{templateFields.map(field=><label key={field}><span>{field}</span><textarea rows={String(templateValues[field]||'').length>120?4:2} value={templateValues[field]||''} onChange={event=>setTemplateValues(current=>({...current,[field]:event.target.value}))}/></label>)}</div>{templateVerification&&<div className="atlasVerification"><b>ATLAS: kontrollér før download</b><p>{templateVerification}</p></div>}<button className="primaryBtn generateReportBtn" disabled={templateBusy} onClick={downloadFilledTemplate}>Download udfyldt {activeTemplate?.name?.toLowerCase().endsWith('.xlsx')?'Excel':'Word'}-dokument</button></>:<div className="reportEmpty"><span>ATLAS</span><h3>Vælg template og datakilder</h3><p>ATLAS viser alle værdier her, før dokumentet kan downloades.</p></div>}
       </section>
     </div>}
 
@@ -2928,7 +3039,7 @@ body{font-family:Arial,sans-serif;color:#14202b;margin:34px;line-height:1.45}hea
       </>:<div className="reportEmpty"><span>ATLAS</span><h3>Vælg en rapportkladde</h3><p>Her kan du gennemlæse, rette og godkende før print.</p></div>}</section>
     </div>}
 
-    {tab==='library'&&<div className="companyLibraryGrid"><aside className="panel companyFolders"><div className="panelHead"><h3>Firmamapper</h3><span>{companyFolders.length}</span></div>{companyFolders.map(folder=><button key={folder.id} className={String(folder.id)===String(selectedFolder)?'active':''} onClick={()=>setSelectedFolder(folder.id)}><span>▤</span><div><b>{folder.name}</b><small>{companyDocuments.filter(document=>String(document.folderId)===String(folder.id)).length} filer</small></div></button>)}{canManage&&<div className="companyFolderCreate"><input value={newFolderName} onChange={event=>setNewFolderName(event.target.value)} placeholder="Ny firmamappe"/><button onClick={addFolder}>Opret</button></div>}</aside><section className="panel companyFiles" onDragOver={event=>event.preventDefault()} onDrop={event=>{event.preventDefault();uploadFiles(event.dataTransfer.files)}}><div className="panelHead"><div><h3>{currentFolder?.name||'Vælg mappe'}</h3><small>{currentFolder?.description}</small></div><label className="binderUpload">{uploading?'Uploader…':'+ Upload filer'}<input disabled={uploading||!selectedFolder} type="file" multiple onChange={event=>{uploadFiles(event.target.files);event.target.value=''}}/></label></div><div className="companyFileDrop">Træk filer direkte ind i vinduet</div><div className="companyFileList">{currentDocs.map(document=><a key={document.id} href={document.url} target="_blank" rel="noreferrer"><span>▧</span><div><b>{document.name}</b><small>{document.size} · {document.uploadedBy} · {document.status}</small></div><em>Åbn</em></a>)}{!currentDocs.length&&<div className="empty">Denne mappe er tom.</div>}</div></section></div>}
+    {tab==='library'&&<div className="companyLibraryGrid"><aside className="panel companyFolders"><div className="panelHead"><h3>Firmamapper</h3><span>{companyFolders.length}</span></div>{companyFolders.map(folder=><button key={folder.id} className={`${String(folder.id)===String(selectedFolder)?'active':''} ${folder.parentId?'child':''}`} onClick={()=>setSelectedFolder(folder.id)}><span>{folder.parentId?'↳':'▤'}</span><div><b>{folder.name}</b><small>{companyDocuments.filter(document=>String(document.folderId)===String(folder.id)).length} filer</small></div></button>)}{canManage&&<div className="companyFolderCreate"><input value={newFolderName} onChange={event=>setNewFolderName(event.target.value)} placeholder="Ny firmamappe"/><button onClick={addFolder}>Opret</button></div>}</aside><section className="panel companyFiles" onDragOver={event=>event.preventDefault()} onDrop={event=>{event.preventDefault();uploadFiles(event.dataTransfer.files)}}><div className="panelHead"><div><h3>{currentFolder?.name||'Vælg mappe'}</h3><small>{currentFolder?.description}</small></div><label className="binderUpload">{uploading?'Uploader…':'+ Upload filer'}<input disabled={uploading||!selectedFolder} type="file" multiple onChange={event=>{uploadFiles(event.target.files);event.target.value=''}}/></label></div><div className="companyFileDrop">Træk filer direkte ind i vinduet</div><div className="companyFileList">{currentDocs.map(document=><a key={document.id} href={document.url} target="_blank" rel="noreferrer"><span>▧</span><div><b>{document.name}</b><small>{document.size} · {document.uploadedBy} · {document.status}</small></div><em>Åbn</em></a>)}{!currentDocs.length&&<div className="empty">Denne mappe er tom.</div>}</div></section></div>}
 
     {tab==='archive'&&<section className="panel reportArchive"><div className="panelHead"><h3>Godkendte FSQ-rapporter</h3><span>{reports.filter(report=>report.status==='Approved').length}</span></div>{reports.filter(report=>report.status==='Approved').slice().reverse().map(report=><button key={report.id} onClick={()=>{setSelectedReport(report.id);setTab('review')}}><div><b>{report.title}</b><small>{report.templateName} · {report.project||'Generel'} · {report.reference||'uden reference'}</small></div><span>{report.approvedBy}<small>{new Date(report.approvedAt).toLocaleDateString('da-DK')}</small></span></button>)}{!reports.some(report=>report.status==='Approved')&&<div className="empty">Ingen rapporter er godkendt endnu.</div>}</section>}
   </div>;

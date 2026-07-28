@@ -1,0 +1,15 @@
+FSQ COMMAND 1.0 RC4.14
+
+REUSABLE FSQ TEMPLATE STUDIO
+
+- Flemming and Jakob can upload approved Word DOCX and Excel XLSX templates.
+- Templates keep their original layout, logos, headers, footers and formatting.
+- Placeholders such as {{CUSTOMER}}, {{PO_NUMBER}} and {{JOB_DESCRIPTION}} are
+  detected automatically.
+- ATLAS combines selected Commander project/job data with uploaded PO files,
+  notes and images.
+- Every value is shown in a review screen before document generation.
+- Missing or ambiguous facts are blocked with a clear MANGLER marker.
+- Filled Word/Excel documents are generated from the original template.
+- Template routes and stored company profile are protected by Company Library access.
+- Includes PO packing lists, AIS recovery and the Natural Earth world map.

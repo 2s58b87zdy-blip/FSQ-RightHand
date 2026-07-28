@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import ExcelJS from 'exceljs';
+import JSZip from 'jszip';
 import { extractDocumentText } from '../lib/documentText.js';
 import { detectImageMime, downloadHeaders, isAllowedDocument, safeSegment } from '../lib/files.js';
+import { replaceDocxTemplate, replaceXlsxTemplate, templateFields } from '../lib/templateFill.js';
 import { assignmentLabel, clearEmployeeProjectAssignments, isTaskAssignedTo, removeProjectTasks, taskAssignees, taskHasActiveProject } from '../lib/taskAssignments.js';
 import { projectPlannerEntries, removeProjectPlannerEntries, syncProjectCrewEntries } from '../lib/plannerSync.js';
 import { parseAtlasActionOutput, rankKnowledge } from '../lib/atlas.js';
@@ -19,6 +21,27 @@ const extracted = await extractDocumentText(
 );
 assert.match(extracted, /Wind Orca/);
 assert.match(extracted, /Ready/);
+
+assert.deepEqual(templateFields('Kunde {{customer}} PO {{PO_NUMBER}} {{customer}}'), ['CUSTOMER','PO_NUMBER']);
+const docxZip = new JSZip();
+docxZip.file('word/document.xml', '<w:document><w:r><w:t>{{CUS</w:t></w:r><w:r><w:t>TOMER}}</w:t></w:r><w:t>{{NOTE}}</w:t></w:document>');
+docxZip.file('word/footer1.xml', '<w:ftr><w:t>{{PO_NUMBER}}</w:t></w:ftr>');
+const docxTemplateBuffer = await docxZip.generateAsync({ type:'nodebuffer' });
+const filledDocx = await replaceDocxTemplate(docxTemplateBuffer, {
+  CUSTOMER:'FSQ & Partner', NOTE:'Linje 1\nLinje 2', PO_NUMBER:'PO-42'
+});
+const filledDocxZip = await JSZip.loadAsync(filledDocx);
+assert.match(await filledDocxZip.file('word/document.xml').async('string'), /FSQ &amp; Partner/);
+assert.match(await filledDocxZip.file('word/document.xml').async('string'), /Linje 1<w:br\/>Linje 2/);
+assert.match(await filledDocxZip.file('word/footer1.xml').async('string'), /PO-42/);
+
+const xlsxTemplate = new ExcelJS.Workbook();
+const xlsxTemplateSheet = xlsxTemplate.addWorksheet('Template');
+xlsxTemplateSheet.getCell('A1').value = 'Customer: {{CUSTOMER}}';
+const filledXlsx = await replaceXlsxTemplate(Buffer.from(await xlsxTemplate.xlsx.writeBuffer()), { CUSTOMER:'FSQ' });
+const checkedXlsx = new ExcelJS.Workbook();
+await checkedXlsx.xlsx.load(filledXlsx);
+assert.equal(checkedXlsx.getWorksheet('Template').getCell('A1').value, 'Customer: FSQ');
 
 assert.equal(isAllowedDocument('manual.pdf'), true);
 assert.equal(isAllowedDocument('drawing.dwg'), true);
@@ -91,6 +114,11 @@ assert.match(pageSource, /packingEditorTable/);
 assert.match(pageSource, /Generér FSQ-pakkeliste automatisk/);
 assert.match(pageSource, /CVR\/VAT/);
 assert.match(pageSource, /fsq-logo-clean\.webp/);
+assert.match(pageSource, /Udfyld FSQ-template/);
+assert.match(pageSource, /templateStudioGrid/);
+assert.match(pageSource, /\{\{CUSTOMER\}\}/);
+assert.match(pageSource, /Lad ATLAS udfylde template/);
+assert.match(pageSource, /downloadFilledTemplate/);
 assert.match(pageSource, /className="atlasCommandDeck"/);
 assert.match(pageSource, /className="atlasMegaCore"/);
 assert.match(pageSource, /className="atlasCommandInput"/);
@@ -151,6 +179,17 @@ assert.match(reportRoute, /packingDetails/);
 assert.match(reportRoute, /packingItems/);
 assert.match(reportRoute, /Extract every PO line/);
 assert.match(reportRoute, /Do not guess package numbers/);
+const templateRoute = fs.readFileSync('app/api/atlas/template/route.js', 'utf8');
+assert.match(templateRoute, /canAccessCompanyLibrary/);
+assert.match(templateRoute, /replaceDocxTemplate/);
+assert.match(templateRoute, /replaceXlsxTemplate/);
+assert.match(templateRoute, /Never invent names, dates, measurements/);
+assert.match(templateRoute, /MANGLER/);
+assert.match(templateRoute, /Cache-Control':'private, no-store/);
+const stateRoute = fs.readFileSync('app/api/state/route.js', 'utf8');
+assert.match(stateRoute, /fsq-v81-company-profile/);
+assert.match(stateRoute, /PRIVATE_COMPANY_KEYS/);
+assert.equal(JSON.parse(fs.readFileSync('package.json','utf8')).dependencies.jszip, '3.10.1');
 const fleetRoute = fs.readFileSync('app/api/fleet/positions/route.js', 'utf8');
 assert.match(fleetRoute, /AISSTREAM_API_KEY/);
 assert.match(fleetRoute, /readSession/);
