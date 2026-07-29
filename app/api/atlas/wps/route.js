@@ -12,10 +12,12 @@ export const dynamic = 'force-dynamic';
 
 const MASTER_PATH = path.join(process.cwd(), 'public', 'templates', 'FSQ-WPS-Master.docx');
 const MISSING = '[MANGLER - skal udfyldes og verificeres]';
-const MAX_SOURCE_FILES = 40;
+const MAX_SOURCE_FILES = 100;
+const MAX_SELECTED_SOURCES = 8;
 const MAX_FILE_SIZE = 15 * 1024 * 1024;
-const MAX_TOTAL_SIZE = 45 * 1024 * 1024;
-const MAX_EXTRACTED_TEXT = 260000;
+const MAX_TOTAL_SIZE = 24 * 1024 * 1024;
+const MAX_EXTRACTED_TEXT = 120000;
+const OPENAI_TIMEOUT_MS = 105000;
 const CONTROL_FIELDS = new Set([
   'STATUS', 'PREPARED_BY', 'APPROVED_BY', 'APPROVAL_DATE',
   'TECHNICAL_REVIEWER', 'REVIEW_DATE', 'DATE',
@@ -64,13 +66,40 @@ function wpsSourceCandidate(blob) {
   return /(wpqr|wps|welding|weld|svejs|quality)/i.test(identity);
 }
 
-async function collectControlledSources() {
+function relevantSources(candidates, requestText) {
+  const ignored = new Set(['create','simple','english','welding','procedure','specification','using','only','qualified','values','controlled','sources','parent','material','joint','type','process','requested','position','selected','supporting','exact','from','with']);
+  const tokens = [...new Set(String(requestText || '').toLowerCase().match(/[a-z0-9._-]{3,}/g) || [])]
+    .filter(token => !ignored.has(token))
+    .slice(0, 30);
+  return candidates.map(blob => {
+    const metadata = blob.metadata || {};
+    const identity = [blob.name, metadata.folder, metadata.originalname, metadata.accessfolder]
+      .map(value => decodeURIComponent(String(value || ''))).join(' ').toLowerCase();
+    let score = /\bwpqr\b/.test(identity) ? 4 : 1;
+    for (const token of tokens) {
+      if (identity.includes(token)) score += /^\d{3}$/.test(token) ? 12 : 7;
+    }
+    return { blob, score };
+  }).sort((left, right) => right.score - left.score).slice(0, MAX_SELECTED_SOURCES).map(item => item.blob);
+}
+
+function withTimeLimit(promise, milliseconds, message) {
+  let timer;
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      timer = setTimeout(() => reject(Object.assign(new Error(message), { status: 504 })), milliseconds);
+    })
+  ]).finally(() => clearTimeout(timer));
+}
+
+async function collectControlledSources(requestText) {
   const container = getBlobContainerClient();
   const candidates = [];
   for await (const blob of container.listBlobsFlat({ prefix: 'knowledge/', includeMetadata: true })) {
     if (wpsSourceCandidate(blob)) candidates.push(blob);
     if (candidates.length > MAX_SOURCE_FILES) {
-      throw Object.assign(new Error(`Der ligger mere end ${MAX_SOURCE_FILES} WPS/WPQR-filer. Del dem i en aktiv og en arkiveret mappe foer generering.`), { status: 413 });
+      throw Object.assign(new Error(`Der ligger mere end ${MAX_SOURCE_FILES} aktive WPS/WPQR-filer. Flyt gamle dokumenter til arkiv.`), { status: 413 });
     }
   }
   if (!candidates.length) {
@@ -83,11 +112,11 @@ async function collectControlledSources() {
   const contentParts = [];
   const unreadable = [];
 
-  for (const blob of candidates) {
+  for (const blob of relevantSources(candidates, requestText)) {
     const metadata = blob.metadata || {};
     const originalName = decodeURIComponent(String(metadata.originalname || path.basename(blob.name)));
     const client = container.getBlobClient(blob.name);
-    const properties = await client.getProperties();
+    const properties = await withTimeLimit(client.getProperties(), 12000, `${originalName} tog for lang tid at hente fra filserveren.`);
     const size = Number(properties.contentLength || 0);
     if (size <= 0 || size > MAX_FILE_SIZE) {
       unreadable.push(`${originalName} (tom eller stoerre end 15 MB)`);
@@ -95,19 +124,21 @@ async function collectControlledSources() {
     }
     totalBytes += size;
     if (totalBytes > MAX_TOTAL_SIZE) {
-      throw Object.assign(new Error('WPS/WPQR-kilderne fylder samlet mere end 45 MB. Flyt gamle dokumenter til en arkivmappe før generering.'), { status: 413 });
+      throw Object.assign(new Error('De mest relevante WPS/WPQR-kilder fylder samlet mere end 24 MB. Flyt store eller gamle dokumenter til arkiv.'), { status: 413 });
     }
-    const buffer = await client.downloadToBuffer();
+    const buffer = await withTimeLimit(client.downloadToBuffer(), 25000, `${originalName} tog for lang tid at downloade.`);
     const mimeType = properties.contentType || '';
     const text = clean(await extractDocumentText(buffer, originalName, mimeType), 50000);
     if (text) {
-      totalText += text.length;
-      if (totalText > MAX_EXTRACTED_TEXT) {
-        throw Object.assign(new Error('De udlaeste WPS/WPQR-kilder er for omfattende til en sikker samlet behandling. Flyt historiske eller irrelevante filer til arkiv.'), { status: 413 });
+      if (totalText + text.length > MAX_EXTRACTED_TEXT) {
+        totalBytes -= size;
+        unreadable.push(`${originalName} (udeladt: for meget samlet tekst)`);
+        continue;
       }
+      totalText += text.length;
       contentParts.push({ type: 'input_text', text: `--- CONTROLLED SOURCE: ${originalName} ---\n${text}` });
     }
-    if (/\.pdf$/i.test(originalName) || mimeType === 'application/pdf') {
+    if (!text && (/\.pdf$/i.test(originalName) || mimeType === 'application/pdf')) {
       contentParts.push({
         type: 'input_file',
         filename: originalName,
@@ -144,7 +175,7 @@ async function generateWps(request, session) {
     return Response.json({ error: 'Skriv kort hvilken svejseopgave WPS-kladden skal daekke.' }, { status: 400 });
   }
 
-  const [{ fields }, controlled] = await Promise.all([masterData(), collectControlledSources()]);
+  const [{ fields }, controlled] = await Promise.all([masterData(), collectControlledSources(requestText)]);
   const modelFields = fields.filter(field => !CONTROL_FIELDS.has(field));
   const sourceNames = controlled.sources.map(source => source.name);
   const today = new Date().toISOString().slice(0, 10);
@@ -180,10 +211,11 @@ ${sourceNames.map(name => `- ${name}`).join('\n')}
 Unreadable or excluded sources:
 ${controlled.unreadable.length ? controlled.unreadable.map(name => `- ${name}`).join('\n') : '- none'}`;
 
-  const response = await atlasClient().responses.create({
+  const response = await atlasClient({ timeoutMs: OPENAI_TIMEOUT_MS, maxRetries: 0 }).responses.create({
     model: process.env.OPENAI_MODEL || 'gpt-5',
     instructions,
     input: [{ role: 'user', content: [{ type: 'input_text', text: userText }, ...controlled.contentParts] }],
+    max_output_tokens: 9000,
     store: false
   });
   const parsed = parseJsonObject(response.output_text);
@@ -203,13 +235,15 @@ ${controlled.unreadable.length ? controlled.unreadable.map(name => `- ${name}`).
   const missingFields = fields.filter(field => isMissing(values[field]));
   const evidence = parsed.evidence && typeof parsed.evidence === 'object' ? parsed.evidence : {};
 
-  await saveAtlasConversation({
+  await withTimeLimit(saveAtlasConversation({
     userName: session.name,
     mode: 'wps',
     question: requestText,
     answer: `Prepared controlled WPS draft from ${sourceNames.length} server sources. Human technical approval required.`,
     usedWeb: false,
     sources: sourceNames.map(title => ({ title, type: 'Controlled WPS/WPQR source' }))
+  }), 5000, 'WPS audit log timed out').catch(error => {
+    console.warn('WPS audit log was skipped', { message: error?.message });
   });
 
   return Response.json({
@@ -278,8 +312,11 @@ export async function POST(request) {
     return Response.json({ error: 'Ugyldig WPS-handling.' }, { status: 400 });
   } catch (error) {
     console.error('ATLAS WPS generation failed', { message: error?.message, status: error?.status });
+    const timedOut = error?.status === 504 || /timeout|timed out|aborted/i.test(String(error?.message || ''));
     return Response.json({
-      error: error?.message || 'ATLAS kunne ikke generere WPS-kladden.'
-    }, { status: error?.status || 500 });
+      error: timedOut
+        ? 'ATLAS brugte for lang tid på WPS-kilderne. Prøv igen; systemet vælger nu kun de mest relevante WPQR/WPS-filer.'
+        : error?.message || 'ATLAS kunne ikke generere WPS-kladden.'
+    }, { status: timedOut ? 504 : error?.status || 500 });
   }
 }

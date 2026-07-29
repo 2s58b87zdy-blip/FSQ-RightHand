@@ -93,6 +93,7 @@ const serviceWorker = fs.readFileSync('public/sw.js', 'utf8');
 assert.match(serviceWorker, /pathname\.startsWith\('\/api\/'\)/);
 
 const pageSource = fs.readFileSync('app/page.js', 'utf8');
+const wpsRouteSource = fs.readFileSync('app/api/atlas/wps/route.js', 'utf8');
 const myJobsSource = pageSource.slice(pageSource.indexOf('function MyJobs('), pageSource.indexOf('function Dashboard('));
 const approvalsSource = pageSource.slice(pageSource.indexOf('function JobApprovals('), pageSource.indexOf('function Dashboard('));
 const knowledgeSource = pageSource.slice(pageSource.indexOf('function KnowledgeBase('), pageSource.indexOf('function AI('));
@@ -154,6 +155,13 @@ assert.match(pageSource, /Medarbejderen fjernes fra login, Crew, projekter, jobs
 assert.match(pageSource, /setPlannerEntries\(current=>current\.filter\(entry=>!matches\(entry\.person\)\)\)/);
 assert.match(pageSource, /setPeople\(current=>current\.filter\(person=>!matches\(person\.name\)\)\)/);
 assert.match(pageSource, /if\(!userDeleted\)/);
+assert.match(pageSource, /const controller=new AbortController\(\)/);
+assert.match(pageSource, /ATLAS stoppede WPS-genereringen efter 2 minutter/);
+assert.match(pageSource, /ATLAS matcher materiale, proces, tråd, gas og position med WPQR/);
+assert.match(wpsRouteSource, /MAX_SELECTED_SOURCES = 8/);
+assert.match(wpsRouteSource, /relevantSources\(candidates, requestText\)/);
+assert.match(wpsRouteSource, /timeoutMs: OPENAI_TIMEOUT_MS/);
+assert.match(wpsRouteSource, /max_output_tokens: 9000/);
 assert.match(pageSource, /function JobArchive\(/);
 assert.match(pageSource, /archiveReason:'Final control approved'/);
 assert.match(pageSource, /function canApproveWorkshopFinal/);

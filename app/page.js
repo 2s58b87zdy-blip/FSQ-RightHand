@@ -18,7 +18,7 @@ const FOLDER_ACCESS_LEVELS = ['No Access','Read','Edit','Full Control'];
 const MANAGED_FOLDERS = ['Projects','Workshop','Marine','Drawings','Procedures','QA / QC','Reports','Drone','Certificates','Templates','Finance','HR','Management','Contracts','Customers'];
 const DEFAULT_FOLDER_ACCESS = Object.fromEntries(MANAGED_FOLDERS.map(folder=>[folder,'No Access']));
 
-const APP_VERSION = '1.0 RC4.23';
+const APP_VERSION = '1.0 RC4.24';
 
 const USER_REGISTRY_DEFAULTS = [];
 
@@ -3067,10 +3067,18 @@ function CompanyLibrary({session,projects,tasks,folders,setFolders,foldersHydrat
       'Use the matching butt-weld or fillet-weld joint sketch in the FSQ layout. Do not infer or expand any qualification range.'
     ].filter(Boolean).join('\n');
     setWpsBusy(true);setMessage('ATLAS gennemgår de kontrollerede WPS/WPQR-filer på serveren…');
+    const controller=new AbortController();
+    const requestTimeout=setTimeout(()=>controller.abort(),120000);
+    const progressTimers=[
+      setTimeout(()=>setMessage('ATLAS har fundet de mest relevante WPQR/WPS-filer og læser svejsedata…'),15000),
+      setTimeout(()=>setMessage('ATLAS matcher materiale, proces, tråd, gas og position med WPQR…'),45000),
+      setTimeout(()=>setMessage('WPS-kladden færdiggøres. Hvis kilderne er store, kan dette tage lidt længere…'),80000)
+    ];
     try{
       const response=await fetch('/api/atlas/wps',{
         method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({action:'generate',request})
+        body:JSON.stringify({action:'generate',request}),
+        signal:controller.signal
       });
       const data=await response.json().catch(()=>({}));
       if(!response.ok)throw new Error(data.error||'WPS-kladden kunne ikke genereres.');
@@ -3092,8 +3100,16 @@ function CompanyLibrary({session,projects,tasks,folders,setFolders,foldersHydrat
       setReports(current=>[...current,draft]);
       setSelectedReport(draft.id);setTab('review');
       setMessage('WPS-kladden er klar. Kontrollér alle tekniske værdier, udfyld MANGLER-felter og godkend den.');
-    }catch(error){setMessage(error.message)}
-    finally{setWpsBusy(false)}
+    }catch(error){
+      setMessage(error?.name==='AbortError'
+        ?'ATLAS stoppede WPS-genereringen efter 2 minutter. Prøv igen; systemet vælger automatisk de mest relevante WPQR/WPS-filer.'
+        :error.message);
+    }
+    finally{
+      clearTimeout(requestTimeout);
+      progressTimers.forEach(timer=>clearTimeout(timer));
+      setWpsBusy(false);
+    }
   }
 
   async function generateReport(){
