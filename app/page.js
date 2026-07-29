@@ -18,7 +18,7 @@ const FOLDER_ACCESS_LEVELS = ['No Access','Read','Edit','Full Control'];
 const MANAGED_FOLDERS = ['Projects','Workshop','Marine','Drawings','Procedures','QA / QC','Reports','Drone','Certificates','Templates','Finance','HR','Management','Contracts','Customers'];
 const DEFAULT_FOLDER_ACCESS = Object.fromEntries(MANAGED_FOLDERS.map(folder=>[folder,'No Access']));
 
-const APP_VERSION = '1.0 RC4.18';
+const APP_VERSION = '1.0 RC4.19';
 
 const USER_REGISTRY_DEFAULTS = [];
 
@@ -268,6 +268,47 @@ const WPS_SIMPLE_FIELDS = new Set([
   'RUN_1_CURRENT','RUN_1_VOLTAGE','RUN_1_SPEED',
   'PREHEAT','INTERPASS','TECHNICAL_REVIEWER'
 ]);
+
+const WPS_MATERIAL_OPTIONS = [
+  'S235 / S275 / S355',
+  '304 / 1.4301',
+  '316L / 1.4404',
+  'Duplex 2205 / 1.4462',
+  'Super Duplex 2507 / 1.4410',
+  'SMO 254 / 1.4547',
+  'Aluminium',
+  'Other - enter material'
+];
+
+const WPS_PROCESS_OPTIONS = [
+  ['141','TIG / GTAW'],
+  ['135','MAG solid wire'],
+  ['136','FCAW flux-cored wire'],
+  ['138','MCAW metal-cored wire'],
+  ['111','MMA / SMAW electrode'],
+  ['121','Submerged arc welding']
+];
+
+const WPS_FILLER_OPTIONS = [
+  'ER308LSi / 308LSi',
+  'ER316LSi / 316LSi',
+  'ER2209 / 2209',
+  'ER2594 / 2594',
+  'ER385 / 20 25 5 Cu N',
+  'G3Si1',
+  'E 42 / E 46 electrode',
+  'Other - enter classification'
+];
+
+const WPS_GAS_OPTIONS = [
+  'Argon 100% (I1)',
+  'Ar/CO2 82/18 (M21)',
+  'Ar/CO2 92/8 (M20)',
+  'Ar/O2 98/2 (M13)',
+  'Argon/Helium mix',
+  'N/A - no shielding gas',
+  'Other - enter gas'
+];
 
 function getGreeting(name) {
   const hour = new Date().getHours();
@@ -2787,7 +2828,10 @@ function CompanyLibrary({session,projects,tasks,folders,setFolders,foldersHydrat
   const [templateFields,setTemplateFields]=useState([]);
   const [templateVerification,setTemplateVerification]=useState('');
   const [templateBusy,setTemplateBusy]=useState(false);
-  const [wpsRequest,setWpsRequest]=useState('');
+  const [wpsForm,setWpsForm]=useState({
+    material:'',materialCustom:'',jointType:'Butt weld',process:'',filler:'',fillerCustom:'',gas:'',gasCustom:'',
+    thickness:'',position:'',notes:''
+  });
   const [wpsBusy,setWpsBusy]=useState(false);
   const [wpsAdvanced,setWpsAdvanced]=useState(false);
   const [form,setForm]=useState({
@@ -2956,12 +3000,30 @@ function CompanyLibrary({session,projects,tasks,folders,setFolders,foldersHydrat
   }
 
   async function generateWps(){
-    if(!wpsRequest.trim())return setMessage('Beskriv kort den svejseopgave, som WPS-kladden skal dække.');
+    const material=wpsForm.material.startsWith('Other')?wpsForm.materialCustom.trim():wpsForm.material;
+    const filler=wpsForm.filler.startsWith('Other')?wpsForm.fillerCustom.trim():wpsForm.filler;
+    const gas=wpsForm.gas.startsWith('Other')?wpsForm.gasCustom.trim():wpsForm.gas;
+    if(!material||!wpsForm.jointType||!wpsForm.process){
+      return setMessage('Vælg materiale, samlingstype og svejsemetode først.');
+    }
+    const processName=WPS_PROCESS_OPTIONS.find(([code])=>code===wpsForm.process)?.[1]||'';
+    const request=[
+      'Create a simple English FSQ Welding Procedure Specification using only qualified values from the controlled sources.',
+      `Parent material: ${material}.`,
+      `Joint type: ${wpsForm.jointType}.`,
+      `Welding process: ISO 4063 ${wpsForm.process} - ${processName}.`,
+      wpsForm.thickness?`Requested material thickness: ${wpsForm.thickness} mm.`:'Use only a qualified thickness range supported by the selected WPQR.',
+      wpsForm.position?`Welding position: ${wpsForm.position}.`:'Use only welding positions supported by the selected WPQR.',
+      filler?`Filler wire or electrode: ${filler}.`:'Select filler only when explicitly supported by the selected WPQR/WPS.',
+      gas?`Shielding gas: ${gas}.`:'Select shielding gas only when explicitly supported by the selected WPQR/WPS.',
+      wpsForm.notes.trim()?`Additional job notes: ${wpsForm.notes.trim()}`:'',
+      'Use the matching butt-weld or fillet-weld joint sketch in the FSQ layout. Do not infer or expand any qualification range.'
+    ].filter(Boolean).join('\n');
     setWpsBusy(true);setMessage('ATLAS gennemgår de kontrollerede WPS/WPQR-filer på serveren…');
     try{
       const response=await fetch('/api/atlas/wps',{
         method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({action:'generate',request:wpsRequest})
+        body:JSON.stringify({action:'generate',request})
       });
       const data=await response.json().catch(()=>({}));
       if(!response.ok)throw new Error(data.error||'WPS-kladden kunne ikke genereres.');
@@ -3139,9 +3201,17 @@ body{font-family:Arial,sans-serif;color:#14202b;margin:34px;line-height:1.45}hea
       <section className="panel wpsBrief">
         <div className="panelHead"><div><p className="panelEyebrow">ATLAS CONTROLLED WPS</p><h3>Generér WPS fra serverens WPQR/WPS-filer</h3></div><span>{wpsSourceDocuments.length} kilder</span></div>
         <div className="wpsLogoLock"><img src="/fsq-logo-clean.webp" alt="FSQ"/><div><b>FSQ-logo er låst i Word-masteren</b><small>Logo, sidehoved og dokumentkontrol gentages automatisk på alle WPS-sider.</small></div></div>
-        <div className="wpsFlow"><span>1</span><b>ATLAS læser kontrollerede kilder</b><i>→</i><span>2</span><b>Du kontrollerer alle værdier</b><i>→</i><span>3</span><b>Godkend og hent Word</b></div>
-        <label>Beskriv den ønskede svejseopgave<textarea rows="8" value={wpsRequest} onChange={event=>setWpsRequest(event.target.value)} placeholder="Fx: Lav en WPS til TIG 141 stumpsøm i 316L, pladetykkelse 3 mm. Brug kun områder, der er dokumenteret i vores WPQR."/></label>
-        <button className="primaryBtn generateReportBtn" disabled={wpsBusy||!wpsSourceDocuments.length} onClick={generateWps}>{wpsBusy?'ATLAS kontrollerer WPQR/WPS-kilderne…':'ATLAS · Generér sikker WPS-kladde →'}</button>
+        <div className="wpsFlow"><span>1</span><b>Vælg</b><i>→</i><span>2</span><b>Generér</b><i>→</i><span>3</span><b>Kontrollér og godkend</b></div>
+        <div className="wpsQuickForm">
+          <section className="wpsQuickStep"><div className="wpsStepTitle"><span>1</span><div><b>Materiale</b><small>Vælg grundmaterialet</small></div></div><select value={wpsForm.material} onChange={event=>setWpsForm({...wpsForm,material:event.target.value})}><option value="">Vælg materiale…</option>{WPS_MATERIAL_OPTIONS.map(option=><option key={option}>{option}</option>)}</select>{wpsForm.material.startsWith('Other')&&<input autoFocus value={wpsForm.materialCustom} onChange={event=>setWpsForm({...wpsForm,materialCustom:event.target.value})} placeholder="Skriv materiale / material number"/>}</section>
+          <section className="wpsQuickStep"><div className="wpsStepTitle"><span>2</span><div><b>Samlingstype</b><small>Vælg den skitse WPS’en skal bruge</small></div></div><div className="wpsJointChoices"><button className={wpsForm.jointType==='Butt weld'?'active':''} onClick={()=>setWpsForm({...wpsForm,jointType:'Butt weld'})}><i className="buttJointIcon"/><b>Stumpsøm</b><small>Butt weld</small></button><button className={wpsForm.jointType==='Fillet weld'?'active':''} onClick={()=>setWpsForm({...wpsForm,jointType:'Fillet weld'})}><i className="filletJointIcon"/><b>Kantsøm</b><small>Fillet weld</small></button></div></section>
+          <section className="wpsQuickStep"><div className="wpsStepTitle"><span>3</span><div><b>Svejsemetode</b><small>ISO 4063-proces</small></div></div><div className="wpsProcessChoices">{WPS_PROCESS_OPTIONS.map(([code,name])=><button key={code} className={wpsForm.process===code?'active':''} onClick={()=>setWpsForm({...wpsForm,process:code})}><strong>{code}</strong><span>{name}</span></button>)}</div></section>
+          <section className="wpsQuickStep"><div className="wpsStepTitle"><span>4</span><div><b>Tråd eller elektrode</b><small>Valgfrit - ATLAS kan finde den fra WPQR</small></div></div><select value={wpsForm.filler} onChange={event=>setWpsForm({...wpsForm,filler:event.target.value})}><option value="">Lad ATLAS vælge fra WPQR…</option>{WPS_FILLER_OPTIONS.map(option=><option key={option}>{option}</option>)}</select>{wpsForm.filler.startsWith('Other')&&<input value={wpsForm.fillerCustom} onChange={event=>setWpsForm({...wpsForm,fillerCustom:event.target.value})} placeholder="Skriv klassifikation / handelsnavn"/>}</section>
+          <section className="wpsQuickStep"><div className="wpsStepTitle"><span>5</span><div><b>Beskyttelsesgas</b><small>Valgfrit - skal være understøttet af WPQR</small></div></div><select value={wpsForm.gas} onChange={event=>setWpsForm({...wpsForm,gas:event.target.value})}><option value="">Lad ATLAS vælge fra WPQR…</option>{WPS_GAS_OPTIONS.map(option=><option key={option}>{option}</option>)}</select>{wpsForm.gas.startsWith('Other')&&<input value={wpsForm.gasCustom} onChange={event=>setWpsForm({...wpsForm,gasCustom:event.target.value})} placeholder="Skriv gas / ISO 14175-klassifikation"/>}</section>
+          <section className="wpsQuickStep wpsQuickOptional"><div className="wpsStepTitle"><span>6</span><div><b>Tykkelse og position</b><small>Valgfrit - tomme felter hentes fra WPQR</small></div></div><div><label>Tykkelse, mm<input type="number" min="0.1" step="0.1" value={wpsForm.thickness} onChange={event=>setWpsForm({...wpsForm,thickness:event.target.value})} placeholder="Fx 3"/></label><label>Svejseposition<select value={wpsForm.position} onChange={event=>setWpsForm({...wpsForm,position:event.target.value})}><option value="">Fra WPQR</option>{['PA','PB','PC','PD','PE','PF','PG','All qualified positions'].map(position=><option key={position}>{position}</option>)}</select></label></div></section>
+          <details className="wpsExtraNotes"><summary>+ Tilføj særlige jobkrav</summary><textarea rows="3" value={wpsForm.notes} onChange={event=>setWpsForm({...wpsForm,notes:event.target.value})} placeholder="Valgfrit: særlige krav, kunde, projekt eller begrænsninger…"/></details>
+        </div>
+        <button className="primaryBtn generateReportBtn wpsGenerateNow" disabled={wpsBusy||!wpsSourceDocuments.length||!wpsForm.material||!wpsForm.process} onClick={generateWps}>{wpsBusy?'ATLAS finder den rigtige WPQR og bygger WPS’en…':'GENERÉR FSQ WPS →'}</button>
       </section>
       <section className="panel wpsSourcePanel">
         <div className="panelHead"><div><p className="panelEyebrow">KONTROLLEREDE KILDER</p><h3>Automatisk fra Company Library</h3></div></div>
