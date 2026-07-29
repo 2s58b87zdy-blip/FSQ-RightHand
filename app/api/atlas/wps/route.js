@@ -57,6 +57,29 @@ function normalizeValues(input, fields) {
   return Object.fromEntries(fields.map(field => [field, clean(source[field] || MISSING, 12000)]));
 }
 
+function requestLine(requestText, label) {
+  const line = String(requestText || '').split(/\r?\n/).find(item => item.toLowerCase().startsWith(label.toLowerCase()));
+  return line ? clean(line.slice(label.length).replace(/\.$/, ''), 1000) : '';
+}
+
+function safeFallbackValues(requestText) {
+  const values = {
+    WPS_NO: 'DRAFT-WPS',
+    REVISION: '0',
+    APPLICATION_SCOPE: 'Draft created from the operator selections; technical values must be verified against the supporting WPQR.',
+    PARENT_MATERIAL_1: requestLine(requestText, 'Parent material:'),
+    JOINT_TYPE: requestLine(requestText, 'Joint type:'),
+    WELDING_PROCESS: requestLine(requestText, 'Welding process:'),
+    WELDING_POSITION: requestLine(requestText, 'Welding position:'),
+    SHIELDING_GAS: requestLine(requestText, 'Shielding gas:')
+  };
+  if (/required filler diameter:\s*1\.2 mm/i.test(requestText)) {
+    values.FILLER_DIAMETER = '1.2 mm (SMO)';
+    values.FILLER_CLASSIFICATION = '[MANGLER - copy exact classification and trade name from supporting WPQR]';
+  }
+  return values;
+}
+
 function wpsSourceCandidate(blob) {
   const metadata = blob.metadata || {};
   if (String(metadata.companylibrary).toLowerCase() !== 'true') return false;
@@ -211,14 +234,30 @@ ${sourceNames.map(name => `- ${name}`).join('\n')}
 Unreadable or excluded sources:
 ${controlled.unreadable.length ? controlled.unreadable.map(name => `- ${name}`).join('\n') : '- none'}`;
 
-  const response = await atlasClient({ timeoutMs: OPENAI_TIMEOUT_MS, maxRetries: 0 }).responses.create({
-    model: process.env.OPENAI_MODEL || 'gpt-5',
+  const model = process.env.OPENAI_MODEL || 'gpt-5';
+  const responseRequest = {
+    model,
     instructions,
     input: [{ role: 'user', content: [{ type: 'input_text', text: userText }, ...controlled.contentParts] }],
     max_output_tokens: 9000,
     store: false
-  });
-  const parsed = parseJsonObject(response.output_text);
+  };
+  if (/^(gpt-5|gpt-5\.|gpt-5-)/i.test(model)) responseRequest.reasoning = { effort: 'low' };
+
+  let parsed;
+  let fallbackReason = '';
+  try {
+    const response = await atlasClient({ timeoutMs: OPENAI_TIMEOUT_MS, maxRetries: 0 }).responses.create(responseRequest);
+    parsed = parseJsonObject(response.output_text);
+  } catch (error) {
+    fallbackReason = clean(error?.message || 'ATLAS model request failed', 1000);
+    console.warn('ATLAS WPS safe fallback used', { message: fallbackReason });
+    parsed = {
+      values: safeFallbackValues(requestText),
+      verificationNotes: `ATLAS could not complete the automatic source analysis: ${fallbackReason}. A safe draft was created from the operator selections. Every missing technical value must be copied from and verified against the supporting WPQR before approval.`,
+      evidence: {}
+    };
+  }
   const values = normalizeValues(parsed.values, fields);
   values.STATUS = 'DRAFT - NOT APPROVED';
   values.PREPARED_BY = session.name;
@@ -253,10 +292,11 @@ ${controlled.unreadable.length ? controlled.unreadable.map(name => `- ${name}`).
       evidence,
       missingFields,
       sourceNames,
-      unreadableSources: controlled.unreadable
+      unreadableSources: controlled.unreadable,
+      fallback: Boolean(fallbackReason)
     },
     fields,
-    model: process.env.OPENAI_MODEL || 'gpt-5'
+    model
   }, { headers: { 'Cache-Control': 'private, no-store' } });
 }
 

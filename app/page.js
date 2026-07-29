@@ -18,7 +18,7 @@ const FOLDER_ACCESS_LEVELS = ['No Access','Read','Edit','Full Control'];
 const MANAGED_FOLDERS = ['Projects','Workshop','Marine','Drawings','Procedures','QA / QC','Reports','Drone','Certificates','Templates','Finance','HR','Management','Contracts','Customers'];
 const DEFAULT_FOLDER_ACCESS = Object.fromEntries(MANAGED_FOLDERS.map(folder=>[folder,'No Access']));
 
-const APP_VERSION = '1.0 RC4.24';
+const APP_VERSION = '1.0 RC4.25';
 
 const USER_REGISTRY_DEFAULTS = [];
 
@@ -292,6 +292,7 @@ const WPS_PROCESS_OPTIONS = [
 
 const WPS_FILLER_OPTIONS = [
   'Use exact filler wire from selected WPQR',
+  'Ø1.2 mm wire (SMO) — exact classification from WPQR',
   'ER308LSi / 308LSi',
   'ER316LSi / 316LSi',
   'ER2209 / 2209',
@@ -3061,6 +3062,8 @@ function CompanyLibrary({session,projects,tasks,folders,setFolders,foldersHydrat
       wpsForm.position?`Welding position: ${wpsForm.position}.`:'Use only welding positions supported by the selected WPQR.',
       filler==='Use exact filler wire from selected WPQR'
         ?'Use the exact filler wire classification and trade name stated in the selected supporting WPQR. Do not substitute or infer another filler.'
+        :filler.startsWith('Ø1.2 mm wire (SMO)')
+          ?'Use the exact filler wire classification and trade name stated in the selected supporting WPQR. Required filler diameter: 1.2 mm. Add "(SMO)" after the filler wire text in the WPS line.'
         :filler?`Filler wire or electrode: ${filler}.`:'Select filler only when explicitly supported by the selected WPQR/WPS.',
       gas?`Shielding gas: ${gas}.`:'Select shielding gas only when explicitly supported by the selected WPQR/WPS.',
       wpsForm.notes.trim()?`Additional job notes: ${wpsForm.notes.trim()}`:'',
@@ -3099,7 +3102,9 @@ function CompanyLibrary({session,projects,tasks,folders,setFolders,foldersHydrat
       };
       setReports(current=>[...current,draft]);
       setSelectedReport(draft.id);setTab('review');
-      setMessage('WPS-kladden er klar. Kontrollér alle tekniske værdier, udfyld MANGLER-felter og godkend den.');
+      setMessage(data.wps?.fallback
+        ?'ATLAS-forbindelsen kunne ikke færdiggøre analysen, men en sikker WPS-kladde er oprettet. Udfyld og verificér alle MANGLER-felter mod WPQR.'
+        :'WPS-kladden er klar. Kontrollér alle tekniske værdier, udfyld MANGLER-felter og godkend den.');
     }catch(error){
       setMessage(error?.name==='AbortError'
         ?'ATLAS stoppede WPS-genereringen efter 2 minutter. Prøv igen; systemet vælger automatisk de mest relevante WPQR/WPS-filer.'
@@ -3269,12 +3274,13 @@ body{font-family:Arial,sans-serif;color:#14202b;margin:34px;line-height:1.45}hea
           <section className="wpsQuickStep"><div className="wpsStepTitle"><span>1</span><div><b>Materiale</b><small>Vælg grundmaterialet</small></div></div><select value={wpsForm.material} onChange={event=>setWpsForm({...wpsForm,material:event.target.value})}><option value="">Vælg materiale…</option>{WPS_MATERIAL_OPTIONS.map(option=><option key={option}>{option}</option>)}</select>{wpsForm.material.startsWith('Other')&&<input autoFocus value={wpsForm.materialCustom} onChange={event=>setWpsForm({...wpsForm,materialCustom:event.target.value})} placeholder="Skriv materiale / material number"/>}</section>
           <section className="wpsQuickStep"><div className="wpsStepTitle"><span>2</span><div><b>Samlingstype</b><small>Vælg den skitse WPS’en skal bruge</small></div></div><div className="wpsJointChoices"><button className={wpsForm.jointType==='Butt weld'?'active':''} onClick={()=>setWpsForm({...wpsForm,jointType:'Butt weld'})}><i className="buttJointIcon"/><b>Stumpsøm</b><small>Butt weld</small></button><button className={wpsForm.jointType==='Fillet weld'?'active':''} onClick={()=>setWpsForm({...wpsForm,jointType:'Fillet weld'})}><i className="filletJointIcon"/><b>Kantsøm</b><small>Fillet weld</small></button></div></section>
           <section className="wpsQuickStep"><div className="wpsStepTitle"><span>3</span><div><b>Svejsemetode</b><small>Vælg ISO 4063-proces — 131 MIG er med som første valg</small></div></div><div className="wpsProcessChoices">{WPS_PROCESS_OPTIONS.map(([code,name])=><button key={code} className={`${wpsForm.process===code?'active':''} ${code==='131'?'featuredProcess':''}`} onClick={()=>setWpsForm({...wpsForm,process:code})}><strong>{code}</strong><span>{name}</span>{code==='131'&&<em>MIG</em>}</button>)}</div>{wpsForm.process&&<div className="wpsSelectedProcess">Valgt svejsemetode: <strong>{wpsForm.process}</strong> — {WPS_PROCESS_OPTIONS.find(([code])=>code===wpsForm.process)?.[1]}</div>}</section>
-          <section className="wpsQuickStep"><div className="wpsStepTitle"><span>4</span><div><b>Tråd eller elektrode</b><small>Vælg den præcise tråd fra WPQR eller angiv den manuelt</small></div></div><select value={wpsForm.filler} onChange={event=>setWpsForm({...wpsForm,filler:event.target.value})}><option value="">Lad ATLAS finde en kvalificeret tråd…</option>{WPS_FILLER_OPTIONS.map(option=><option key={option}>{option}</option>)}</select>{wpsForm.filler==='Use exact filler wire from selected WPQR'&&<small className="wpsSourceChoice">ATLAS kopierer klassifikation og handelsnavn direkte fra den valgte WPQR.</small>}{wpsForm.filler.startsWith('Other')&&<input value={wpsForm.fillerCustom} onChange={event=>setWpsForm({...wpsForm,fillerCustom:event.target.value})} placeholder="Skriv klassifikation / handelsnavn"/>}</section>
+          <section className="wpsQuickStep"><div className="wpsStepTitle"><span>4</span><div><b>Tråd eller elektrode</b><small>Vælg den præcise tråd fra WPQR eller angiv den manuelt</small></div></div><select value={wpsForm.filler} onChange={event=>setWpsForm({...wpsForm,filler:event.target.value})}><option value="">Lad ATLAS finde en kvalificeret tråd…</option>{WPS_FILLER_OPTIONS.map(option=><option key={option}>{option}</option>)}</select>{wpsForm.filler==='Use exact filler wire from selected WPQR'&&<small className="wpsSourceChoice">ATLAS kopierer klassifikation og handelsnavn direkte fra den valgte WPQR.</small>}{wpsForm.filler.startsWith('Ø1.2 mm wire (SMO)')&&<small className="wpsSourceChoice">WPS-linjen mærkes med <b>(SMO)</b>. Trådklassifikation og handelsnavn skal stadig komme direkte fra WPQR.</small>}{wpsForm.filler.startsWith('Other')&&<input value={wpsForm.fillerCustom} onChange={event=>setWpsForm({...wpsForm,fillerCustom:event.target.value})} placeholder="Skriv klassifikation / handelsnavn"/>}</section>
           <section className="wpsQuickStep"><div className="wpsStepTitle"><span>5</span><div><b>Beskyttelsesgas</b><small>Valgfrit - skal være understøttet af WPQR</small></div></div><select value={wpsForm.gas} onChange={event=>setWpsForm({...wpsForm,gas:event.target.value})}><option value="">Lad ATLAS vælge fra WPQR…</option>{WPS_GAS_OPTIONS.map(option=><option key={option}>{option}</option>)}</select>{wpsForm.gas.startsWith('Other')&&<input value={wpsForm.gasCustom} onChange={event=>setWpsForm({...wpsForm,gasCustom:event.target.value})} placeholder="Skriv gas / ISO 14175-klassifikation"/>}</section>
           <section className="wpsQuickStep wpsQuickOptional"><div className="wpsStepTitle"><span>6</span><div><b>Tykkelse og position</b><small>Valgfrit - tomme felter hentes fra WPQR</small></div></div><div className="wpsThicknessPosition"><label><span>Tykkelse i mm</span><input type="number" inputMode="decimal" min="0.1" step="0.1" value={wpsForm.thickness} onChange={event=>setWpsForm({...wpsForm,thickness:event.target.value})} placeholder="Fx 3,0 mm"/></label><label><span>Svejseposition</span><select value={wpsForm.position} onChange={event=>setWpsForm({...wpsForm,position:event.target.value})}><option value="">Vælg fra WPQR…</option>{WPS_POSITION_OPTIONS.map(([code,label])=><option key={code} value={code}>{code} — {label}</option>)}</select></label></div><div className="wpsPositionGuide"><b>Positioner</b>{WPS_POSITION_OPTIONS.slice(0,-1).map(([code,label])=><span key={code}><strong>{code}</strong> {label}</span>)}</div></section>
           <details className="wpsExtraNotes"><summary>+ Tilføj særlige jobkrav</summary><textarea rows="3" value={wpsForm.notes} onChange={event=>setWpsForm({...wpsForm,notes:event.target.value})} placeholder="Valgfrit: særlige krav, kunde, projekt eller begrænsninger…"/></details>
         </div>
         <button className="primaryBtn generateReportBtn wpsGenerateNow" disabled={wpsBusy||!wpsSourceDocuments.length||!wpsForm.material||!wpsForm.process} onClick={generateWps}>{wpsBusy?'ATLAS finder den rigtige WPQR og bygger WPS’en…':'GENERÉR FSQ WPS →'}</button>
+        {message&&<div className={`wpsInlineStatus ${wpsBusy?'busy':''}`}>{message}</div>}
       </section>
       <section className="panel wpsSourcePanel">
         <div className="panelHead"><div><p className="panelEyebrow">KONTROLLEREDE KILDER</p><h3>Automatisk fra Company Library</h3></div></div>
