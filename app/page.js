@@ -18,7 +18,7 @@ const FOLDER_ACCESS_LEVELS = ['No Access','Read','Edit','Full Control'];
 const MANAGED_FOLDERS = ['Projects','Workshop','Marine','Drawings','Procedures','QA / QC','Reports','Drone','Certificates','Templates','Finance','HR','Management','Contracts','Customers'];
 const DEFAULT_FOLDER_ACCESS = Object.fromEntries(MANAGED_FOLDERS.map(folder=>[folder,'No Access']));
 
-const APP_VERSION = '1.0 RC4.19';
+const APP_VERSION = '1.0 RC4.21';
 
 const USER_REGISTRY_DEFAULTS = [];
 
@@ -43,7 +43,7 @@ function getActiveTechnicians(users) {
 const NAV = [
   ['dashboard', 'Dashboard', '◈'],
   ['myjobs', 'My Jobs', '✓'],
-  ['approvals', 'Job Approvals', '✓'],
+  ['approvals', 'Slutkontrol', '✓'],
   ['jobArchive', 'Job Archive', '▤'],
   ['projects', 'Projects', '◫'],
   ['fleet', 'Fleet Map', '⌖'],
@@ -275,13 +275,14 @@ const WPS_MATERIAL_OPTIONS = [
   '316L / 1.4404',
   'Duplex 2205 / 1.4462',
   'Super Duplex 2507 / 1.4410',
-  'SMO 254 / 1.4547',
+  'SMO 254 / 1.4547 (6Mo)',
   'Aluminium',
   'Other - enter material'
 ];
 
 const WPS_PROCESS_OPTIONS = [
   ['141','TIG / GTAW'],
+  ['131','MIG solid wire'],
   ['135','MAG solid wire'],
   ['136','FCAW flux-cored wire'],
   ['138','MCAW metal-cored wire'],
@@ -290,6 +291,7 @@ const WPS_PROCESS_OPTIONS = [
 ];
 
 const WPS_FILLER_OPTIONS = [
+  'Use exact filler wire from selected WPQR',
   'ER308LSi / 308LSi',
   'ER316LSi / 316LSi',
   'ER2209 / 2209',
@@ -298,6 +300,17 @@ const WPS_FILLER_OPTIONS = [
   'G3Si1',
   'E 42 / E 46 electrode',
   'Other - enter classification'
+];
+
+const WPS_POSITION_OPTIONS = [
+  ['PA','Flat position (liggende)'],
+  ['PB','Horizontal-vertical fillet weld (vandret/lodret kantsøm)'],
+  ['PC','Horizontal butt weld (vandret stumpsøm)'],
+  ['PD','Overhead fillet weld (overhoved kantsøm)'],
+  ['PE','Overhead butt weld (overhoved stumpsøm)'],
+  ['PF','Vertical up (lodret op)'],
+  ['PG','Vertical down (lodret ned)'],
+  ['All qualified positions','All positions qualified by the selected WPQR']
 ];
 
 const WPS_GAS_OPTIONS = [
@@ -332,6 +345,11 @@ function chooseEnglishFemaleVoice() {
 
 function canApproveTackAndComplete(session) {
   return Boolean(session && (session.permissions || []).some(permission => ['approve_tack','approve_final','complete_jobs'].includes(permission)));
+}
+
+function canApproveWorkshopFinal(session) {
+  const name=String(session?.name||'').trim().toLowerCase();
+  return ['flemming','jakob'].includes(name);
 }
 
 
@@ -382,6 +400,40 @@ function isMarineProject(project) {
 
 function workshopStageLabel(task) {
   return task.qaStage || task.jobStatus || 'Pending';
+}
+
+function migrateLegacyWorkshopControl(task, projects) {
+  const project = projects.find(item => item.name === task.project);
+  if (!isWorkshopProject(project)) return task;
+
+  const stage = String(task.qaStage || task.jobStatus || '').trim();
+  const legacyPreControl = ['Fit-up', 'Awaiting tack approval', 'Tack approved', 'Welding'];
+  const legacyFinalControl = ['Awaiting completion approval', 'Awaiting final approval', 'Awaiting QC'];
+
+  if (legacyPreControl.includes(stage)) {
+    return {
+      ...task,
+      legacyPhotos: task.legacyPhotos || task.photos || [],
+      photos: [],
+      qaStage: 'In progress',
+      jobStatus: 'In progress',
+      status: 'In progress',
+      workflowMigratedAt: new Date().toISOString()
+    };
+  }
+
+  if (legacyFinalControl.includes(stage)) {
+    const hasFourFinalPhotos = (task.photos || []).length >= 4;
+    return {
+      ...task,
+      qaStage: hasFourFinalPhotos ? 'Awaiting final QC' : 'In progress',
+      jobStatus: hasFourFinalPhotos ? 'Awaiting final QC' : 'In progress',
+      status: hasFourFinalPhotos ? 'Waiting' : 'In progress',
+      workflowMigratedAt: new Date().toISOString()
+    };
+  }
+
+  return task;
 }
 
 function isArchivedJob(task) {
@@ -682,12 +734,16 @@ function AppShell({ session, onLogout, users, setUsers }) {
   const [companyReports, setCompanyReports] = useStoredState('fsq-v80-company-reports', DEFAULT_COMPANY_REPORTS);
   const [companyProfile, setCompanyProfile] = useStoredState('fsq-v81-company-profile', DEFAULT_COMPANY_PROFILE);
 
-  // Persistently remove jobs whose project no longer exists. Waiting for both
-  // stores prevents a slow project load from being mistaken for deleted data.
+  // Remove jobs whose project no longer exists and move jobs left in the
+  // retired fit-up/tack controls into the new four-photo final-control flow.
+  // Old intermediate photos are preserved separately as legacyPhotos.
   useEffect(() => {
     if (!projectsHydrated || !tasksHydrated) return;
-    const cleanedTasks = tasks.filter(task => isArchivedJob(task) || taskHasActiveProject(task, projects));
-    if (cleanedTasks.length !== tasks.length) setTasks(cleanedTasks);
+    const cleanedTasks = tasks
+      .filter(task => isArchivedJob(task) || taskHasActiveProject(task, projects))
+      .map(task => migrateLegacyWorkshopControl(task, projects));
+    const changed = cleanedTasks.length !== tasks.length || cleanedTasks.some((task, index) => task !== tasks[index]);
+    if (changed) setTasks(cleanedTasks);
   }, [projectsHydrated, tasksHydrated, projects, tasks, setTasks]);
 
   // One-time Go Live cleanup: remove demonstration jobs, tasks and materials.
@@ -773,7 +829,8 @@ function AppShell({ session, onLogout, users, setUsers }) {
   const visibleProjects = isTechnician ? projects.filter(project => assignedProjectNames.has(project.name)) : projects;
   const roleNav = NAV.filter(item =>
     (item[0] !== 'jobArchive' || canViewJobArchive(session)) &&
-    (item[0] !== 'companyLibrary' || canViewCompanyLibrary(session))
+    (item[0] !== 'companyLibrary' || canViewCompanyLibrary(session)) &&
+    (item[0] !== 'approvals' || canApproveWorkshopFinal(session))
   );
   const visibleNav = isTechnician
     ? NAV.filter(item => ['myjobs','inventory','knowledge','ai'].includes(item[0]))
@@ -782,6 +839,7 @@ function AppShell({ session, onLogout, users, setUsers }) {
   useEffect(() => { setMobileNavOpen(false); }, [active]);
   useEffect(() => {
     if(active==='companyLibrary'&&!canViewCompanyLibrary(session))setActive(isTechnician?'myjobs':'dashboard');
+    if(active==='approvals'&&!canApproveWorkshopFinal(session))setActive(isTechnician?'myjobs':'dashboard');
   },[active,session,isTechnician]);
   useEffect(() => {
     if (!mobileNavOpen) return;
@@ -894,7 +952,7 @@ function AppShell({ session, onLogout, users, setUsers }) {
 
         {active === 'dashboard' && <Dashboard session={session} stats={stats} projects={visibleProjects} tasks={visibleTasks} people={people} machines={knowledgeMachines} materials={materials} quotes={quotes} droneInspections={droneInspections} setActive={setActive} />}
         {active === 'myjobs' && <MyJobs session={session} tasks={activeProjectTasks} setTasks={setTasks} projects={projects} />}
-        {active === 'approvals' && <JobApprovals session={session} tasks={activeProjectTasks} setTasks={setTasks} projects={projects} />}
+        {active === 'approvals' && canApproveWorkshopFinal(session) && <JobApprovals session={session} tasks={activeProjectTasks} setTasks={setTasks} projects={projects} />}
         {active === 'jobArchive' && <JobArchive session={session} tasks={archivedTasks} projects={projects} />}
         {active === 'crew' && <CrewManagement people={people} setPeople={setPeople} projects={projects} />}
         {active === 'projects' && <Projects projects={projects} setProjects={setProjects} deletedProjects={deletedProjects} setDeletedProjects={setDeletedProjects} setActive={setActive} setActiveProjectId={setActiveProjectId} tasks={activeProjectTasks} setTasks={setTasks} people={people} users={users} setPlannerEntries={setPlannerEntries} />}
@@ -918,6 +976,7 @@ function MyJobs({ session, tasks, setTasks, projects }) {
   const [selectedId,setSelectedId]=useState(null);
   const [message,setMessage]=useState('');
   const [uploading,setUploading]=useState(false);
+  const [finalPhotoMode,setFinalPhotoMode]=useState(false);
   const assigned=tasks.filter(task=>isTaskAssignedTo(task,session.name)&&taskHasActiveProject(task,projects));
   const selected=assigned.find(task=>task.id===selectedId) || assigned[0] || null;
   const project=projects.find(p=>p.name===selected?.project);
@@ -927,7 +986,14 @@ function MyJobs({ session, tasks, setTasks, projects }) {
 
   async function uploadPhotos(event){
     if(!selected)return;
-    const files=Array.from(event.target.files||[]).filter(file=>file.type.startsWith('image/'));
+    const chosen=Array.from(event.target.files||[]).filter(file=>file.type.startsWith('image/'));
+    const remaining=workshop?Math.max(0,4-(selected.photos||[]).length):chosen.length;
+    const files=workshop?chosen.slice(0,remaining):chosen;
+    if(workshop&&!remaining){
+      setMessage('Der er allerede uploadet 4 afslutningsbilleder.');
+      event.target.value='';
+      return;
+    }
     if(!files.length)return;
     setUploading(true);setMessage('Uploading photos to Azure...');
     try{
@@ -946,7 +1012,7 @@ function MyJobs({ session, tasks, setTasks, projects }) {
       const photos=[...(selected.photos||[]),...uploaded];
       updateTask(selected.id,{photos,photoStorage:'Azure Blob Storage'});
       setMessage(workshop
-        ? `${uploaded.length} photo(s) uploaded. ${Math.max(0,4-photos.length)} remaining before final QC submission.`
+        ? `${uploaded.length} afslutningsbillede(r) uploadet. ${Math.max(0,4-photos.length)} mangler før slutkontrol.`
         : `${uploaded.length} photo(s) uploaded.`);
     }catch(error){
       setMessage(`Upload failed: ${error.message}`);
@@ -970,41 +1036,18 @@ function MyJobs({ session, tasks, setTasks, projects }) {
     updateTask(selected.id,{
       jobStatus:'In progress',
       status:'In progress',
-      qaStage:workshop?'Fit-up':'In progress',
+      qaStage:'In progress',
       startedAt:new Date().toISOString(),
       startedBy:session.name
     });
     setMessage('Job started.');
   }
 
-  function submitTack(){
-    if(!selected||!workshop)return;
-    updateTask(selected.id,{
-      jobStatus:'Awaiting tack approval',
-      status:'Waiting',
-      qaStage:'Awaiting tack approval',
-      tackSubmittedAt:new Date().toISOString(),
-      tackSubmittedBy:session.name
-    });
-    setMessage('Fit-up submitted for tack approval by Flemming or Jakob.');
-  }
-
-  function startWelding(){
-    if(!selected||!workshop||selected.qaStage!=='Tack approved')return;
-    updateTask(selected.id,{
-      jobStatus:'Welding',
-      status:'In progress',
-      qaStage:'Welding',
-      weldingStartedAt:new Date().toISOString()
-    });
-    setMessage('Welding started.');
-  }
-
   function submitFinalQC(){
     if(!selected||!workshop)return;
     const count=(selected.photos||[]).length;
     if(count<4){
-      setMessage(`Cannot submit final QC. Upload ${4-count} more workshop photo(s).`);
+      setMessage(`Jobbet kan ikke afsluttes endnu. Upload ${4-count} afslutningsbillede(r).`);
       return;
     }
     updateTask(selected.id,{
@@ -1014,7 +1057,7 @@ function MyJobs({ session, tasks, setTasks, projects }) {
       finalSubmittedAt:new Date().toISOString(),
       finalSubmittedBy:session.name
     });
-    setMessage('Job submitted for final QC by Flemming or Jakob.');
+    setMessage('Jobbet er sendt til slutkontrol hos Flemming og Jakob.');
   }
 
   function finishMarineJob(){
@@ -1032,10 +1075,8 @@ function MyJobs({ session, tasks, setTasks, projects }) {
 
   const photoCount=(selected?.photos||[]).length;
   const stage=workshopStageLabel(selected);
-  const canStart=['Pending','Rejected','Needs rework'].includes(stage) || !selected.startedAt;
-  const canSubmitTack=workshop && ['Fit-up','In progress'].includes(stage);
-  const canStartWelding=workshop && stage==='Tack approved';
-  const canSubmitFinal=workshop && stage==='Welding';
+  const canStart=['Pending','Rejected'].includes(stage) || (!selected.startedAt&&!['Awaiting final QC','QC approved / Released','Completed'].includes(stage));
+  const canSubmitFinal=workshop && ['In progress','Fit-up','Awaiting tack approval','Tack approved','Welding','Needs rework'].includes(stage);
   const canFinishMarine=!workshop && ['In progress','Pending','Rejected'].includes(stage);
 
   return <div className="content technicianJobs">
@@ -1048,10 +1089,10 @@ function MyJobs({ session, tasks, setTasks, projects }) {
           const isWorkshop=isWorkshopProject(jobProject);
           const c=(job.photos||[]).length;
           const st=workshopStageLabel(job);
-          return <button key={job.id} className={selected?.id===job.id?'active':''} onClick={()=>{setSelectedId(job.id);setMessage('')}}>
+          return <button key={job.id} className={selected?.id===job.id?'active':''} onClick={()=>{setSelectedId(job.id);setMessage('');setFinalPhotoMode(false)}}>
             <div><b>{job.title}</b><small>{job.project} · {job.due}</small></div>
             <span className={`jobState ${String(st).toLowerCase().replaceAll(' ','-')}`}>{st}</span>
-            <em>{isWorkshop?`${c}/4 QC photos`:`${c} photos`}</em>
+            <em>{isWorkshop?`${c}/4 afslutningsbilleder`:`${c} billeder`}</em>
           </button>
         })}
       </aside>
@@ -1062,30 +1103,28 @@ function MyJobs({ session, tasks, setTasks, projects }) {
         {selected.rejectionReason&&<div className="rejectionBox"><b>Returned for rework</b><p>{selected.rejectionReason}</p></div>}
 
         {workshop&&<div className="workshopQcFlow">
-          {['Fit-up','Awaiting tack approval','Tack approved','Welding','Awaiting final QC','QC approved / Released'].map((step,index)=><div key={step} className={stage===step?'active':stage==='Completed'&&index===5?'done':''}><span>{index+1}</span><small>{step}</small></div>)}
+          {[['In progress','Udfør jobbet'],['Awaiting final QC','Afventer slutkontrol'],['QC approved / Released','Godkendt og afsluttet']].map(([step,label],index)=><div key={step} className={stage===step?'active':stage==='Completed'&&index===2?'done':''}><span>{index+1}</span><small>{label}</small></div>)}
         </div>}
 
         {workshop&&<div className="photoGate">
-          <div><strong>{photoCount}/4</strong><small>QC photos uploaded</small></div>
+          <div><strong>{photoCount}/4</strong><small>afslutningsbilleder</small></div>
           <div className="gateProgress"><span style={{width:`${Math.min(100,photoCount/4*100)}%`}}/></div>
-          <p>{photoCount<4?'Four workshop photos are required before final QC: fabrication, fit-up/welding, completed item and detail.':'Workshop photo requirement completed.'}</p>
+          <p>{photoCount<4?'Tag først billederne, når jobbet er færdigt. Der skal uploades præcis 4 billeder før slutkontrol.':'De 4 afslutningsbilleder er klar. Jobbet kan nu sendes til slutkontrol.'}</p>
         </div>}
 
-        <label className={`jobPhotoUpload ${uploading?'busy':''}`}>{uploading?'Uploading...':'Upload photos to Azure'}<input disabled={uploading||['Awaiting tack approval','Awaiting final QC','QC approved / Released','Completed'].includes(stage)} type="file" accept="image/*" capture="environment" multiple onChange={uploadPhotos}/></label>
-        <div className="jobPhotoGrid">{(selected.photos||[]).map(photo=><figure key={photo.id}><a href={photo.url} target="_blank" rel="noreferrer"><img src={photo.url} alt={photo.name}/></a><figcaption>{photo.name}<button onClick={()=>removePhoto(photo)}>×</button></figcaption></figure>)}</div>
+        {workshop&&canSubmitFinal&&!finalPhotoMode&&photoCount===0&&<button className="startFinalPhotos" onClick={()=>{setFinalPhotoMode(true);setMessage('Tag eller vælg nu de 4 afslutningsbilleder.')}}>Jobbet er færdigt – tag 4 afslutningsbilleder</button>}
+        {(!workshop||finalPhotoMode||photoCount>0)&&<label className={`jobPhotoUpload ${uploading?'busy':''}`}>{uploading?'Uploader…':workshop?'Tag / upload afslutningsbilleder':'Upload billeder'}<input disabled={uploading||(workshop&&photoCount>=4)||['Awaiting final QC','QC approved / Released','Completed'].includes(stage)} type="file" accept="image/*" capture="environment" multiple onChange={uploadPhotos}/></label>}
+        <div className="jobPhotoGrid">{(selected.photos||[]).map(photo=><figure key={photo.id}><a href={photo.url} target="_blank" rel="noreferrer"><img src={photo.url} alt={photo.name}/></a><figcaption>{photo.name}{!['Awaiting final QC','QC approved / Released','Completed'].includes(stage)&&<button onClick={()=>removePhoto(photo)}>×</button>}</figcaption></figure>)}</div>
         {message&&<div className="jobMessage">{message}</div>}
 
         <div className="jobActions">
           {canStart&&<button className="startJob" onClick={startJob}>Start Job</button>}
-          {canSubmitTack&&<button className="finishJob" onClick={submitTack}>Submit Fit-up / Tack Approval</button>}
-          {canStartWelding&&<button className="startJob" onClick={startWelding}>Start Welding</button>}
-          {canSubmitFinal&&<button className="finishJob" disabled={photoCount<4} onClick={submitFinalQC}>Submit Final QC</button>}
+          {canSubmitFinal&&<button className="finishJob" disabled={photoCount<4} onClick={submitFinalQC}>Afslut job og send til slutkontrol</button>}
           {canFinishMarine&&<button className="finishJob" onClick={finishMarineJob}>Complete Marine Job</button>}
         </div>
 
-        {workshop&&stage==='Awaiting tack approval'&&<div className="pendingNotice approvalPending">Awaiting tack approval from Flemming or Jakob.</div>}
-        {workshop&&stage==='Awaiting final QC'&&<div className="pendingNotice approvalPending">Awaiting final QC from Flemming or Jakob.</div>}
-        {workshop&&stage==='QC approved / Released'&&<div className="approvalSuccess">✓ Released by {selected.approvedBy||'Flemming/Jakob'}</div>}
+        {workshop&&stage==='Awaiting final QC'&&<div className="pendingNotice approvalPending">Afventer slutkontrol fra Flemming eller Jakob.</div>}
+        {workshop&&stage==='QC approved / Released'&&<div className="approvalSuccess">✓ Slutkontrol godkendt af {selected.approvedBy||'Flemming/Jakob'}</div>}
       </main>
     </section>
   </div>
@@ -1093,35 +1132,22 @@ function MyJobs({ session, tasks, setTasks, projects }) {
 
 
 function JobApprovals({session,tasks,setTasks,projects}){
-  const allowed=canApproveTackAndComplete(session);
+  const allowed=canApproveWorkshopFinal(session);
   const [reason,setReason]=useState({});
 
   const workshopTasks=tasks.filter(task=>{
     const project=projects.find(p=>p.name===task.project);
     return isWorkshopProject(project);
   });
-  const tackPending=workshopTasks.filter(task=>task.qaStage==='Awaiting tack approval'||task.jobStatus==='Awaiting tack approval');
   const finalPending=workshopTasks.filter(task=>task.qaStage==='Awaiting final QC'||task.jobStatus==='Awaiting final QC');
-  const recent=workshopTasks.filter(task=>['Tack approved','QC approved / Released','Needs rework'].includes(task.qaStage)).slice(-12).reverse();
+  const recent=workshopTasks.filter(task=>['QC approved / Released','Needs rework'].includes(task.qaStage)).slice(-12).reverse();
 
   function update(id,changes){setTasks(tasks.map(task=>task.id===id?{...task,...changes}:task))}
-
-  function approveTack(task){
-    if(!allowed)return;
-    update(task.id,{
-      qaStage:'Tack approved',
-      jobStatus:'Tack approved',
-      status:'Waiting',
-      tackApprovedBy:session.name,
-      tackApprovedAt:new Date().toISOString(),
-      rejectionReason:''
-    });
-  }
 
   function approveFinal(task){
     if(!allowed)return;
     if((task.photos||[]).length<4){
-      alert('Final QC cannot be approved until four workshop photos are uploaded.');
+      alert('Slutkontrollen kan ikke godkendes, før alle 4 afslutningsbilleder er uploadet.');
       return;
     }
     update(task.id,{
@@ -1132,7 +1158,7 @@ function JobApprovals({session,tasks,setTasks,projects}){
       qcApprovedAt:new Date().toISOString(),
       completedAt:new Date().toISOString(),
       archivedAt:new Date().toISOString(),
-      archiveReason:'Final QC approved',
+      archiveReason:'Final control approved',
       rejectionReason:''
     });
   }
@@ -1153,44 +1179,37 @@ function JobApprovals({session,tasks,setTasks,projects}){
     setReason(current=>({...current,[task.id]:''}));
   }
 
-  if(!allowed)return <div className="content"><div className="sectionIntro"><h1>Workshop QC</h1><p>Only Flemming and Jakob can approve workshop fit-up and final QC.</p></div></div>;
+  if(!allowed)return <div className="content"><div className="sectionIntro"><h1>Slutkontrol</h1><p>Kun Flemming og Jakob kan se og godkende afsluttede workshopjobs.</p></div></div>;
 
-  const renderCard=(task,stage)=>{
+  const renderCard=task=>{
     const project=projects.find(p=>p.name===task.project);
-    const isFinal=stage==='final';
     return <article className="approvalCard workshopApprovalCard" key={task.id}>
       <div className="approvalCardHead">
-        <div><small>{task.project} · {project?.location||'Workshop'}</small><h3>{task.title}</h3><p>{task.person} · {isFinal?'Final QC':'Fit-up / Tack approval'}</p></div>
-        <span>{(task.photos||[]).length} photos</span>
+        <div><small>{task.project} · {project?.location||'Workshop'}</small><h3>{task.title}</h3><p>{task.person} · Job afsluttet og klar til slutkontrol</p></div>
+        <span>{(task.photos||[]).length}/4 billeder</span>
       </div>
       <div className="approvalPhotos">{(task.photos||[]).map(photo=><a key={photo.id} href={photo.url} target="_blank" rel="noreferrer"><img src={photo.url} alt={photo.name}/></a>)}</div>
-      {isFinal&&(task.photos||[]).length<4&&<div className="qcWarning">Final QC locked: four workshop photos are required.</div>}
-      <textarea placeholder="Rework reason required when rejecting" value={reason[task.id]||''} onChange={e=>setReason(current=>({...current,[task.id]:e.target.value}))}/>
+      {(task.photos||[]).length<4&&<div className="qcWarning">Godkendelsen er låst: der skal være 4 afslutningsbilleder.</div>}
+      <textarea placeholder="Skriv en årsag, hvis jobbet skal sendes retur" value={reason[task.id]||''} onChange={e=>setReason(current=>({...current,[task.id]:e.target.value}))}/>
       <div className="approvalActions">
-        {isFinal
-          ? <button className="approveButton" disabled={(task.photos||[]).length<4} onClick={()=>approveFinal(task)}>Approve Final QC & Release</button>
-          : <button className="approveButton" onClick={()=>approveTack(task)}>Approve Fit-up / Tack</button>}
-        <button className="rejectButton" onClick={()=>reject(task,stage)}>Return for Rework</button>
+        <button className="approveButton" disabled={(task.photos||[]).length<4} onClick={()=>approveFinal(task)}>Godkend slutkontrol og afslut job</button>
+        <button className="rejectButton" onClick={()=>reject(task,'final')}>Send retur</button>
       </div>
     </article>
   };
 
   return <div className="content approvalsPage">
-    <div className="sectionIntro"><div><h1>Workshop QC</h1><p>Workshop-only fit-up approval and final quality control.</p></div><span className="approvalRole">{session.name}</span></div>
+    <div className="sectionIntro"><div><h1>Slutkontrol</h1><p>Kun afsluttede workshopjobs med 4 billeder vises her. Kun Flemming og Jakob har adgang.</p></div><span className="approvalRole">{session.name}</span></div>
     <section className="approvalGrid qcApprovalGrid">
       <div className="panel">
-        <div className="panelHead"><h3>Awaiting Fit-up / Tack Approval</h3><span>{tackPending.length}</span></div>
-        {tackPending.length?tackPending.map(task=>renderCard(task,'tack')):<div className="empty">No workshop fit-up approvals are waiting.</div>}
-      </div>
-      <div className="panel">
-        <div className="panelHead"><h3>Awaiting Final QC</h3><span>{finalPending.length}</span></div>
-        {finalPending.length?finalPending.map(task=>renderCard(task,'final')):<div className="empty">No workshop jobs are waiting for final QC.</div>}
+        <div className="panelHead"><h3>Afventer slutkontrol</h3><span>{finalPending.length}</span></div>
+        {finalPending.length?finalPending.map(renderCard):<div className="empty">Ingen afsluttede workshopjobs afventer slutkontrol.</div>}
       </div>
     </section>
     <section className="panel qcRecent">
-      <div className="panelHead"><h3>Recent Workshop QC Decisions</h3><span>{recent.length}</span></div>
+      <div className="panelHead"><h3>Seneste slutkontroller</h3><span>{recent.length}</span></div>
       {recent.map(task=><div className="approvalHistory" key={task.id}><div><b>{task.title}</b><small>{task.project} · {task.person}</small></div><span className={`jobState ${String(task.qaStage).toLowerCase().replaceAll(' ','-')}`}>{task.qaStage}</span></div>)}
-      {!recent.length&&<div className="empty">No recent workshop QC decisions.</div>}
+      {!recent.length&&<div className="empty">Ingen tidligere slutkontroller.</div>}
     </section>
   </div>
 }
@@ -1204,15 +1223,12 @@ function Dashboard({ session, stats, projects, tasks, people, machines, material
     const project=projects.find(p=>p.name===task.project);
     return isWorkshopProject(project);
   });
-  const pendingApprovals=workshopTaskList.filter(task=>['Awaiting tack approval','Awaiting final QC'].includes(task.qaStage)||['Awaiting tack approval','Awaiting final QC'].includes(task.jobStatus));
+  const pendingApprovals=workshopTaskList.filter(task=>task.qaStage==='Awaiting final QC'||task.jobStatus==='Awaiting final QC');
   const criticalJobs=tasks.filter(task=>(task.priority==='High'||task.priority==='Critical'||task.due==='Overdue') && task.status!=='Completed');
   const peopleWorking=people.filter(person=>person && !['Free','Off'].includes(person.status));
   const materialAlerts=materials.filter(material=>material && Number(material.quantity)<Number(material.minimum));
   const openDrone=droneInspections.filter(item=>item && !['Completed','Closed'].includes(item.status));
   const quoteReplies=quotes.filter(quote=>quote && ['Draft','Awaiting approval','Sent','Awaiting reply'].includes(quote.status));
-  const tackApprovals=workshopTaskList.filter(task=>task.qaStage==='Awaiting tack approval' || task.jobStatus==='Awaiting tack approval');
-  const finalApprovals=workshopTaskList.filter(task=>task.qaStage==='Awaiting final QC' || task.jobStatus==='Awaiting final QC');
-  const releasedToday=workshopTaskList.filter(task=>task.qaStage==='QC approved / Released' && task.qcApprovedAt && new Date(task.qcApprovedAt).toDateString()===new Date().toDateString());
   const visiblePeople=peopleWorking.slice(0,8);
   const machineStatus=(status)=>{
     if(['Out of service','Fault'].includes(status))return 'fault';
@@ -1294,7 +1310,7 @@ function Dashboard({ session, stats, projects, tasks, people, machines, material
 
       <footer className="atlasDeckStats">
         <button onClick={()=>setActive('projects')}><small>AKTIVE PROJEKTER</small><b>{activeProjects.length}</b><span>{marineProjects.length} marine · {workshopProjects.length} workshop</span></button>
-        <button onClick={()=>setActive('approvals')}><small>GODKENDELSER</small><b>{pendingApprovals.length}</b><span>{tackApprovals.length} tack · {finalApprovals.length} final</span></button>
+        {canApproveWorkshopFinal(session)?<button onClick={()=>setActive('approvals')}><small>SLUTKONTROL</small><b>{pendingApprovals.length}</b><span>Kun Flemming og Jakob</span></button>:<button onClick={()=>setActive('projects')}><small>WORKSHOP JOBS</small><b>{workshopTaskList.filter(task=>task.status!=='Completed').length}</b><span>Aktive jobs</span></button>}
         <button onClick={()=>setActive('crew')}><small>CREW I GANG</small><b>{peopleWorking.length}</b><span>{visiblePeople.length} vist live</span></button>
         <button onClick={()=>setActive('inventory')}><small>LAGERADVARSLER</small><b>{materialAlerts.length}</b><span>{materials.length} varer overvåget</span></button>
         <button onClick={()=>setActive('projects')}><small>DRONE / TILBUD</small><b>{openDrone.length+quoteReplies.length}</b><span>{openDrone.length} inspektioner · {quoteReplies.length} tilbud</span></button>
@@ -2030,7 +2046,7 @@ function Projects({projects,setProjects,deletedProjects,setDeletedProjects,setAc
         <div className="creationSummary">
           <h3>FSQ Command will create</h3>
           <p>1 project hub · {(isWorkshop?workshopTasks:marineTasks).length} standard tasks · {requiredFolders.length} project folders</p>
-          {isWorkshop?<p className="reviewRule">Workshop rule: Fit-up approval and Final QC by Flemming/Jakob. Four QC photos required before final release.</p>:<p className="reviewRule">Marine rule: No four-photo requirement. Timesheet and Work Done folders are prepared for the later document phase.</p>}
+          {isWorkshop?<p className="reviewRule">Workshopregel: Når jobbet er afsluttet, uploades 4 afslutningsbilleder. Kun Flemming og Jakob kan se og godkende slutkontrollen.</p>:<p className="reviewRule">Marine rule: No four-photo requirement. Timesheet and Work Done folders are prepared for the later document phase.</p>}
         </div>
       </div>}
 
@@ -2229,7 +2245,7 @@ function ProjectHub({session,users,project,projects,setProjects,people,setPeople
     {tab==='tasks'&&<section className="panel projectTaskPanel">
       <div className="hubTaskAdd taskAssignBar multiAssignBar"><input placeholder="Nyt job" value={newTask} onChange={e=>setNewTask(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addTask()}/><div className="taskCrewPicker">{crew.map(person=><button key={person.id} className={newAssignees.includes(person.name)?'active':''} onClick={()=>toggleNewAssignee(person.name)}>{newAssignees.includes(person.name)?'✓':'＋'} {person.name}</button>)}</div><button onClick={addTask}>Opret job</button></div>
       {!crew.length&&<div className="crewHint">Vælg først medarbejdere under fanen Crew.</div>}
-      <div className="projectJobTable multiCrewJobs">{projectTasks.map(t=><div key={t.id}><div><b>{t.title}</b><small>{assignmentLabel(t)} · {isWorkshopProject(project)?`${(t.photos||[]).length}/4 QC photos`:`${(t.photos||[]).length} photos`}</small><div className="taskCrewPicker compact">{crew.map(person=><button key={person.id} className={taskAssignees(t).includes(person.name)?'active':''} onClick={()=>toggleTaskAssignee(t.id,person.name)}>{taskAssignees(t).includes(person.name)?'✓':'＋'} {person.name}</button>)}</div></div><span className={`jobState ${(t.jobStatus||'Pending').toLowerCase().replaceAll(' ','-')}`}>{t.jobStatus||'Pending'}</span></div>)}</div>
+      <div className="projectJobTable multiCrewJobs">{projectTasks.map(t=><div key={t.id}><div><b>{t.title}</b><small>{assignmentLabel(t)} · {isWorkshopProject(project)?`${(t.photos||[]).length}/4 afslutningsbilleder`:`${(t.photos||[]).length} billeder`}</small><div className="taskCrewPicker compact">{crew.map(person=><button key={person.id} className={taskAssignees(t).includes(person.name)?'active':''} onClick={()=>toggleTaskAssignee(t.id,person.name)}>{taskAssignees(t).includes(person.name)?'✓':'＋'} {person.name}</button>)}</div></div><span className={`jobState ${(t.jobStatus||'Pending').toLowerCase().replaceAll(' ','-')}`}>{t.jobStatus||'Pending'}</span></div>)}</div>
     </section>}
     {tab==='materials'&&<section className="materialsHub">
       <div className="panel addMaterialPanel">
@@ -3014,7 +3030,9 @@ function CompanyLibrary({session,projects,tasks,folders,setFolders,foldersHydrat
       `Welding process: ISO 4063 ${wpsForm.process} - ${processName}.`,
       wpsForm.thickness?`Requested material thickness: ${wpsForm.thickness} mm.`:'Use only a qualified thickness range supported by the selected WPQR.',
       wpsForm.position?`Welding position: ${wpsForm.position}.`:'Use only welding positions supported by the selected WPQR.',
-      filler?`Filler wire or electrode: ${filler}.`:'Select filler only when explicitly supported by the selected WPQR/WPS.',
+      filler==='Use exact filler wire from selected WPQR'
+        ?'Use the exact filler wire classification and trade name stated in the selected supporting WPQR. Do not substitute or infer another filler.'
+        :filler?`Filler wire or electrode: ${filler}.`:'Select filler only when explicitly supported by the selected WPQR/WPS.',
       gas?`Shielding gas: ${gas}.`:'Select shielding gas only when explicitly supported by the selected WPQR/WPS.',
       wpsForm.notes.trim()?`Additional job notes: ${wpsForm.notes.trim()}`:'',
       'Use the matching butt-weld or fillet-weld joint sketch in the FSQ layout. Do not infer or expand any qualification range.'
@@ -3206,9 +3224,9 @@ body{font-family:Arial,sans-serif;color:#14202b;margin:34px;line-height:1.45}hea
           <section className="wpsQuickStep"><div className="wpsStepTitle"><span>1</span><div><b>Materiale</b><small>Vælg grundmaterialet</small></div></div><select value={wpsForm.material} onChange={event=>setWpsForm({...wpsForm,material:event.target.value})}><option value="">Vælg materiale…</option>{WPS_MATERIAL_OPTIONS.map(option=><option key={option}>{option}</option>)}</select>{wpsForm.material.startsWith('Other')&&<input autoFocus value={wpsForm.materialCustom} onChange={event=>setWpsForm({...wpsForm,materialCustom:event.target.value})} placeholder="Skriv materiale / material number"/>}</section>
           <section className="wpsQuickStep"><div className="wpsStepTitle"><span>2</span><div><b>Samlingstype</b><small>Vælg den skitse WPS’en skal bruge</small></div></div><div className="wpsJointChoices"><button className={wpsForm.jointType==='Butt weld'?'active':''} onClick={()=>setWpsForm({...wpsForm,jointType:'Butt weld'})}><i className="buttJointIcon"/><b>Stumpsøm</b><small>Butt weld</small></button><button className={wpsForm.jointType==='Fillet weld'?'active':''} onClick={()=>setWpsForm({...wpsForm,jointType:'Fillet weld'})}><i className="filletJointIcon"/><b>Kantsøm</b><small>Fillet weld</small></button></div></section>
           <section className="wpsQuickStep"><div className="wpsStepTitle"><span>3</span><div><b>Svejsemetode</b><small>ISO 4063-proces</small></div></div><div className="wpsProcessChoices">{WPS_PROCESS_OPTIONS.map(([code,name])=><button key={code} className={wpsForm.process===code?'active':''} onClick={()=>setWpsForm({...wpsForm,process:code})}><strong>{code}</strong><span>{name}</span></button>)}</div></section>
-          <section className="wpsQuickStep"><div className="wpsStepTitle"><span>4</span><div><b>Tråd eller elektrode</b><small>Valgfrit - ATLAS kan finde den fra WPQR</small></div></div><select value={wpsForm.filler} onChange={event=>setWpsForm({...wpsForm,filler:event.target.value})}><option value="">Lad ATLAS vælge fra WPQR…</option>{WPS_FILLER_OPTIONS.map(option=><option key={option}>{option}</option>)}</select>{wpsForm.filler.startsWith('Other')&&<input value={wpsForm.fillerCustom} onChange={event=>setWpsForm({...wpsForm,fillerCustom:event.target.value})} placeholder="Skriv klassifikation / handelsnavn"/>}</section>
+          <section className="wpsQuickStep"><div className="wpsStepTitle"><span>4</span><div><b>Tråd eller elektrode</b><small>Vælg den præcise tråd fra WPQR eller angiv den manuelt</small></div></div><select value={wpsForm.filler} onChange={event=>setWpsForm({...wpsForm,filler:event.target.value})}><option value="">Lad ATLAS finde en kvalificeret tråd…</option>{WPS_FILLER_OPTIONS.map(option=><option key={option}>{option}</option>)}</select>{wpsForm.filler==='Use exact filler wire from selected WPQR'&&<small className="wpsSourceChoice">ATLAS kopierer klassifikation og handelsnavn direkte fra den valgte WPQR.</small>}{wpsForm.filler.startsWith('Other')&&<input value={wpsForm.fillerCustom} onChange={event=>setWpsForm({...wpsForm,fillerCustom:event.target.value})} placeholder="Skriv klassifikation / handelsnavn"/>}</section>
           <section className="wpsQuickStep"><div className="wpsStepTitle"><span>5</span><div><b>Beskyttelsesgas</b><small>Valgfrit - skal være understøttet af WPQR</small></div></div><select value={wpsForm.gas} onChange={event=>setWpsForm({...wpsForm,gas:event.target.value})}><option value="">Lad ATLAS vælge fra WPQR…</option>{WPS_GAS_OPTIONS.map(option=><option key={option}>{option}</option>)}</select>{wpsForm.gas.startsWith('Other')&&<input value={wpsForm.gasCustom} onChange={event=>setWpsForm({...wpsForm,gasCustom:event.target.value})} placeholder="Skriv gas / ISO 14175-klassifikation"/>}</section>
-          <section className="wpsQuickStep wpsQuickOptional"><div className="wpsStepTitle"><span>6</span><div><b>Tykkelse og position</b><small>Valgfrit - tomme felter hentes fra WPQR</small></div></div><div><label>Tykkelse, mm<input type="number" min="0.1" step="0.1" value={wpsForm.thickness} onChange={event=>setWpsForm({...wpsForm,thickness:event.target.value})} placeholder="Fx 3"/></label><label>Svejseposition<select value={wpsForm.position} onChange={event=>setWpsForm({...wpsForm,position:event.target.value})}><option value="">Fra WPQR</option>{['PA','PB','PC','PD','PE','PF','PG','All qualified positions'].map(position=><option key={position}>{position}</option>)}</select></label></div></section>
+          <section className="wpsQuickStep wpsQuickOptional"><div className="wpsStepTitle"><span>6</span><div><b>Tykkelse og position</b><small>Valgfrit - tomme felter hentes fra WPQR</small></div></div><div className="wpsThicknessPosition"><label><span>Tykkelse i mm</span><input type="number" inputMode="decimal" min="0.1" step="0.1" value={wpsForm.thickness} onChange={event=>setWpsForm({...wpsForm,thickness:event.target.value})} placeholder="Fx 3,0 mm"/></label><label><span>Svejseposition</span><select value={wpsForm.position} onChange={event=>setWpsForm({...wpsForm,position:event.target.value})}><option value="">Vælg fra WPQR…</option>{WPS_POSITION_OPTIONS.map(([code,label])=><option key={code} value={code}>{code} — {label}</option>)}</select></label></div><div className="wpsPositionGuide"><b>Positioner</b>{WPS_POSITION_OPTIONS.slice(0,-1).map(([code,label])=><span key={code}><strong>{code}</strong> {label}</span>)}</div></section>
           <details className="wpsExtraNotes"><summary>+ Tilføj særlige jobkrav</summary><textarea rows="3" value={wpsForm.notes} onChange={event=>setWpsForm({...wpsForm,notes:event.target.value})} placeholder="Valgfrit: særlige krav, kunde, projekt eller begrænsninger…"/></details>
         </div>
         <button className="primaryBtn generateReportBtn wpsGenerateNow" disabled={wpsBusy||!wpsSourceDocuments.length||!wpsForm.material||!wpsForm.process} onClick={generateWps}>{wpsBusy?'ATLAS finder den rigtige WPQR og bygger WPS’en…':'GENERÉR FSQ WPS →'}</button>

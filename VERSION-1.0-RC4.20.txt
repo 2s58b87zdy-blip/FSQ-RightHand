@@ -1,0 +1,9 @@
+FSQ RightHand 1.0 RC4.20
+
+- Fit-up/tack-mellemgodkendelsen er fjernet.
+- De 4 billeder tages kun, når workshopjobbet er helt afsluttet.
+- Uploaden stopper automatisk ved 4 afslutningsbilleder.
+- Medarbejderen vælger "Jobbet er færdigt" før kamera/upload åbnes.
+- Jobbet sendes derefter til én samlet slutkontrol.
+- Kun Flemming og Jakob kan se menupunktet Slutkontrol og godkende jobbet.
+- Godkendte jobs afsluttes og flyttes til det fælles jobarkiv.

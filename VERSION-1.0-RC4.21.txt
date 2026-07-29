@@ -1,0 +1,16 @@
+FSQ RightHand / ATLAS Command
+Version: 1.0 RC4.21
+
+Changes:
+- Added ISO 4063 process 131: MIG welding with solid wire electrode.
+- Made WPS thickness and welding-position controls larger and mobile friendly.
+- Added clear PA, PB, PC, PD, PE, PF and PG position descriptions.
+- Kept SMO 254 / 1.4547 as a clear material choice.
+- Added an explicit option to copy the exact filler wire from the supporting WPQR.
+- Migrates jobs left in retired fit-up/tack control steps into the new final-control workflow.
+- Exactly four completion photos are still required before final control.
+- Only Flemming and Jakob can approve final workshop control.
+
+Important:
+ATLAS must only use welding values supported by the selected controlled WPQR/WPS.
+All generated WPS documents remain drafts until technically reviewed and approved.

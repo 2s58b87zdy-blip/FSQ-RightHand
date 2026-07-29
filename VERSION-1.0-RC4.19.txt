@@ -1,0 +1,9 @@
+FSQ RightHand 1.0 RC4.19
+
+- Ny enkel WPS-forside med trinvis valg.
+- Vælg materiale, butt weld/fillet weld, ISO 4063-proces, tråd/elektrode og gas.
+- Tykkelse, position og særlige jobkrav kan tilføjes efter behov.
+- Tråd, gas, tykkelse og position kan også hentes sikkert fra den valgte WPQR.
+- Én stor Generér FSQ WPS-knap bygger den engelske WPS-kladde.
+- ATLAS må kun anvende kvalificerede værdier fra de kontrollerede serverkilder.
+- Mobilvisningen bruger store trykflader og enkle valg.
