@@ -27,6 +27,7 @@ const REQUIRED_FIELDS = [
   'PARENT_MATERIAL_1', 'PARENT_MATERIAL_2', 'MATERIAL_GROUP_1', 'MATERIAL_GROUP_2',
   'THICKNESS_RANGE', 'DIAMETER_RANGE', 'JOINT_PREPARATION', 'JOINT_DIMENSIONS',
   'FILLER_CLASSIFICATION', 'FILLER_DIAMETER', 'SHIELDING_GAS',
+  'RUN_1_PROCESS', 'RUN_1_CURRENT', 'RUN_1_VOLTAGE', 'RUN_1_SPEED', 'RUN_1_NOTES',
   'CURRENT_POLARITY', 'HEAT_INPUT', 'PREHEAT', 'INTERPASS',
   'INSPECTION_NDT', 'ACCEPTANCE_CRITERIA', 'WELDER_QUALIFICATION',
   'TECHNICAL_REVIEWER'
@@ -152,6 +153,7 @@ Prepare a DRAFT Welding Procedure Specification from the supplied controlled WPS
 The requested WPS may use ISO 15609-1, ISO 15614-1, ASME IX or another standard only when explicitly supported by the sources.
 
 HARD SAFETY RULES:
+- Write all descriptive field values in clear professional English. Keep document numbers, standard designations, material grades and classifications unchanged.
 - Copy technical values only when they are explicitly supported by a named source document.
 - Never calculate, infer or expand qualification ranges.
 - Never combine incompatible WPQR ranges, materials, processes, consumables or positions.
@@ -243,10 +245,15 @@ async function renderApprovedWps(request, session) {
       error: `WPS kan ikke godkendes. Kontrollér disse felter: ${missingRequired.join(', ')}`
     }, { status: 400 });
   }
-  if (fields.some(field => isMissing(values[field]))) {
-    return Response.json({
-      error: 'Alle WPS-felter skal udfyldes eller markeres med en dokumenteret N/A-værdi før godkendelse.'
-    }, { status: 400 });
+  const optionalMissing = fields.filter(field => !REQUIRED_FIELDS.includes(field) && isMissing(values[field]));
+  for (const field of optionalMissing) {
+    values[field] = 'N/A - not specified in the controlled sources';
+  }
+  if (optionalMissing.length) {
+    values.VERIFICATION_NOTES = [
+      values.VERIFICATION_NOTES,
+      `Optional fields without controlled source data are marked N/A: ${optionalMissing.join(', ')}.`
+    ].filter(Boolean).join('\n');
   }
 
   const output = await replaceDocxTemplate(buffer, values);

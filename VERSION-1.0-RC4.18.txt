@@ -1,0 +1,11 @@
+FSQ RightHand 1.0 RC4.18
+
+- Enkel WPS-visning er nu standard.
+- ATLAS udfylder tekniske baggrundsfelter fra de kontrollerede kilder.
+- Brugeren ser hoveddata og obligatoriske oplysninger, der mangler.
+- Alle detaljer kan åbnes med "Vis avancerede felter".
+- Valgfrie felter uden kildedata markeres tydeligt som ikke specificeret.
+- Sikkerhedskritiske WPS-felter skal stadig være udfyldt før godkendelse.
+- FSQ-logoet er fast indlejret i WPS-dokumentet.
+- Den færdige WPS er et kompakt engelsk A4-dokument efter strukturen i FSQ's eksisterende WPS-eksempler.
+- WPS-masteren indeholder tydelige tekniske skitser for både butt weld og fillet weld.

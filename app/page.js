@@ -18,7 +18,7 @@ const FOLDER_ACCESS_LEVELS = ['No Access','Read','Edit','Full Control'];
 const MANAGED_FOLDERS = ['Projects','Workshop','Marine','Drawings','Procedures','QA / QC','Reports','Drone','Certificates','Templates','Finance','HR','Management','Contracts','Customers'];
 const DEFAULT_FOLDER_ACCESS = Object.fromEntries(MANAGED_FOLDERS.map(folder=>[folder,'No Access']));
 
-const APP_VERSION = '1.0 RC4.17';
+const APP_VERSION = '1.0 RC4.18';
 
 const USER_REGISTRY_DEFAULTS = [];
 
@@ -191,8 +191,7 @@ const WPS_FIELD_GROUPS = [
       ['WPS_NO','WPS-nummer'],['REVISION','Revision'],['STANDARD','Standard'],
       ['SUPPORTING_WPQR','Understøttende WPQR'],['APPLICATION_SCOPE','Anvendelse / omfang'],
       ['WELDING_PROCESS','Svejseproces (ISO 4063)'],['JOINT_TYPE','Samlingstype'],
-      ['WELDING_POSITION','Svejseposition'],['PRODUCT_TYPE','Produkttype'],
-      ['WELDING_DIRECTION','Svejseretning']
+      ['WELDING_POSITION','Svejseposition'],['PRODUCT_TYPE','Produkttype']
     ]
   },
   {
@@ -211,15 +210,13 @@ const WPS_FIELD_GROUPS = [
       ['FILLER_CLASSIFICATION','Tilsatsklassifikation'],['FILLER_TRADE_NAME','Handelsnavn'],
       ['FILLER_DIAMETER','Tilsatsdiameter'],['CONSUMABLE_HANDLING','Batch / håndtering'],
       ['SHIELDING_GAS','Beskyttelsesgas'],['GAS_FLOW','Gasflow'],
-      ['BACKING_GAS','Formiergas'],['BACKING_GAS_FLOW','Formiergasflow'],
-      ['TUNGSTEN','Wolframtype / størrelse'],['FLUX_OTHER','Flux / andet']
+      ['BACKING_GAS','Formiergas'],['TUNGSTEN','Wolframtype / størrelse']
     ]
   },
   {
     title:'Elektriske hoveddata',
     fields:[
-      ['CURRENT_POLARITY','Strømtype / polaritet'],['HEAT_INPUT','Varmetilførsel'],
-      ['WIRE_FEED_SPEED','Trådhastighed'],['TRANSFER_MODE','Overføring / puls']
+      ['CURRENT_POLARITY','Strømtype / polaritet'],['HEAT_INPUT','Varmetilførsel']
     ]
   },
   {
@@ -233,23 +230,10 @@ const WPS_FIELD_GROUPS = [
     ])
   },
   {
-    title:'Svejsestrenge 4–6',
-    fields:[4,5,6].flatMap(run=>[
-      [`RUN_${run}_PROCESS`,`Streng ${run} · proces / tilsats`],
-      [`RUN_${run}_CURRENT`,`Streng ${run} · strøm A`],
-      [`RUN_${run}_VOLTAGE`,`Streng ${run} · spænding V`],
-      [`RUN_${run}_SPEED`,`Streng ${run} · fremføringshastighed`],
-      [`RUN_${run}_NOTES`,`Streng ${run} · polaritet / noter`]
-    ])
-  },
-  {
     title:'Temperatur og teknik',
     fields:[
       ['PREHEAT','Forvarmning'],['INTERPASS','Maks. mellemstrengstemperatur'],
-      ['PWHT','Eftervarme / PWHT'],['HEAT_CONTROL','Temperaturkontrol'],
-      ['BEAD_TECHNIQUE','Stringer / weave'],['WEAVE_WIDTH','Maks. pendlebredde'],
-      ['INTERPASS_CLEANING','Rensning mellem strenge'],['BACK_GOUGING_METHOD','Rodudtagning'],
-      ['TORCH_ANGLE','Brænder- / elektrodevinkel'],['OSCILLATION','Pendling / holdetid']
+      ['INTERPASS_CLEANING','Rensning mellem strenge'],['BACK_GOUGING_METHOD','Rodudtagning']
     ]
   },
   {
@@ -264,9 +248,25 @@ const WPS_FIELD_GROUPS = [
   }
 ];
 
-const WPS_APPROVAL_IGNORED_FIELDS = new Set([
-  'STATUS','PREPARED_BY','APPROVED_BY','APPROVAL_DATE','DATE',
-  'SOURCE_DOCUMENTS','VERIFICATION_NOTES'
+const WPS_REQUIRED_FIELDS = new Set([
+  'WPS_NO','REVISION','STANDARD','SUPPORTING_WPQR','APPLICATION_SCOPE',
+  'WELDING_PROCESS','JOINT_TYPE','WELDING_POSITION',
+  'PARENT_MATERIAL_1','PARENT_MATERIAL_2','MATERIAL_GROUP_1','MATERIAL_GROUP_2',
+  'THICKNESS_RANGE','DIAMETER_RANGE','JOINT_PREPARATION','JOINT_DIMENSIONS',
+  'FILLER_CLASSIFICATION','FILLER_DIAMETER','SHIELDING_GAS',
+  'RUN_1_PROCESS','RUN_1_CURRENT','RUN_1_VOLTAGE','RUN_1_SPEED','RUN_1_NOTES',
+  'CURRENT_POLARITY','HEAT_INPUT','PREHEAT','INTERPASS',
+  'INSPECTION_NDT','ACCEPTANCE_CRITERIA','WELDER_QUALIFICATION',
+  'TECHNICAL_REVIEWER'
+]);
+
+const WPS_SIMPLE_FIELDS = new Set([
+  'WPS_NO','REVISION','STANDARD','SUPPORTING_WPQR','APPLICATION_SCOPE',
+  'WELDING_PROCESS','JOINT_TYPE','WELDING_POSITION',
+  'PARENT_MATERIAL_1','PARENT_MATERIAL_2','THICKNESS_RANGE',
+  'FILLER_CLASSIFICATION','FILLER_DIAMETER','SHIELDING_GAS',
+  'RUN_1_CURRENT','RUN_1_VOLTAGE','RUN_1_SPEED',
+  'PREHEAT','INTERPASS','TECHNICAL_REVIEWER'
 ]);
 
 function getGreeting(name) {
@@ -2789,6 +2789,7 @@ function CompanyLibrary({session,projects,tasks,folders,setFolders,foldersHydrat
   const [templateBusy,setTemplateBusy]=useState(false);
   const [wpsRequest,setWpsRequest]=useState('');
   const [wpsBusy,setWpsBusy]=useState(false);
+  const [wpsAdvanced,setWpsAdvanced]=useState(false);
   const [form,setForm]=useState({
     reportType:'packing',project:'',customer:'',reference:'',notes:''
   });
@@ -3047,7 +3048,7 @@ function CompanyLibrary({session,projects,tasks,folders,setFolders,foldersHydrat
     if(!currentReport||!canApprove)return setMessage('Du har ikke rettighed til at godkende rapporter.');
     if(currentReport.templateId==='wps'){
       const missing=Object.entries(currentReport.wpsValues||{})
-        .filter(([field,value])=>!WPS_APPROVAL_IGNORED_FIELDS.has(field)&&(!String(value||'').trim()||String(value).includes('[MANGLER')))
+        .filter(([field,value])=>WPS_REQUIRED_FIELDS.has(field)&&(!String(value||'').trim()||String(value).includes('[MANGLER')))
         .map(([field])=>field);
       if(missing.length)return setMessage(`WPS kan ikke godkendes endnu. Udfyld eller dokumentér N/A i: ${missing.slice(0,8).join(', ')}${missing.length>8?'…':''}`);
     }
@@ -3197,7 +3198,16 @@ body{font-family:Arial,sans-serif;color:#14202b;margin:34px;line-height:1.45}hea
       <section className="panel reportEditor">{currentReport?<><div className="reportApprovalBar"><div><span className={`reportState ${currentReport.status==='Approved'?'approved':''}`}>{currentReport.status}</span><small>{currentReport.status==='Approved'?`Godkendt af ${currentReport.approvedBy}`:'ATLAS-kladden skal kontrolleres af et menneske'}</small></div><div>{currentReport.templateId!=='wps'&&<button disabled={currentReport.status!=='Approved'} onClick={printReport}>Print</button>}<button disabled={currentReport.status!=='Approved'} onClick={downloadReport}>{currentReport.templateId==='wps'?'Download FSQ WPS · Word':'Download Word'}</button>{canApprove&&<button className="primaryBtn" onClick={approveReport}>Godkend {currentReport.templateId==='wps'?'WPS':'rapport'}</button>}</div></div>
         {currentReport.templateId==='wps'&&<section className="wpsReview">
           <div className="wpsReviewBanner"><img src="/fsq-logo-clean.webp" alt="FSQ"/><div><p className="panelEyebrow">FSQ WELDING PROCEDURE SPECIFICATION</p><h3>Teknisk kontrol før godkendelse</h3><small>Word-filen bygges fra FSQ-masteren med fast logo på alle sider.</small></div></div>
-          {WPS_FIELD_GROUPS.map(group=><article className="wpsFieldGroup" key={group.title}><h4>{group.title}</h4><div className="wpsFieldGrid">{group.fields.map(([field,label])=><label key={field} className={String(currentReport.wpsValues?.[field]||'').includes('[MANGLER')?'missing':''}><span>{label}</span><textarea rows={String(currentReport.wpsValues?.[field]||'').length>120?4:2} value={currentReport.wpsValues?.[field]||''} onChange={event=>updateWpsValue(field,event.target.value)}/>{String(currentReport.wpsValues?.[field]||'').includes('[MANGLER')?<small>Skal udfyldes og verificeres</small>:Array.isArray(currentReport.wpsEvidence?.[field])&&currentReport.wpsEvidence[field].length>0&&<small className="wpsEvidence">Kilde: {currentReport.wpsEvidence[field].join(', ')}</small>}</label>)}</div></article>)}
+          <div className="wpsSimpleToolbar"><div><b>{wpsAdvanced?'Alle tekniske WPS-felter':'Enkel WPS-visning'}</b><small>{wpsAdvanced?'Her kan alle detaljer kontrolleres og ændres.':'ATLAS har udfyldt baggrunden. Du ser kun hoveddata og obligatoriske felter, der mangler.'}</small></div><button onClick={()=>setWpsAdvanced(value=>!value)}>{wpsAdvanced?'Vis enkel WPS':'Vis avancerede felter'}</button></div>
+          {WPS_FIELD_GROUPS.map(group=>{
+            const visibleFields=group.fields.filter(([field])=>
+              wpsAdvanced ||
+              WPS_SIMPLE_FIELDS.has(field) ||
+              (WPS_REQUIRED_FIELDS.has(field)&&(!String(currentReport.wpsValues?.[field]||'').trim()||String(currentReport.wpsValues?.[field]).includes('[MANGLER')))
+            );
+            if(!visibleFields.length)return null;
+            return <article className="wpsFieldGroup" key={group.title}><h4>{group.title}</h4><div className="wpsFieldGrid">{visibleFields.map(([field,label])=><label key={field} className={String(currentReport.wpsValues?.[field]||'').includes('[MANGLER')?'missing':''}><span>{label}</span><textarea rows={String(currentReport.wpsValues?.[field]||'').length>120?4:2} value={currentReport.wpsValues?.[field]||''} onChange={event=>updateWpsValue(field,event.target.value)}/>{String(currentReport.wpsValues?.[field]||'').includes('[MANGLER')?<small>Skal udfyldes og verificeres</small>:Array.isArray(currentReport.wpsEvidence?.[field])&&currentReport.wpsEvidence[field].length>0&&<small className="wpsEvidence">Kilde: {currentReport.wpsEvidence[field].join(', ')}</small>}</label>)}</div></article>;
+          })}
           <article className="wpsTraceability"><h4>Kildesporbarhed</h4><div>{(currentReport.attachments||[]).map(name=><span key={name}>{name}</span>)}</div></article>
         </section>}
         {currentReport.templateId!=='wps'&&<>
