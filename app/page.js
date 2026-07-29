@@ -18,7 +18,7 @@ const FOLDER_ACCESS_LEVELS = ['No Access','Read','Edit','Full Control'];
 const MANAGED_FOLDERS = ['Projects','Workshop','Marine','Drawings','Procedures','QA / QC','Reports','Drone','Certificates','Templates','Finance','HR','Management','Contracts','Customers'];
 const DEFAULT_FOLDER_ACCESS = Object.fromEntries(MANAGED_FOLDERS.map(folder=>[folder,'No Access']));
 
-const APP_VERSION = '1.0 RC4.21';
+const APP_VERSION = '1.0 RC4.22';
 
 const USER_REGISTRY_DEFAULTS = [];
 
@@ -964,7 +964,7 @@ function AppShell({ session, onLogout, users, setUsers }) {
         {active === 'planner' && <OperationsPlanner people={people} users={users} projects={projects} entries={plannerEntries} setEntries={setPlannerEntries} />}
         {active === 'knowledge' && <KnowledgeBase session={session} users={users} folders={knowledgeFolders} setFolders={setKnowledgeFolders} machines={knowledgeMachines} setMachines={setKnowledgeMachines} documents={knowledgeDocuments} setDocuments={setKnowledgeDocuments} solutions={knowledgeSolutions} setSolutions={setKnowledgeSolutions} />}
         {active === 'health' && <SystemHealth session={session} users={users} projects={projects} documents={documents} knowledgeDocuments={knowledgeDocuments} knowledgeMachines={knowledgeMachines} />}
-        {active === 'admin' && <Admin session={session} users={users} setUsers={setUsers} people={people} setPeople={setPeople} machines={knowledgeMachines} setMachines={setKnowledgeMachines} materials={materials} setMaterials={setMaterials} />}
+        {active === 'admin' && <Admin session={session} users={users} setUsers={setUsers} people={people} setPeople={setPeople} projects={projects} setProjects={setProjects} tasks={tasks} setTasks={setTasks} plannerEntries={plannerEntries} setPlannerEntries={setPlannerEntries} machines={knowledgeMachines} setMachines={setKnowledgeMachines} materials={materials} setMaterials={setMaterials} />}
         {active === 'ai' && <AI session={session} chat={chat} setChat={setChat} voice={voice} stats={stats} context={{projects:visibleProjects,tasks:visibleTasks,people,users,machines:knowledgeMachines,materials,documents,knowledgeDocuments,knowledgeMachines,knowledgeSolutions}} onActions={executeAtlasActions} />}
         {!['dashboard','myjobs','approvals','jobArchive','crew','projects','fleet','projectHub','documents','companyLibrary','inventory','planner','knowledge','health','admin','ai'].includes(active) && <ModulePlaceholder title={NAV.find(n=>n[0]===active)?.[1]} />}
       </main>
@@ -2742,7 +2742,7 @@ function SystemHealth({session,users,projects,documents,knowledgeDocuments=[],kn
   return <div className="content healthPage"><div className="sectionIntro"><div><h1>System Health</h1><p>Administratorstatus for FSQ Command.</p></div><div className="healthOverall"><i/> ALL SYSTEMS OPERATIONAL</div></div><div className="healthGrid">{items.map(([name,status])=><article key={name}><div className="healthIcon">◉</div><small>{name}</small><strong>{status}</strong><span>{new Date().toLocaleString('da-DK')}</span></article>)}</div><section className="panel healthNote"><h3>Database status</h3><p>Version 8.0 synkroniserer brugere, rettigheder og driftsdata med Azure SQL. Browserens lokale lager bruges kun som midlertidig fallback. Filer og billeder gemmes fortsat i Azure Blob Storage.</p></section></div>
 }
 
-function Admin({session,users,setUsers,people,setPeople,machines,setMachines,materials,setMaterials}) {
+function Admin({session,users,setUsers,people,setPeople,projects,setProjects,tasks,setTasks,plannerEntries,setPlannerEntries,machines,setMachines,materials,setMaterials}) {
   const [newUser,setNewUser]=useState({name:'',role:'Technician',password:''});
   const [message,setMessage]=useState('');
   const [passwordDrafts,setPasswordDrafts]=useState({});
@@ -2799,11 +2799,40 @@ function Admin({session,users,setUsers,people,setPeople,machines,setMachines,mat
     setPasswordDrafts(current=>({...current,[id]:password}));
     setVisiblePasswords(current=>({...current,[id]:true}));
   }
-  function deleteUser(id){
+  async function deleteUser(id){
     if(!owner){setMessage('Only Flemming or Jakob can delete users.');return;}
     const target=users.find(user=>user.id===id);
     if(target?.name==='Flemming'){setMessage('The owner account cannot be deleted.');return;}
-    if(window.confirm(`Delete ${target?.name}?`)) setUsers(users.filter(user=>user.id!==id));
+    if(!target)return;
+    if(!window.confirm(`Slet ${target.name} alle steder?\n\nMedarbejderen fjernes fra login, Crew, projekter, jobs og oversigtsplanen.`))return;
+
+    const deletedName=String(target.name||'').trim();
+    const matches=value=>String(value||'').trim().toLowerCase()===deletedName.toLowerCase();
+    const userDeleted=await setUsers(users.filter(user=>user.id!==id));
+    if(!userDeleted){
+      setMessage(`${deletedName} kunne ikke slettes fra login. Ingen øvrige medarbejderdata blev ændret.`);
+      return;
+    }
+
+    setPeople(current=>current.filter(person=>!matches(person.name)));
+    setProjects(current=>current.map(project=>({
+      ...project,
+      crew:(Array.isArray(project.crew)?project.crew:[]).filter(name=>!matches(name)),
+      lead:matches(project.lead)?'':project.lead,
+      manager:matches(project.manager)?'':project.manager,
+      supervisor:matches(project.supervisor)?'':project.supervisor
+    })));
+    setTasks(current=>current.map(task=>{
+      const remaining=(Array.isArray(task.assignees)?task.assignees:[task.person]).filter(name=>name&&!matches(name));
+      return {
+        ...task,
+        assignees:remaining,
+        person:matches(task.person)?(remaining[0]||''):task.person,
+        assignedTo:matches(task.assignedTo)?'':task.assignedTo
+      };
+    }));
+    setPlannerEntries(current=>current.filter(entry=>!matches(entry.person)));
+    setMessage(`${deletedName} er slettet fra login, Crew, projekter, jobs og oversigtsplanen.`);
   }
 
   const allPermissions=[...new Set(Object.values(ROLE_DEFINITIONS).flat())];
@@ -3629,13 +3658,23 @@ export default function Page(){
   useEffect(()=>{if(session)loadUsers(true)},[session]);
 
   async function setUsers(next){
+    const previous=users;
     const value=typeof next==='function'?next(users):next;
     setUsersLocal(normalizeUserRegistry(value));
     try{
       const response=await fetch('/api/users',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(value)});
-      if(response.ok)setUsersLocal(normalizeUserRegistry(await response.json()));
-      else console.error('User update failed',await response.text());
-    }catch(error){console.error('User update failed',error);}
+      if(response.ok){
+        setUsersLocal(normalizeUserRegistry(await response.json()));
+        return true;
+      }
+      console.error('User update failed',await response.text());
+      setUsersLocal(previous);
+      return false;
+    }catch(error){
+      console.error('User update failed',error);
+      setUsersLocal(previous);
+      return false;
+    }
   }
   async function logout(){try{await fetch('/api/auth/logout',{method:'POST'})}catch{}setSession(null);loadUsers(false)}
   if(loadingUsers)return <main className="loginShell"><section className="loginPanel"><h1>FSQ COMMAND</h1><p>Connecting to Azure SQL…</p></section></main>;
