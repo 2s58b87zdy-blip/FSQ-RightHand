@@ -1,0 +1,9 @@
+FSQ RightHand 1.0 RC4.17
+
+- ATLAS kan generere en kontrolleret WPS-kladde fra WPS/WPQR-filerne i Company Library.
+- Tekniske værdier skal være sporbare til serverens kildedokumenter.
+- Manglende eller usikre værdier markeres og blokerer godkendelse.
+- Kun Flemming og Jakob har adgang til Company Library og WPS-generatoren.
+- Godkendte WPS-dokumenter downloades som DOCX fra en fast FSQ-master.
+- FSQ-logoet er indlejret i sidehovedet og vises på alle WPS-sider.
+- WPS-visningen er tilpasset desktop og mobil.

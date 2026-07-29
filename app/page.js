@@ -18,7 +18,7 @@ const FOLDER_ACCESS_LEVELS = ['No Access','Read','Edit','Full Control'];
 const MANAGED_FOLDERS = ['Projects','Workshop','Marine','Drawings','Procedures','QA / QC','Reports','Drone','Certificates','Templates','Finance','HR','Management','Contracts','Customers'];
 const DEFAULT_FOLDER_ACCESS = Object.fromEntries(MANAGED_FOLDERS.map(folder=>[folder,'No Access']));
 
-const APP_VERSION = '1.0 RC4.16';
+const APP_VERSION = '1.0 RC4.17';
 
 const USER_REGISTRY_DEFAULTS = [];
 
@@ -183,6 +183,91 @@ const FSQ_REPORT_TEMPLATES = [
   { id:'packing', name:'PO → FSQ Packing List', hint:'Upload PO og få emner, antal, kolli, mål og vægt i FSQ-layout' },
   { id:'po', name:'PO Marking', hint:'PO-reference, mærkning, kolli og leveringsdata' }
 ];
+
+const WPS_FIELD_GROUPS = [
+  {
+    title:'Dokument og anvendelse',
+    fields:[
+      ['WPS_NO','WPS-nummer'],['REVISION','Revision'],['STANDARD','Standard'],
+      ['SUPPORTING_WPQR','Understøttende WPQR'],['APPLICATION_SCOPE','Anvendelse / omfang'],
+      ['WELDING_PROCESS','Svejseproces (ISO 4063)'],['JOINT_TYPE','Samlingstype'],
+      ['WELDING_POSITION','Svejseposition'],['PRODUCT_TYPE','Produkttype'],
+      ['WELDING_DIRECTION','Svejseretning']
+    ]
+  },
+  {
+    title:'Materialer og samling',
+    fields:[
+      ['PARENT_MATERIAL_1','Grundmateriale 1'],['MATERIAL_GROUP_1','Materialegruppe 1'],
+      ['PARENT_MATERIAL_2','Grundmateriale 2'],['MATERIAL_GROUP_2','Materialegruppe 2'],
+      ['THICKNESS_RANGE','Godkendt tykkelsesområde'],['DIAMETER_RANGE','Godkendt diameterområde'],
+      ['JOINT_PREPARATION','Fugeforberedelse'],['JOINT_DIMENSIONS','Rodgab / rodfase / vinkel'],
+      ['BACKING_GOUGING','Backing / mejsling'],['FITUP_TACK','Fit-up / hæftesvejsning']
+    ]
+  },
+  {
+    title:'Tilsatsmateriale og gas',
+    fields:[
+      ['FILLER_CLASSIFICATION','Tilsatsklassifikation'],['FILLER_TRADE_NAME','Handelsnavn'],
+      ['FILLER_DIAMETER','Tilsatsdiameter'],['CONSUMABLE_HANDLING','Batch / håndtering'],
+      ['SHIELDING_GAS','Beskyttelsesgas'],['GAS_FLOW','Gasflow'],
+      ['BACKING_GAS','Formiergas'],['BACKING_GAS_FLOW','Formiergasflow'],
+      ['TUNGSTEN','Wolframtype / størrelse'],['FLUX_OTHER','Flux / andet']
+    ]
+  },
+  {
+    title:'Elektriske hoveddata',
+    fields:[
+      ['CURRENT_POLARITY','Strømtype / polaritet'],['HEAT_INPUT','Varmetilførsel'],
+      ['WIRE_FEED_SPEED','Trådhastighed'],['TRANSFER_MODE','Overføring / puls']
+    ]
+  },
+  {
+    title:'Svejsestrenge 1–3',
+    fields:[1,2,3].flatMap(run=>[
+      [`RUN_${run}_PROCESS`,`Streng ${run} · proces / tilsats`],
+      [`RUN_${run}_CURRENT`,`Streng ${run} · strøm A`],
+      [`RUN_${run}_VOLTAGE`,`Streng ${run} · spænding V`],
+      [`RUN_${run}_SPEED`,`Streng ${run} · fremføringshastighed`],
+      [`RUN_${run}_NOTES`,`Streng ${run} · polaritet / noter`]
+    ])
+  },
+  {
+    title:'Svejsestrenge 4–6',
+    fields:[4,5,6].flatMap(run=>[
+      [`RUN_${run}_PROCESS`,`Streng ${run} · proces / tilsats`],
+      [`RUN_${run}_CURRENT`,`Streng ${run} · strøm A`],
+      [`RUN_${run}_VOLTAGE`,`Streng ${run} · spænding V`],
+      [`RUN_${run}_SPEED`,`Streng ${run} · fremføringshastighed`],
+      [`RUN_${run}_NOTES`,`Streng ${run} · polaritet / noter`]
+    ])
+  },
+  {
+    title:'Temperatur og teknik',
+    fields:[
+      ['PREHEAT','Forvarmning'],['INTERPASS','Maks. mellemstrengstemperatur'],
+      ['PWHT','Eftervarme / PWHT'],['HEAT_CONTROL','Temperaturkontrol'],
+      ['BEAD_TECHNIQUE','Stringer / weave'],['WEAVE_WIDTH','Maks. pendlebredde'],
+      ['INTERPASS_CLEANING','Rensning mellem strenge'],['BACK_GOUGING_METHOD','Rodudtagning'],
+      ['TORCH_ANGLE','Brænder- / elektrodevinkel'],['OSCILLATION','Pendling / holdetid']
+    ]
+  },
+  {
+    title:'Kontrol, instruktion og godkendelse',
+    fields:[
+      ['INSPECTION_NDT','Visuel kontrol / NDT'],['ACCEPTANCE_CRITERIA','Acceptkriterier'],
+      ['WELDER_QUALIFICATION','Svejserkvalifikation'],['ENVIRONMENTAL_LIMITS','Miljøbegrænsninger'],
+      ['WELDING_SEQUENCE','Svejserækkefølge'],['SPECIAL_INSTRUCTIONS','Særlige instruktioner'],
+      ['LIMITATIONS','Begrænsninger / undtagelser'],['TECHNICAL_REVIEWER','Teknisk kontrollant'],
+      ['REVIEW_DATE','Kontroldato']
+    ]
+  }
+];
+
+const WPS_APPROVAL_IGNORED_FIELDS = new Set([
+  'STATUS','PREPARED_BY','APPROVED_BY','APPROVAL_DATE','DATE',
+  'SOURCE_DOCUMENTS','VERIFICATION_NOTES'
+]);
 
 function getGreeting(name) {
   const hour = new Date().getHours();
@@ -2702,6 +2787,8 @@ function CompanyLibrary({session,projects,tasks,folders,setFolders,foldersHydrat
   const [templateFields,setTemplateFields]=useState([]);
   const [templateVerification,setTemplateVerification]=useState('');
   const [templateBusy,setTemplateBusy]=useState(false);
+  const [wpsRequest,setWpsRequest]=useState('');
+  const [wpsBusy,setWpsBusy]=useState(false);
   const [form,setForm]=useState({
     reportType:'packing',project:'',customer:'',reference:'',notes:''
   });
@@ -2728,6 +2815,14 @@ function CompanyLibrary({session,projects,tasks,folders,setFolders,foldersHydrat
     (String(selectedTemplateCategory?.id)===String(templateCategories[0]?.id) && String(document.folderId)===String(templateFolder?.id))
   );
   const activeTemplate=templateDocuments.find(document=>String(document.blobName)===String(selectedTemplate))||null;
+  const weldingFolderIds=new Set(companyFolders.filter(folder=>
+    String(folder.id)==='company-quality' ||
+    /(wpqr|wps|welding|weld|svejs|quality)/i.test(`${folder.name||''} ${folder.description||''}`)
+  ).map(folder=>String(folder.id)));
+  const wpsSourceDocuments=companyDocuments.filter(document=>
+    weldingFolderIds.has(String(document.folderId)) ||
+    /(wpqr|wps|welding|weld|svejs)/i.test(document.name||'')
+  );
 
   useEffect(()=>{
     if(!foldersHydrated||!canManageLibrary)return;
@@ -2859,6 +2954,38 @@ function CompanyLibrary({session,projects,tasks,folders,setFolders,foldersHydrat
     });
   }
 
+  async function generateWps(){
+    if(!wpsRequest.trim())return setMessage('Beskriv kort den svejseopgave, som WPS-kladden skal dække.');
+    setWpsBusy(true);setMessage('ATLAS gennemgår de kontrollerede WPS/WPQR-filer på serveren…');
+    try{
+      const response=await fetch('/api/atlas/wps',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({action:'generate',request:wpsRequest})
+      });
+      const data=await response.json().catch(()=>({}));
+      if(!response.ok)throw new Error(data.error||'WPS-kladden kunne ikke genereres.');
+      const values=data.wps?.values||{};
+      const draft={
+        id:`wps-${Date.now()}`,
+        templateId:'wps',
+        templateName:'FSQ Welding Procedure Specification',
+        title:`WPS ${values.WPS_NO&&!String(values.WPS_NO).includes('[MANGLER')?values.WPS_NO:'DRAFT'}`,
+        summary:`ATLAS WPS-kladde baseret på ${(data.wps?.sourceNames||[]).length} kontrollerede serverdokumenter.`,
+        wpsValues:values,
+        wpsEvidence:data.wps?.evidence||{},
+        attachments:data.wps?.sourceNames||[],
+        verificationNotes:data.wps?.verificationNotes||'',
+        companyProfile:{...DEFAULT_COMPANY_PROFILE,...companyProfile},
+        status:'Draft',createdBy:session.name,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),
+        atlasModel:data.model||''
+      };
+      setReports(current=>[...current,draft]);
+      setSelectedReport(draft.id);setTab('review');
+      setMessage('WPS-kladden er klar. Kontrollér alle tekniske værdier, udfyld MANGLER-felter og godkend den.');
+    }catch(error){setMessage(error.message)}
+    finally{setWpsBusy(false)}
+  }
+
   async function generateReport(){
     if(!form.notes.trim()&&!attachments.length)return setMessage('Tilføj noter, tekst, billeder eller bilag først.');
     setGenerating(true);setMessage('ATLAS læser materialet og bygger et rapportudkast…');
@@ -2911,8 +3038,19 @@ function CompanyLibrary({session,projects,tasks,folders,setFolders,foldersHydrat
     updateReport({packingItems:(currentReport.packingItems||[]).filter((_,itemIndex)=>itemIndex!==index)});
   }
 
+  function updateWpsValue(field,value){
+    if(!currentReport)return;
+    updateReport({wpsValues:{...(currentReport.wpsValues||{}),[field]:value}});
+  }
+
   function approveReport(){
     if(!currentReport||!canApprove)return setMessage('Du har ikke rettighed til at godkende rapporter.');
+    if(currentReport.templateId==='wps'){
+      const missing=Object.entries(currentReport.wpsValues||{})
+        .filter(([field,value])=>!WPS_APPROVAL_IGNORED_FIELDS.has(field)&&(!String(value||'').trim()||String(value).includes('[MANGLER')))
+        .map(([field])=>field);
+      if(missing.length)return setMessage(`WPS kan ikke godkendes endnu. Udfyld eller dokumentér N/A i: ${missing.slice(0,8).join(', ')}${missing.length>8?'…':''}`);
+    }
     const reportText=JSON.stringify(currentReport);
     if(reportText.includes('[MANGLER')&&!window.confirm('Rapporten indeholder stadig felter markeret MANGLER. Vil du godkende alligevel?'))return;
     setReports(current=>current.map(report=>String(report.id)===String(currentReport.id)?{
@@ -2960,8 +3098,30 @@ body{font-family:Arial,sans-serif;color:#14202b;margin:34px;line-height:1.45}hea
     if(!popup)return setMessage('Browseren blokerede printvinduet. Tillad pop op-vinduer og prøv igen.');
     setTimeout(()=>{popup.focus();popup.print();setTimeout(()=>URL.revokeObjectURL(url),30000)},700);
   }
-  function downloadReport(){
+  async function downloadReport(){
     if(!requireApproved())return;
+    if(currentReport.templateId==='wps'){
+      setMessage('Commander bygger den godkendte WPS med fast FSQ-logo på alle sider…');
+      try{
+        const response=await fetch('/api/atlas/wps',{
+          method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({action:'render',confirmTechnicalReview:true,values:currentReport.wpsValues})
+        });
+        if(!response.ok){
+          const data=await response.json().catch(()=>({}));
+          throw new Error(data.error||'WPS-dokumentet kunne ikke bygges.');
+        }
+        const blob=await response.blob();
+        const disposition=response.headers.get('content-disposition')||'';
+        const match=disposition.match(/filename="?([^";]+)"?/i);
+        const url=URL.createObjectURL(blob);
+        const link=document.createElement('a');
+        link.href=url;link.download=match?.[1]||'FSQ-WPS.docx';
+        link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+        setMessage('WPS Word-dokumentet er downloadet med FSQ-logo på alle sider.');
+      }catch(error){setMessage(error.message)}
+      return;
+    }
     const blob=new Blob([reportHtml(currentReport)],{type:'application/msword'});
     const url=URL.createObjectURL(blob);
     const link=document.createElement('a');
@@ -2972,7 +3132,23 @@ body{font-family:Arial,sans-serif;color:#14202b;margin:34px;line-height:1.45}hea
   return <div className="content companyLibraryPage">
     <div className="sectionIntro companyLibraryIntro"><div><p className="eyebrow">FSQ CONTROLLED DOCUMENTS</p><h1>Company Library</h1><p>Firmafiler, godkendte layouts og ATLAS-rapporter samlet ét sted.</p></div><div className="knowledgeStatus"><i/> {companyDocuments.length} filer · {reports.filter(report=>report.status==='Approved').length} godkendte rapporter</div></div>
     {message&&<div className="documentMessage">{message}</div>}
-    <div className="knowledgeTabs companyTabs">{[['templates','Udfyld FSQ-template'],['generate','Ny ATLAS-rapport'],['review','Gennemlæs & godkend'],['library','Firmadokumenter'],['archive','Rapportarkiv']].map(([id,label])=><button key={id} className={tab===id?'active':''} onClick={()=>setTab(id)}>{label}</button>)}</div>
+    <div className="knowledgeTabs companyTabs">{[['wps','Generér WPS'],['templates','Udfyld FSQ-template'],['generate','Ny ATLAS-rapport'],['review','Gennemlæs & godkend'],['library','Firmadokumenter'],['archive','Rapportarkiv']].map(([id,label])=><button key={id} className={tab===id?'active':''} onClick={()=>setTab(id)}>{label}</button>)}</div>
+
+    {tab==='wps'&&<div className="wpsStudio">
+      <section className="panel wpsBrief">
+        <div className="panelHead"><div><p className="panelEyebrow">ATLAS CONTROLLED WPS</p><h3>Generér WPS fra serverens WPQR/WPS-filer</h3></div><span>{wpsSourceDocuments.length} kilder</span></div>
+        <div className="wpsLogoLock"><img src="/fsq-logo-clean.webp" alt="FSQ"/><div><b>FSQ-logo er låst i Word-masteren</b><small>Logo, sidehoved og dokumentkontrol gentages automatisk på alle WPS-sider.</small></div></div>
+        <div className="wpsFlow"><span>1</span><b>ATLAS læser kontrollerede kilder</b><i>→</i><span>2</span><b>Du kontrollerer alle værdier</b><i>→</i><span>3</span><b>Godkend og hent Word</b></div>
+        <label>Beskriv den ønskede svejseopgave<textarea rows="8" value={wpsRequest} onChange={event=>setWpsRequest(event.target.value)} placeholder="Fx: Lav en WPS til TIG 141 stumpsøm i 316L, pladetykkelse 3 mm. Brug kun områder, der er dokumenteret i vores WPQR."/></label>
+        <button className="primaryBtn generateReportBtn" disabled={wpsBusy||!wpsSourceDocuments.length} onClick={generateWps}>{wpsBusy?'ATLAS kontrollerer WPQR/WPS-kilderne…':'ATLAS · Generér sikker WPS-kladde →'}</button>
+      </section>
+      <section className="panel wpsSourcePanel">
+        <div className="panelHead"><div><p className="panelEyebrow">KONTROLLEREDE KILDER</p><h3>Automatisk fra Company Library</h3></div></div>
+        <p>ATLAS bruger kun dokumenter fra WPS/WPQR- og Welding & Quality-området. Kilderne vedhæftes WPS-kladden som sporbar dokumentation.</p>
+        <div className="wpsSourceList">{wpsSourceDocuments.slice(0,12).map(document=><div key={document.id||document.blobName}><span>WPQR</span><div><b>{document.name}</b><small>{document.size||'Serverfil'} · {document.uploadedBy||'FSQ'}</small></div></div>)}{!wpsSourceDocuments.length&&<div className="empty">Upload godkendte WPQR/WPS-filer i Welding & Quality først.</div>}{wpsSourceDocuments.length>12&&<small>+ {wpsSourceDocuments.length-12} yderligere kontrollerede filer</small>}</div>
+        <div className="wpsSafety"><b>Teknisk sikkerhed</b><p>ATLAS må ikke opfinde værdier, udvide WPQR-områder eller blande uforenelige kvalifikationer. Usikre felter markeres MANGLER og blokerer godkendelse.</p></div>
+      </section>
+    </div>}
 
     {tab==='generate'&&<div className="reportStudioGrid">
       <section className="panel reportSetup">
@@ -3018,7 +3194,13 @@ body{font-family:Arial,sans-serif;color:#14202b;margin:34px;line-height:1.45}hea
 
     {tab==='review'&&<div className="reportReviewGrid">
       <aside className="panel reportDraftList"><div className="panelHead"><h3>Rapportkladder</h3><span>{reports.length}</span></div>{reports.slice().reverse().map(report=><button key={report.id} className={String(report.id)===String(selectedReport)?'active':''} onClick={()=>setSelectedReport(report.id)}><div><b>{report.title||report.templateName}</b><small>{report.reference||report.project||'Uden reference'} · {report.createdBy}</small></div><em className={report.status==='Approved'?'approved':''}>{report.status}</em></button>)}{!reports.length&&<div className="empty">Generér den første rapport under “Ny ATLAS-rapport”.</div>}</aside>
-      <section className="panel reportEditor">{currentReport?<><div className="reportApprovalBar"><div><span className={`reportState ${currentReport.status==='Approved'?'approved':''}`}>{currentReport.status}</span><small>{currentReport.status==='Approved'?`Godkendt af ${currentReport.approvedBy}`:'ATLAS-kladden skal kontrolleres af et menneske'}</small></div><div><button disabled={currentReport.status!=='Approved'} onClick={printReport}>Print</button><button disabled={currentReport.status!=='Approved'} onClick={downloadReport}>Download Word</button>{canApprove&&<button className="primaryBtn" onClick={approveReport}>Godkend rapport</button>}</div></div>
+      <section className="panel reportEditor">{currentReport?<><div className="reportApprovalBar"><div><span className={`reportState ${currentReport.status==='Approved'?'approved':''}`}>{currentReport.status}</span><small>{currentReport.status==='Approved'?`Godkendt af ${currentReport.approvedBy}`:'ATLAS-kladden skal kontrolleres af et menneske'}</small></div><div>{currentReport.templateId!=='wps'&&<button disabled={currentReport.status!=='Approved'} onClick={printReport}>Print</button>}<button disabled={currentReport.status!=='Approved'} onClick={downloadReport}>{currentReport.templateId==='wps'?'Download FSQ WPS · Word':'Download Word'}</button>{canApprove&&<button className="primaryBtn" onClick={approveReport}>Godkend {currentReport.templateId==='wps'?'WPS':'rapport'}</button>}</div></div>
+        {currentReport.templateId==='wps'&&<section className="wpsReview">
+          <div className="wpsReviewBanner"><img src="/fsq-logo-clean.webp" alt="FSQ"/><div><p className="panelEyebrow">FSQ WELDING PROCEDURE SPECIFICATION</p><h3>Teknisk kontrol før godkendelse</h3><small>Word-filen bygges fra FSQ-masteren med fast logo på alle sider.</small></div></div>
+          {WPS_FIELD_GROUPS.map(group=><article className="wpsFieldGroup" key={group.title}><h4>{group.title}</h4><div className="wpsFieldGrid">{group.fields.map(([field,label])=><label key={field} className={String(currentReport.wpsValues?.[field]||'').includes('[MANGLER')?'missing':''}><span>{label}</span><textarea rows={String(currentReport.wpsValues?.[field]||'').length>120?4:2} value={currentReport.wpsValues?.[field]||''} onChange={event=>updateWpsValue(field,event.target.value)}/>{String(currentReport.wpsValues?.[field]||'').includes('[MANGLER')?<small>Skal udfyldes og verificeres</small>:Array.isArray(currentReport.wpsEvidence?.[field])&&currentReport.wpsEvidence[field].length>0&&<small className="wpsEvidence">Kilde: {currentReport.wpsEvidence[field].join(', ')}</small>}</label>)}</div></article>)}
+          <article className="wpsTraceability"><h4>Kildesporbarhed</h4><div>{(currentReport.attachments||[]).map(name=><span key={name}>{name}</span>)}</div></article>
+        </section>}
+        {currentReport.templateId!=='wps'&&<>
         <label>Titel<input value={currentReport.title||''} onChange={event=>updateReport({title:event.target.value})}/></label>
         <label>Resumé<textarea rows="5" value={currentReport.summary||''} onChange={event=>updateReport({summary:event.target.value})}/></label>
         {currentReport.templateId==='packing'&&<section className="packingReview">
@@ -3034,6 +3216,7 @@ body{font-family:Arial,sans-serif;color:#14202b;margin:34px;line-height:1.45}hea
         <div className="reportSections">{(currentReport.sections||[]).map((section,index)=><article key={index}><input value={section.heading||''} onChange={event=>updateReport({sections:currentReport.sections.map((item,itemIndex)=>itemIndex===index?{...item,heading:event.target.value}:item)})}/><textarea rows="6" value={section.body||''} onChange={event=>updateReport({sections:currentReport.sections.map((item,itemIndex)=>itemIndex===index?{...item,body:event.target.value}:item)})}/></article>)}</div>
         <label>Actions / opfølgning<textarea rows="4" value={(currentReport.actionItems||[]).join('\n')} onChange={event=>updateReport({actionItems:event.target.value.split('\n').filter(Boolean)})}/></label>
         <label>Konklusion<textarea rows="4" value={currentReport.conclusion||''} onChange={event=>updateReport({conclusion:event.target.value})}/></label>
+        </>}
         {currentReport.verificationNotes&&<div className="atlasVerification"><b>ATLAS: kontrollér før godkendelse</b><p>{currentReport.verificationNotes}</p></div>}
         {(currentReport.images||[]).length>0&&<div className="reportPhotoStrip">{currentReport.images.map((image,index)=><figure key={index}><img src={image.dataUrl} alt={image.name}/><figcaption>{image.name}</figcaption></figure>)}</div>}
       </>:<div className="reportEmpty"><span>ATLAS</span><h3>Vælg en rapportkladde</h3><p>Her kan du gennemlæse, rette og godkende før print.</p></div>}</section>
