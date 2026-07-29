@@ -19,6 +19,7 @@ Create these environment variables before the first start:
 - `INITIAL_OWNER_PASSWORD`: unique password with at least 12 characters.
 - `INITIAL_OWNER_NAME`: optional; defaults to `Flemming`.
 - `SQL_SERVER` and `SQL_DATABASE`, or a valid `DATABASE_URL`.
+- For the recommended Managed Identity setup, leave `SQL_USER` and `SQL_PASSWORD` absent. Enable the App Service system-assigned identity and create an Azure SQL user for that identity with the required database permissions.
 - `AZURE_STORAGE_CONNECTION_STRING`, or `AZURE_STORAGE_ACCOUNT_URL` with Managed Identity.
 - `AZURE_STORAGE_CONTAINER`: normally `fsq-documents`.
 - `OPENAI_API_KEY`: required for ATLAS.
@@ -59,3 +60,16 @@ After deployment:
 2. Assign unique passwords and permissions to every required user.
 3. Verify `/api/diagnostics/database` and `/api/diagnostics/blob` while signed in as Owner or Co-Owner.
 4. Test a small PDF in Project Binder and a permitted image in My Jobs.
+
+### Managed Identity for Azure SQL
+
+Run this once in the application database while signed in as a Microsoft Entra administrator. Replace the name if the App Service identity has a different display name:
+
+```sql
+CREATE USER [fsq-right-hand] FROM EXTERNAL PROVIDER;
+ALTER ROLE db_datareader ADD MEMBER [fsq-right-hand];
+ALTER ROLE db_datawriter ADD MEMBER [fsq-right-hand];
+ALTER ROLE db_ddladmin ADD MEMBER [fsq-right-hand];
+```
+
+The application rotates its Azure SQL connection pool before the Managed Identity token expires. This prevents intermittent login failures after the service has been idle.

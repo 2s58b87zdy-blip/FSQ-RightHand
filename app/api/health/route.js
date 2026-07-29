@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { readSession, canManage } from '../../../lib/auth';
-import { databaseInfo } from '../../../lib/db';
+import { databaseAuthenticationMode, databaseInfo } from '../../../lib/db';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,7 +11,7 @@ export async function GET() {
     const info = await databaseInfo();
     return NextResponse.json({
       database: 'Connected',
-      authentication: process.env.SQL_USER ? 'SQL credentials' : 'Managed Identity',
+      authentication: databaseAuthenticationMode() === 'sql-credentials' ? 'SQL credentials' : 'Managed Identity',
       server: process.env.SQL_SERVER,
       databaseName: info.DatabaseName,
       activeUsers: info.ActiveUsers,

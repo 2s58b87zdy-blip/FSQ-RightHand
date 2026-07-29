@@ -1,0 +1,6 @@
+FSQ COMMAND 1.0 RC4.16
+
+- Managed Identity SQL pools are renewed before the Azure access token expires.
+- Failed login-list attempts reset the SQL pool before retrying.
+- ELOGIN now reports the correct Managed Identity guidance when SQL credentials are not configured.
+- Database health and diagnostics now report the actual authentication mode.

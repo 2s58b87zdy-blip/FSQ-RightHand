@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { listUsers } from '../../../../lib/users';
+import { databaseAuthenticationMode, resetPool } from '../../../../lib/db';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -14,6 +15,12 @@ function loginListError(error) {
     return { publicCode: 'AUTH_CONFIGURATION', message: 'Login er ikke konfigureret. Kontrollér INITIAL_OWNER_PASSWORD i App Service.' };
   }
   if (code === 'ELOGIN') {
+    if (databaseAuthenticationMode() === 'managed-identity') {
+      return {
+        publicCode: 'MANAGED_IDENTITY_SQL_LOGIN',
+        message: 'Managed Identity blev afvist af Azure SQL. Kontrollér App Service Identity og databasebrugeren.'
+      };
+    }
     return { publicCode: 'SQL_LOGIN', message: 'Azure SQL afviste loginoplysningerne. Kontrollér SQL_USER og SQL_PASSWORD.' };
   }
   if (code === 'ETIMEOUT' || code === 'ESOCKET' || message.includes('firewall') || message.includes('server was not found')) {
@@ -39,6 +46,7 @@ export async function GET() {
       } catch (error) {
         lastError = error;
         if (error?.code === 'AUTH_CONFIGURATION_ERROR' || attempt === 2) throw error;
+        await resetPool();
         await wait(500 * (attempt + 1));
       }
     }
