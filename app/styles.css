@@ -329,6 +329,10 @@ button:disabled,
 @media(max-width:650px){.companyLibraryPage{padding:13px}.companyLibraryIntro{align-items:flex-start}.reportTemplateGrid{grid-template-columns:1fr}.reportSetup,.reportEvidence,.reportEditor{padding:13px}.reportApprovalBar{align-items:stretch;flex-direction:column}.reportApprovalBar>div:last-child{display:grid;grid-template-columns:1fr}.reportApprovalBar button{width:100%}.reportPhotoStrip{grid-template-columns:1fr 1fr}.companyFiles>.panelHead{align-items:flex-start;flex-direction:column}.companyFiles .binderUpload{width:100%;text-align:center}.reportArchive>button{align-items:flex-start;flex-direction:column;gap:7px}.reportArchive>button>span{text-align:left}}
 .fleetNotice.errorState{border-color:#8d3446;background:linear-gradient(90deg,#35131d,#111923);color:#ef9aa5}.fleetNotice.errorState b{color:#ff9eaa}
 
+/* Company Library RC4.26 - owner-only document deletion */
+.companyFileRow{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:stretch;border-top:1px solid #15364c}.companyFileRow>a{display:grid;grid-template-columns:34px minmax(0,1fr) auto;align-items:center;gap:10px;padding:12px 17px;color:#d8edf7;text-decoration:none;min-width:0}.companyFileRow>a b,.companyFileRow>a small{display:block;overflow-wrap:anywhere;word-break:break-word}.companyFileRow>a small{margin-top:3px;color:#6e94a9}.companyFileRow>a em{color:#53d8ff;font-size:11px;font-style:normal}.companyFileDelete{align-self:center;margin:8px 12px 8px 0;padding:8px 10px;border:1px solid #7a2b3d;border-radius:6px;background:#3a1520;color:#ff9aa4;cursor:pointer}.companyFileDelete:disabled{opacity:.5;cursor:wait}
+@media(max-width:650px){.companyFileRow{grid-template-columns:minmax(0,1fr)}.companyFileRow>a{padding-bottom:7px}.companyFileDelete{width:calc(100% - 24px);margin:0 12px 10px}}
+
 /* RC4.21: larger, mobile-friendly WPS thickness/position controls */
 .wpsQuickOptional .wpsThicknessPosition{display:grid;grid-template-columns:minmax(180px,.65fr) minmax(300px,1.35fr);gap:12px}
 .wpsThicknessPosition label{display:grid;gap:7px;color:#a9ccdd;font-size:12px;font-weight:700}

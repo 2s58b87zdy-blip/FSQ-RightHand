@@ -18,7 +18,7 @@ const FOLDER_ACCESS_LEVELS = ['No Access','Read','Edit','Full Control'];
 const MANAGED_FOLDERS = ['Projects','Workshop','Marine','Drawings','Procedures','QA / QC','Reports','Drone','Certificates','Templates','Finance','HR','Management','Contracts','Customers'];
 const DEFAULT_FOLDER_ACCESS = Object.fromEntries(MANAGED_FOLDERS.map(folder=>[folder,'No Access']));
 
-const APP_VERSION = '1.0 RC4.25';
+const APP_VERSION = '1.0 RC4.26';
 
 const USER_REGISTRY_DEFAULTS = [];
 
@@ -2860,6 +2860,7 @@ function CompanyLibrary({session,projects,tasks,folders,setFolders,foldersHydrat
   const [selectedFolder,setSelectedFolder]=useState(null);
   const [selectedReport,setSelectedReport]=useState(null);
   const [uploading,setUploading]=useState(false);
+  const [deletingDocument,setDeletingDocument]=useState('');
   const [generating,setGenerating]=useState(false);
   const [message,setMessage]=useState('');
   const [dragActive,setDragActive]=useState(false);
@@ -2970,6 +2971,27 @@ function CompanyLibrary({session,projects,tasks,folders,setFolders,foldersHydrat
       }catch(error){setMessage(`${file.name}: ${error.message}`)}
     }
     setUploading(false);setMessage(current=>current||'Filerne er gemt i Company Library og klar til ATLAS.');
+  }
+
+  async function deleteCompanyDocument(document){
+    if(!canManage)return setMessage('Kun Flemming og Jakob kan slette dokumenter i Company Library.');
+    if(!document?.blobName)return setMessage('Dokumentet mangler en gyldig filreference og kan ikke slettes.');
+    if(!window.confirm(`Slet ${document.name} permanent fra Company Library?\n\nDokumentet fjernes også som kilde for ATLAS.`))return;
+    setDeletingDocument(document.blobName);setMessage(`Sletter ${document.name}…`);
+    try{
+      const response=await fetch(`/api/knowledge?blob=${encodeURIComponent(document.blobName)}`,{method:'DELETE'});
+      const data=await response.json().catch(()=>({}));
+      if(!response.ok)throw new Error(data.error||`Sletning mislykkedes (HTTP ${response.status}).`);
+      setDocuments(current=>current.filter(item=>String(item.blobName)!==String(document.blobName)));
+      if(String(selectedTemplate)===String(document.blobName)){
+        setSelectedTemplate('');setTemplateFields([]);setTemplateValues({});setTemplateVerification('');
+      }
+      setMessage(`${document.name} er slettet fra Company Library og fjernet som ATLAS-kilde.`);
+    }catch(error){
+      setMessage(`${document.name}: ${error.message}`);
+    }finally{
+      setDeletingDocument('');
+    }
   }
 
   function removeAttachment(index){setAttachments(current=>current.filter((_,itemIndex)=>itemIndex!==index))}
@@ -3371,7 +3393,7 @@ body{font-family:Arial,sans-serif;color:#14202b;margin:34px;line-height:1.45}hea
       </>:<div className="reportEmpty"><span>ATLAS</span><h3>Vælg en rapportkladde</h3><p>Her kan du gennemlæse, rette og godkende før print.</p></div>}</section>
     </div>}
 
-    {tab==='library'&&<div className="companyLibraryGrid"><aside className="panel companyFolders"><div className="panelHead"><h3>Firmamapper</h3><span>{companyFolders.length}</span></div>{companyFolders.map(folder=><button key={folder.id} className={`${String(folder.id)===String(selectedFolder)?'active':''} ${folder.parentId?'child':''}`} onClick={()=>setSelectedFolder(folder.id)}><span>{folder.parentId?'↳':'▤'}</span><div><b>{folder.name}</b><small>{companyDocuments.filter(document=>String(document.folderId)===String(folder.id)).length} filer</small></div></button>)}{canManage&&<div className="companyFolderCreate"><input value={newFolderName} onChange={event=>setNewFolderName(event.target.value)} placeholder="Ny firmamappe"/><button onClick={addFolder}>Opret</button></div>}</aside><section className="panel companyFiles" onDragOver={event=>event.preventDefault()} onDrop={event=>{event.preventDefault();uploadFiles(event.dataTransfer.files)}}><div className="panelHead"><div><h3>{currentFolder?.name||'Vælg mappe'}</h3><small>{currentFolder?.description}</small></div><label className="binderUpload">{uploading?'Uploader…':'+ Upload filer'}<input disabled={uploading||!selectedFolder} type="file" multiple onChange={event=>{uploadFiles(event.target.files);event.target.value=''}}/></label></div><div className="companyFileDrop">Træk filer direkte ind i vinduet</div><div className="companyFileList">{currentDocs.map(document=><a key={document.id} href={document.url} target="_blank" rel="noreferrer"><span>▧</span><div><b>{document.name}</b><small>{document.size} · {document.uploadedBy} · {document.status}</small></div><em>Åbn</em></a>)}{!currentDocs.length&&<div className="empty">Denne mappe er tom.</div>}</div></section></div>}
+    {tab==='library'&&<div className="companyLibraryGrid"><aside className="panel companyFolders"><div className="panelHead"><h3>Firmamapper</h3><span>{companyFolders.length}</span></div>{companyFolders.map(folder=><button key={folder.id} className={`${String(folder.id)===String(selectedFolder)?'active':''} ${folder.parentId?'child':''}`} onClick={()=>setSelectedFolder(folder.id)}><span>{folder.parentId?'↳':'▤'}</span><div><b>{folder.name}</b><small>{companyDocuments.filter(document=>String(document.folderId)===String(folder.id)).length} filer</small></div></button>)}{canManage&&<div className="companyFolderCreate"><input value={newFolderName} onChange={event=>setNewFolderName(event.target.value)} placeholder="Ny firmamappe"/><button onClick={addFolder}>Opret</button></div>}</aside><section className="panel companyFiles" onDragOver={event=>event.preventDefault()} onDrop={event=>{event.preventDefault();uploadFiles(event.dataTransfer.files)}}><div className="panelHead"><div><h3>{currentFolder?.name||'Vælg mappe'}</h3><small>{currentFolder?.description}</small></div><label className="binderUpload">{uploading?'Uploader…':'+ Upload filer'}<input disabled={uploading||!selectedFolder} type="file" multiple onChange={event=>{uploadFiles(event.target.files);event.target.value=''}}/></label></div><div className="companyFileDrop">Træk filer direkte ind i vinduet</div><div className="companyFileList">{currentDocs.map(document=><div className="companyFileRow" key={document.id}><a href={document.url} target="_blank" rel="noreferrer"><span>▧</span><div><b>{document.name}</b><small>{document.size} · {document.uploadedBy} · {document.status}</small></div><em>Åbn</em></a>{canManage&&<button className="companyFileDelete" disabled={deletingDocument===document.blobName} onClick={()=>deleteCompanyDocument(document)} aria-label={`Slet ${document.name}`}>{deletingDocument===document.blobName?'Sletter…':'Slet'}</button>}</div>)}{!currentDocs.length&&<div className="empty">Denne mappe er tom.</div>}</div></section></div>}
 
     {tab==='archive'&&<section className="panel reportArchive"><div className="panelHead"><h3>Godkendte FSQ-rapporter</h3><span>{reports.filter(report=>report.status==='Approved').length}</span></div>{reports.filter(report=>report.status==='Approved').slice().reverse().map(report=><button key={report.id} onClick={()=>{setSelectedReport(report.id);setTab('review')}}><div><b>{report.title}</b><small>{report.templateName} · {report.project||'Generel'} · {report.reference||'uden reference'}</small></div><span>{report.approvedBy}<small>{new Date(report.approvedAt).toLocaleDateString('da-DK')}</small></span></button>)}{!reports.some(report=>report.status==='Approved')&&<div className="empty">Ingen rapporter er godkendt endnu.</div>}</section>}
   </div>;
