@@ -1,0 +1,11 @@
+FSQ RightHand / ATLAS Command
+Version: 1.0 RC4.26
+
+Company Library document deletion:
+- Added a visible Delete button beside every Company Library document for owners.
+- Deletion requires confirmation before the Azure Blob is permanently removed.
+- Deleted documents disappear from Company Library and are no longer available as ATLAS sources.
+- Clear success and server-error messages are shown.
+- The Delete control is mobile-friendly and spans the document card width on small screens.
+
+Includes all RC4.25 WPS, SMO wire, source-ranking, timeout and safe-draft improvements.

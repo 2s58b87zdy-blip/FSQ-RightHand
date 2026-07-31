@@ -1,0 +1,8 @@
+FSQ RightHand 1.0 RC4.27
+
+- Hvert job har nu kun to godkendelser: FIT-UP og slutkontrol.
+- FIT-UP godkendes af Flemming eller Jakob uden billedkrav.
+- Slutkontrol kræver præcis 4 afslutningsbilleder.
+- Gamle automatisk oprettede arbejdstrin samles til ét rigtigt job pr. projekt.
+- Almindelige brugeroprettede jobtitler og medarbejdertilknytninger bevares.
+- Nye jobs og ATLAS-oprettede jobs bruger automatisk det nye workflow.

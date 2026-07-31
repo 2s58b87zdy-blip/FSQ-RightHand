@@ -1,0 +1,14 @@
+FSQ RightHand / ATLAS Command
+Version: 1.0 RC4.25
+
+WPS generation and SMO wire:
+- Based on the user's latest FSQ-RightHand-main (9).zip.
+- Added filler choice: Ø1.2 mm wire (SMO) - exact classification from WPQR.
+- When selected, the WPS request requires "(SMO)" on the filler line.
+- The exact filler classification and trade name must still come from the supporting WPQR.
+- GPT-5 WPS generation uses low reasoning effort to reduce latency.
+- If the ATLAS model call or JSON response fails, a safe DRAFT-WPS is still created.
+- The safe draft contains only operator selections; unsupported technical values remain clearly marked MANGLER.
+- WPS progress and errors are shown directly below the Generate button.
+
+Includes all RC4.24 source-ranking, timeout, employee-deletion and final-control improvements.
