@@ -114,6 +114,81 @@ export async function POST(request) {
       } catch (error) { await tx.rollback(); throw error; }
     }
 
+    if (body.action === 'receive') {
+      const quantity = Number(body.quantity);
+      if (!Number.isFinite(quantity) || quantity <= 0) {
+        return NextResponse.json({ error: 'Det modtagne antal skal være større end 0.' }, { status: 400 });
+      }
+      const note = String(body.note || '').trim().slice(0, 500) || 'Materiale modtaget og lagt på lager';
+      const tx = new sql.Transaction(pool);
+      await tx.begin();
+      try {
+        const current = await new sql.Request(tx)
+          .input('Id', sql.NVarChar(100), body.itemId)
+          .query(`SELECT Name,Quantity,Unit FROM dbo.InventoryItems WITH (UPDLOCK,ROWLOCK) WHERE Id=@Id AND Active=1`);
+        const selected = current.recordset[0];
+        if (!selected) throw new Error('Varen blev ikke fundet.');
+        await new sql.Request(tx)
+          .input('Id', sql.NVarChar(100), body.itemId)
+          .input('Quantity', sql.Decimal(18,3), quantity)
+          .input('UserName', sql.NVarChar(100), session.name)
+          .input('Note', sql.NVarChar(500), note)
+          .query(`UPDATE dbo.InventoryItems
+                  SET Quantity=Quantity+@Quantity,UpdatedBy=@UserName,UpdatedAt=SYSUTCDATETIME()
+                  WHERE Id=@Id;
+                  INSERT INTO dbo.InventoryTransactions (ItemId,ChangeQuantity,ActionType,UserName,Note)
+                  VALUES (@Id,@Quantity,'Varemodtagelse',@UserName,@Note);`);
+        await tx.commit();
+        return NextResponse.json({
+          ok: true,
+          itemName: selected.Name,
+          quantity,
+          newQuantity: Number(selected.Quantity || 0) + quantity,
+          unit: selected.Unit
+        });
+      } catch (error) { await tx.rollback(); throw error; }
+    }
+
+    if (body.action === 'receive_new') {
+      const name = String(body.name || '').trim();
+      const quantity = Number(body.quantity);
+      if (!name) return NextResponse.json({ error: 'Skriv materialets navn.' }, { status: 400 });
+      if (!Number.isFinite(quantity) || quantity <= 0) {
+        return NextResponse.json({ error: 'Det modtagne antal skal være større end 0.' }, { status: 400 });
+      }
+      const duplicate = await pool.request()
+        .input('Name', sql.NVarChar(200), name)
+        .query(`SELECT TOP 1 Id,Name FROM dbo.InventoryItems WHERE Active=1 AND LOWER(LTRIM(RTRIM(Name)))=LOWER(LTRIM(RTRIM(@Name)))`);
+      if (duplicate.recordset[0]) {
+        return NextResponse.json({ error: `${duplicate.recordset[0].Name} findes allerede. Brug “Modtag varer” på den eksisterende linje.` }, { status: 409 });
+      }
+
+      const id = crypto.randomUUID();
+      const category = String(body.category || 'Materialer').trim() || 'Materialer';
+      const unit = String(body.unit || 'stk.').trim() || 'stk.';
+      const location = String(body.location || '').trim();
+      const supplier = String(body.supplier || '').trim();
+      const deliveryNote = String(body.note || '').trim().slice(0, 500) || 'Nyt materiale modtaget og oprettet på lager';
+      await pool.request()
+        .input('Id', sql.NVarChar(100), id)
+        .input('Name', sql.NVarChar(200), name)
+        .input('Category', sql.NVarChar(100), category)
+        .input('Unit', sql.NVarChar(50), unit)
+        .input('Quantity', sql.Decimal(18,3), quantity)
+        .input('Location', sql.NVarChar(200), location)
+        .input('Supplier', sql.NVarChar(200), supplier)
+        .input('UserName', sql.NVarChar(100), session.name)
+        .input('Note', sql.NVarChar(500), deliveryNote)
+        .query(`DECLARE @Prefix NVARCHAR(20)=UPPER(LEFT(REPLACE(REPLACE(REPLACE(@Category,' ',''),'Æ','AE'),'Ø','O'),5));
+                DECLARE @NextNo INT=(SELECT ISNULL(COUNT(*),0)+1 FROM dbo.InventoryItems WHERE Category=@Category);
+                DECLARE @Sku NVARCHAR(100)=CONCAT(@Prefix,'-',RIGHT(CONCAT('0000',@NextNo),4));
+                INSERT INTO dbo.InventoryItems (Id,Sku,Name,Category,Unit,IssueMode,Quantity,MinimumQuantity,Location,Supplier,Active,UpdatedBy)
+                VALUES (@Id,@Sku,@Name,@Category,@Unit,'none',@Quantity,NULL,@Location,@Supplier,1,@UserName);
+                INSERT INTO dbo.InventoryTransactions (ItemId,ChangeQuantity,ActionType,UserName,Note)
+                VALUES (@Id,@Quantity,'Ny varemodtagelse',@UserName,@Note);`);
+      return NextResponse.json({ ok: true, id, itemName: name, quantity, unit });
+    }
+
     if (!canManage(session)) return NextResponse.json({ error: 'Kun Owner og Co-Owner kan ændre lageropsætningen.' }, { status: 403 });
 
     if (body.action === 'create') {

@@ -1,0 +1,9 @@
+FSQ RightHand 1.0 RC4.28
+
+- Medarbejdere kan registrere varemodtagelse direkte på en eksisterende lagerlinje.
+- Modtaget antal lægges automatisk til beholdningen.
+- Modtagerens navn, tidspunkt og PO/følgeseddel gemmes i lagerhistorikken.
+- Hvis materialet ikke findes, kan modtageren oprette og modtage en ny lagerlinje.
+- Nyt materiale kræver kun navn og antal; varenummer oprettes automatisk.
+- Dubletkontrol forhindrer samme materiale i at blive oprettet igen.
+- Indeholder også RC4.27-workflowet med FIT-UP og slutkontrol.

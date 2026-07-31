@@ -18,7 +18,7 @@ const FOLDER_ACCESS_LEVELS = ['No Access','Read','Edit','Full Control'];
 const MANAGED_FOLDERS = ['Projects','Workshop','Marine','Drawings','Procedures','QA / QC','Reports','Drone','Certificates','Templates','Finance','HR','Management','Contracts','Customers'];
 const DEFAULT_FOLDER_ACCESS = Object.fromEntries(MANAGED_FOLDERS.map(folder=>[folder,'No Access']));
 
-const APP_VERSION = '1.0 RC4.27';
+const APP_VERSION = '1.0 RC4.28';
 
 const USER_REGISTRY_DEFAULTS = [];
 
@@ -2430,6 +2430,10 @@ function InventoryCenter({ session }) {
   const [message,setMessage]=useState('');
   const [category,setCategory]=useState('Alle');
   const [showCreate,setShowCreate]=useState(false);
+  const [receivingItem,setReceivingItem]=useState(null);
+  const [receiveDraft,setReceiveDraft]=useState({quantity:'',note:''});
+  const [showReceiveNew,setShowReceiveNew]=useState(false);
+  const [newDelivery,setNewDelivery]=useState({name:'',quantity:'',unit:'stk.',category:'Materialer',location:'',supplier:'',note:''});
   const [draft,setDraft]=useState({name:'',sku:'',category:'Materialer',unit:'stk.',issueMode:'none',quantity:0,minimum:'',location:'',supplier:''});
 
   async function load(){
@@ -2474,6 +2478,36 @@ Forbruget trækkes fra lageret og registreres på ${session.name}.`))return;
     const ok=await action({action:'create',...draft},`${draft.name} er oprettet.`);
     if(ok){setShowCreate(false);setDraft({name:'',sku:'',category:'Materialer',unit:'stk.',issueMode:'none',quantity:0,minimum:'',location:'',supplier:''});}
   }
+  function openReceive(item){
+    setReceivingItem(item);
+    setReceiveDraft({quantity:'',note:''});
+    setMessage('');
+  }
+  async function receiveItem(event){
+    event.preventDefault();
+    if(!receivingItem)return;
+    const quantity=Number(String(receiveDraft.quantity).replace(',','.'));
+    if(!Number.isFinite(quantity)||quantity<=0){setMessage('Skriv det antal, der er modtaget.');return;}
+    const ok=await action(
+      {action:'receive',itemId:receivingItem.id,quantity,note:receiveDraft.note},
+      `${quantity} ${receivingItem.unit} ${receivingItem.name} er modtaget og lagt på lager af ${session.name}.`
+    );
+    if(ok){setReceivingItem(null);setReceiveDraft({quantity:'',note:''});}
+  }
+  async function receiveNewItem(event){
+    event.preventDefault();
+    const quantity=Number(String(newDelivery.quantity).replace(',','.'));
+    if(!newDelivery.name.trim()){setMessage('Skriv materialets navn.');return;}
+    if(!Number.isFinite(quantity)||quantity<=0){setMessage('Skriv det antal, der er modtaget.');return;}
+    const ok=await action(
+      {action:'receive_new',...newDelivery,quantity},
+      `${quantity} ${newDelivery.unit} ${newDelivery.name.trim()} er oprettet og modtaget af ${session.name}.`
+    );
+    if(ok){
+      setShowReceiveNew(false);
+      setNewDelivery({name:'',quantity:'',unit:'stk.',category:'Materialer',location:'',supplier:'',note:''});
+    }
+  }
   async function adjust(item){
     const raw=prompt(`Justér lager for ${item.name}.\nBrug plus for modtagelse (fx 5) og minus for forbrug (fx -2).`, '1');
     if(raw===null)return;const change=Number(String(raw).replace(',','.'));
@@ -2499,7 +2533,7 @@ Forbruget trækkes fra lageret og registreres på ${session.name}.`))return;
   return <section className="inventoryCenter">
     <div className="inventoryHero">
       <div><p className="eyebrow">FSQ WORKSHOP INVENTORY</p><h1>Lager Center</h1><p>Materialer, reservedele, forbrugsvarer og gasflasker samlet ét sted.</p></div>
-      {canManage&&<button className="primaryBtn" onClick={()=>setShowCreate(true)}>＋ Opret nyt emne</button>}
+      <div className="inventoryHeroActions"><button className="primaryBtn receiveNewButton" onClick={()=>{setShowReceiveNew(true);setMessage('')}}>＋ Modtag nyt materiale</button>{canManage&&<button onClick={()=>setShowCreate(true)}>Lageropsætning</button>}</div>
     </div>
     {message&&<div className="inventoryMessage">{message}</div>}
     <div className="inventoryStats">
@@ -2514,13 +2548,30 @@ Forbruget trækkes fra lageret og registreres på ${session.name}.`))return;
         <div className="inventoryToolbar"><h3>Lagerbeholdning</h3><select value={category} onChange={e=>setCategory(e.target.value)}>{categories.map(c=><option key={c}>{c}</option>)}</select></div>
         {loading?<div className="emptyState">Indlæser lager...</div>:<div className="inventoryTableWrap"><table className="inventoryTable"><thead><tr><th>Emne</th><th>Kategori</th><th>Placering</th><th>På lager</th><th>Minimum</th><th>Status</th><th>Handling</th></tr></thead><tbody>
           {visible.map(item=>{const isLow=item.minimum!=null&&item.quantity<=item.minimum;return <tr key={item.id}>
-            <td><b>{item.name}</b><small>{item.sku||'Automatisk varenr.'}{item.supplier?` · ${item.supplier}`:''}</small></td><td>{item.category}</td><td>{item.location||'—'}</td><td><strong>{item.quantity}</strong> {item.unit}</td><td>{item.minimum==null?'Ikke fastsat':`${item.minimum} ${item.unit}`}</td><td><span className={`stockBadge ${isLow?'low':'ok'}`}>{isLow?'Bestil':'OK'}</span></td><td><div className="inventoryActions">{item.issueMode==='gas'&&<button onClick={()=>issue(item)} disabled={item.quantity<=0}>☐ Skift gas</button>}{item.issueMode==='wire'&&<button onClick={()=>issue(item)} disabled={item.quantity<=0}>☐ Skift tråd</button>}{item.issueMode==='each'&&<button onClick={()=>issue(item)} disabled={item.quantity<=0}>☐ Tag 1 stk.</button>}{item.issueMode==='meter'&&<button onClick={()=>issue(item)} disabled={item.quantity<=0}>☐ Brug meter</button>}{item.issueMode==='kg'&&<button onClick={()=>issue(item)} disabled={item.quantity<=0}>☐ Brug kg</button>}{canManage&&<button onClick={()=>adjust(item)}>± Lager</button>}{canManage&&<button onClick={()=>editMinimum(item)}>Rediger</button>}</div></td>
+            <td><b>{item.name}</b><small>{item.sku||'Automatisk varenr.'}{item.supplier?` · ${item.supplier}`:''}</small></td><td>{item.category}</td><td>{item.location||'—'}</td><td><strong>{item.quantity}</strong> {item.unit}</td><td>{item.minimum==null?'Ikke fastsat':`${item.minimum} ${item.unit}`}</td><td><span className={`stockBadge ${isLow?'low':'ok'}`}>{isLow?'Bestil':'OK'}</span></td><td><div className="inventoryActions"><button className="receiveStockButton" onClick={()=>openReceive(item)}>＋ Modtag varer</button>{item.issueMode==='gas'&&<button onClick={()=>issue(item)} disabled={item.quantity<=0}>☐ Skift gas</button>}{item.issueMode==='wire'&&<button onClick={()=>issue(item)} disabled={item.quantity<=0}>☐ Skift tråd</button>}{item.issueMode==='each'&&<button onClick={()=>issue(item)} disabled={item.quantity<=0}>☐ Tag 1 stk.</button>}{item.issueMode==='meter'&&<button onClick={()=>issue(item)} disabled={item.quantity<=0}>☐ Brug meter</button>}{item.issueMode==='kg'&&<button onClick={()=>issue(item)} disabled={item.quantity<=0}>☐ Brug kg</button>}{canManage&&<button onClick={()=>adjust(item)}>± Lager</button>}{canManage&&<button onClick={()=>editMinimum(item)}>Rediger</button>}</div></td>
           </tr>})}
           {!visible.length&&<tr><td colSpan="7" className="emptyState">Ingen emner i denne kategori.</td></tr>}
         </tbody></table></div>}
       </div>
       <aside className="inventoryHistory panel"><h3>Seneste lagerbevægelser</h3>{history.slice(0,12).map(row=><div className="historyRow" key={row.id}><div className={row.change<0?'minus':'plus'}>{row.change>0?'+':''}{row.change}</div><div><b>{row.itemName}</b><span>{row.action} · {row.userName}</span><small>{new Date(row.createdAt).toLocaleString('da-DK')}</small></div></div>)}{!history.length&&<div className="emptyState">Ingen registreringer endnu.</div>}</aside>
     </div>
+
+    {receivingItem&&<div className="modalBackdrop" onMouseDown={()=>setReceivingItem(null)}><form className="inventoryModal receiveStockModal" onSubmit={receiveItem} onMouseDown={event=>event.stopPropagation()}><div className="modalTitle"><div><p className="eyebrow">VAREMODTAGELSE</p><h2>{receivingItem.name}</h2><p>På lager nu: <b>{receivingItem.quantity} {receivingItem.unit}</b></p></div><button type="button" onClick={()=>setReceivingItem(null)}>×</button></div>
+      <label>Modtaget antal<input autoFocus required inputMode="decimal" type="number" min="0.001" step="0.001" value={receiveDraft.quantity} onChange={event=>setReceiveDraft({...receiveDraft,quantity:event.target.value})} placeholder={`Antal ${receivingItem.unit}`} /></label>
+      <label>PO / følgeseddel / bemærkning (valgfri)<input value={receiveDraft.note} onChange={event=>setReceiveDraft({...receiveDraft,note:event.target.value})} placeholder="Fx PO 45001234 eller følgeseddel 8831" /></label>
+      <div className="receiveSummary"><span>Registreres af</span><b>{session.name}</b><small>Beholdningen lægges automatisk til og gemmes i historikken.</small></div>
+      <div className="modalActions"><button type="button" onClick={()=>setReceivingItem(null)}>Annuller</button><button className="primaryBtn receiveConfirmButton" type="submit">Bekræft varemodtagelse</button></div>
+    </form></div>}
+
+    {showReceiveNew&&<div className="modalBackdrop" onMouseDown={()=>setShowReceiveNew(false)}><form className="inventoryModal receiveStockModal" onSubmit={receiveNewItem} onMouseDown={event=>event.stopPropagation()}><div className="modalTitle"><div><p className="eyebrow">NY VAREMODTAGELSE</p><h2>Materialet findes ikke på listen</h2><p>Navn og modtaget antal er nok. Resten kan udfyldes senere.</p></div><button type="button" onClick={()=>setShowReceiveNew(false)}>×</button></div>
+      <label>Materialets navn<input autoFocus required value={newDelivery.name} onChange={event=>setNewDelivery({...newDelivery,name:event.target.value})} placeholder="Fx SMO 254 plade 6 mm" /></label>
+      <div className="formGrid"><label>Modtaget antal<input required inputMode="decimal" type="number" min="0.001" step="0.001" value={newDelivery.quantity} onChange={event=>setNewDelivery({...newDelivery,quantity:event.target.value})} placeholder="Antal" /></label><label>Enhed<input value={newDelivery.unit} onChange={event=>setNewDelivery({...newDelivery,unit:event.target.value})} placeholder="stk., kg, meter..." /></label></div>
+      <div className="formGrid"><label>Kategori<input value={newDelivery.category} onChange={event=>setNewDelivery({...newDelivery,category:event.target.value})} placeholder="Materialer" /></label><label>Placering (valgfri)<input value={newDelivery.location} onChange={event=>setNewDelivery({...newDelivery,location:event.target.value})} placeholder="Fx Reol A3" /></label></div>
+      <label>Leverandør (valgfri)<input value={newDelivery.supplier} onChange={event=>setNewDelivery({...newDelivery,supplier:event.target.value})} placeholder="Leverandør" /></label>
+      <label>PO / følgeseddel / bemærkning (valgfri)<input value={newDelivery.note} onChange={event=>setNewDelivery({...newDelivery,note:event.target.value})} placeholder="Fx PO 45001234" /></label>
+      <div className="receiveSummary"><span>Ny lagerlinje registreres af</span><b>{session.name}</b><small>Varen får automatisk varenummer og bliver straks lagt på lagerlisten.</small></div>
+      <div className="modalActions"><button type="button" onClick={()=>setShowReceiveNew(false)}>Annuller</button><button className="primaryBtn receiveConfirmButton" type="submit">Opret og modtag</button></div>
+    </form></div>}
 
     {showCreate&&<div className="modalBackdrop" onMouseDown={()=>setShowCreate(false)}><form className="inventoryModal" onSubmit={createItem} onMouseDown={e=>e.stopPropagation()}><div className="modalTitle"><div><p className="eyebrow">LAGER CENTER</p><h2>Opret nyt emne</h2></div><button type="button" onClick={()=>setShowCreate(false)}>×</button></div>
       <label>Navn<input required value={draft.name} onChange={e=>setDraft({...draft,name:e.target.value})} placeholder="Fx SMO254 plade eller Nitrogen" /></label>
